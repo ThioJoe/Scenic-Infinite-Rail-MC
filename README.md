@@ -48,21 +48,32 @@ want to move around afterward.)
   the rider ever dismounts they are put straight back in the cart.
 - **Terrain smoothing** — an invisible track head runs up to ~112 blocks ahead
   of the cart. For every column it samples the vanilla terrain heightmap at 12
-  points across the next 48 blocks, maintains a rolling average, and steers the
-  rail toward *average terrain + 4 blocks*, changing elevation at most 1 block
-  every 3 (a gentle ~18° max grade). Approaching mountains raise the average
-  early, so climbs start well in advance and ascend in one smooth swoop.
+  points across the next 48 blocks and maintains a rolling average, steering the
+  rail toward *average terrain + 4 blocks*. Approaching mountains raise the
+  average early, so climbs start well in advance and ascend in one smooth swoop.
+- **The "event" model (no stair-stepping)** — the rail is never stepped up one
+  block, held flat, then stepped up again. Instead every elevation change is a
+  single continuous **45° line** — consecutive ascending rails, corner to
+  corner — that runs until it reaches the target height, however many blocks
+  that is, and then the rail goes flat. A 12-block rise is one clean diagonal,
+  not twelve little steps. Two spacing constants shape how big and how frequent
+  these changes are: `#SAMEGAP` (minimum flat distance before sloping *again in
+  the same direction*) and `#TURNGAP` (minimum flat distance before *reversing*
+  direction). When terrain would demand a change sooner than the gaps allow, the
+  rail simply holds its height instead — which is exactly what produces the
+  bridges and tunnels below.
 - **Bridges** — every rail carries its own 3-block support column, so whenever
   the ground drops away (ravines, valleys, oceans, lava lakes) the line simply
   becomes a slender floating bridge at cruising altitude. Sudden narrow dips
   are deliberately ignored by the smoother (each sample can only pull the
-  average down 2 blocks per column) and get bridged dead level.
+  average down 2 blocks per column) and, if a descent is forbidden by
+  `#TURNGAP`/`#SAMEGAP`, the rail holds level and bridges straight across.
 - **Tunnels** — every column also carves a 3-wide clearance bore above the
-  rail. When a mountain is too steep to climb within the slope limit, the line
-  naturally continues straight into the rock as a clean tunnel until it breaks
-  out the other side. An invisible vanilla light block is embedded above the
-  rail in every column, so tunnels are gently lit and nothing can spawn on the
-  track.
+  rail. When a mountain rises faster than the spacing constants allow the rail
+  to climb, the line naturally continues straight into the rock as a clean
+  tunnel until it breaks out the other side ("punch through instead of going
+  over it"). An invisible vanilla light block is embedded above the rail in
+  every column, so tunnels are gently lit and nothing can spawn on the track.
 - **Forced generation ahead, aggressive unloading behind** — the pack
   `forceload`s terrain ~190 blocks ahead of the track head so the scanner
   always has real heightmap data, and removes forceloads a few hundred blocks
@@ -78,14 +89,22 @@ want to move around afterward.)
 Constants live in `data/infinite_rail/function/load.mcfunction` and can also be
 changed live in-game, e.g. `/scoreboard players set #HOVER ir 8`:
 
-| Constant     | Default | Meaning                                                        |
-| ------------ | ------- | -------------------------------------------------------------- |
-| `#HOVER`     | 4       | Cruising altitude above the average terrain surface            |
-| `#SPACING`   | 3       | Min. horizontal blocks between 1-block elevation changes       |
-| `#AHEAD`     | 112     | How far ahead of the cart the track is kept built              |
-| `#MAXTICK`   | 8       | Max track columns built per game tick                          |
-| `#UPCLAMP`   | 8       | How hard approaching mountains may pull the target up          |
-| `#DOWNCLAMP` | 2       | How hard dips may pull the target down (small = level bridges) |
+| Constant     | Default | Meaning                                                             |
+| ------------ | ------- | ------------------------------------------------------------------- |
+| `#HOVER`     | 4       | Cruising altitude above the average terrain surface                 |
+| `#DEADBAND`  | 2       | Min. height difference before a climb/descent is triggered          |
+| `#SAMEGAP`   | 6       | Min. flat blocks before sloping again in the **same** direction     |
+| `#TURNGAP`   | 10      | Min. flat blocks before **reversing** direction                     |
+| `#AHEAD`     | 112     | How far ahead of the cart the track is kept built                   |
+| `#MAXTICK`   | 8       | Max track columns built per game tick                               |
+| `#UPCLAMP`   | 8       | How hard approaching mountains may pull the target up               |
+| `#DOWNCLAMP` | 2       | How hard dips may pull the target down (small = level bridges)      |
+
+`#SAMEGAP` and `#TURNGAP` are the two knobs from the design: raise them for
+longer flats and bigger, rarer 45° swoops (with more terrain punched through as
+tunnels/bridges); lower them for a track that hugs the ground more closely with
+more frequent slopes. Because each change is always a single unbroken 45° line,
+the ride never micro-stutters regardless of how they're set.
 
 ## Vanilla limitations
 

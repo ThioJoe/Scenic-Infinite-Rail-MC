@@ -11,19 +11,11 @@ scoreboard players operation #avg ir /= #C12 ir
 scoreboard players operation #target ir = #avg ir
 scoreboard players operation #target ir += #HOVER ir
 
-# --- 3. Decide this column's slope: -1, 0, or +1 ---
-# A change is only allowed every #SPACING columns (max slope), and only when
-# the target differs by 2+ blocks (deadband against 1-block jitter).
-scoreboard players add #since ir 1
-scoreboard players operation #diff ir = #target ir
-scoreboard players operation #diff ir -= #railY ir
-scoreboard players set #dir ir 0
-execute if score #since ir >= #SPACING ir if score #diff ir matches 2.. run scoreboard players set #dir ir 1
-execute if score #since ir >= #SPACING ir if score #diff ir matches ..-2 run scoreboard players set #dir ir -1
-execute unless score #dir ir matches 0 run scoreboard players set #since ir 0
+# --- 3. Decide this column's slope: -1, 0, or +1 (event model) ---
+function infinite_rail:decide
 
 # --- 4. Move the head to the new column and build it ---
-# Flat: same elevation, straight rail.
+# Flat: same elevation, straight rail (bridges over gaps / tunnels through rises).
 execute if score #dir ir matches 0 as @e[type=marker,tag=ir_head,limit=1] at @s run tp @s ~1 ~ ~
 execute if score #dir ir matches 0 at @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:place_flat
 # Descend: rail sits one lower, sloping down to the east.

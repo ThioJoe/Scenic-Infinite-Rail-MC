@@ -23,9 +23,12 @@ scoreboard players operation #railY ir += #HOVER ir
 execute store result storage infinite_rail:tmp y double 1 run scoreboard players get #railY ir
 data modify entity @e[type=marker,tag=ir_head,limit=1] Pos[1] set from storage infinite_rail:tmp y
 
-# --- Initialize counters ---
+# --- Initialize counters and slope state ---
 execute store result score #headX ir run data get entity @e[type=marker,tag=ir_head,limit=1] Pos[0] 1
-scoreboard players set #since ir 99
+# Start flat, with a large flat-gap so the first climb/descent is unrestricted.
+scoreboard players set #slope ir 0
+scoreboard players set #flat ir 99
+scoreboard players set #lastDir ir 0
 # Seed the rolling average (used as the fallback for bad heightmap samples).
 scoreboard players operation #avg ir = #railY ir
 scoreboard players operation #avg ir -= #HOVER ir
