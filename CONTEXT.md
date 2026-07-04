@@ -208,7 +208,7 @@ World load / /reload
                                           (applies all tunable knobs)
 
 Player runs /function infinite_rail:start
-(or the auto-starter fires: tick runs start by itself for the first player to
+(or the auto-starter fires: tick starts a 5-second countdown timer for the first player to
  appear in a fresh world, while #AUTOSTART=1, #started=0 and #autodone≠1)
         │
         ▼
@@ -337,8 +337,7 @@ Sets up and launches a ride (see the flow in §5). Notable steps:
 **`function/setup_world.mcfunction`** / **`function/setup_world_26.mcfunction`**
 One-time gamerule tuning for a clean ride: silences command feedback/output/
 advancement spam; don't keep origin chunks loaded; no mob griefing (creepers/
-endermen can't wreck the track); no fire spread, no phantoms; immediate respawn
-at the moving spawn point if anything impossible ever happens. It exists
+endermen can't wreck the track); no fire spread, no phantoms; disabled tile drops; disabled all environmental damage; immediate respawn at the moving spawn point if anything impossible ever happens. It exists
 **twice** because snapshot 25w44a (the 26.x era) renamed every gamerule to
 snake_case (and reworked a few: `announceAdvancements` →
 `show_advancement_messages`, `doInsomnia` → `spawn_phantoms`, `doFireTick` →
@@ -357,10 +356,7 @@ track (blocks + `ir_disp` displays) is intentionally left in the world.**
 
 **`function/tick.mcfunction`**
 The heartbeat. If `#started == 1`, run `main`. Below that, the **auto-starter**:
-while `#AUTOSTART == 1`, `#started == 0` and `#autodone ≠ 1`, it runs `start`
-every tick — a no-op until a player exists to start the ride for, at which
-point `begin` sets `#autodone = 1` and it never fires again (the score persists
-in the world save).
+while `#AUTOSTART == 1`, `#started == 0` and `#autodone ≠ 1`, it waits for a player to exist, then runs a 100-tick countdown before running start, at which point `begin` sets `#autodone = 1` and it never fires again (the score persists in the world save).
 
 **`function/main.mcfunction`**
 Per-tick driver while riding:
@@ -449,7 +445,7 @@ slope on subsequent columns until the target is reached.
 Ends an event: `#slope = 0`, `#flat = 0`. `#dir` stays `0`, so the current column
 is placed flat at the elevation just reached, and gap-counting restarts.
 
-### 6.6 Column placement (geometry & blocks)
+### 6.6 Column geometry (how slopes map to blocks)
 
 All three run positioned at the head; the head is already at this column's
 `(X, railY, Z)`. **Order matters:** the carve happens first, then `support`
@@ -525,7 +521,7 @@ heights — `#c1`, the constructed S-curve (blend loop `cam_blend`), and
 
 **`function/cam_blend.mcfunction`** *(recursive)*
 One S-curve sample per call: offset `#j` runs from −`#CAMBLEND/2` to
-+`#CAMBLEND/2` in steps of 2. Each sample computes
++`#CAMBLEND/2` in steps of 1. Each sample computes
 `lifted(j) = min(max of the profile over [j .. j+#wmax+1], line(j) + #lift)`
 via `cam_scan`, and accumulates `#tsum`/`#tn`; `#c1` is their average — an
 average over a symmetric window reproduces straight stretches exactly and
@@ -533,7 +529,7 @@ turns every corner of `lifted()` into a parabolic blend `#CAMBLEND` long.
 
 **`function/cam_scan.mcfunction`** *(recursive)*
 The small forward-max scan for one blend sample: `#k` runs 0 to `#wmax` in
-steps of 2, tracking the highest interpolated height `#fmx` and capturing the
+steps of 1, tracking the highest interpolated height `#fmx` and capturing the
 k = 0 sample as `#l0`. Scanning further than `#CAMLIFT`+2 blocks is pointless
 (the `+#lift` cap clips anything higher), which is also what keeps lift-off
 from starting any earlier than the blend needs.
@@ -623,7 +619,7 @@ pace cart that isn't the plug is ejected, as is anything riding the ride cart
 that isn't a player; a dismounted rider is re-mounted into the ride cart; the
 plug and the ride cart are re-mounted onto their perches (unconditional
 attempts that fail silently while already seated); and if the pace cart's
-eastward speed ever drops near zero it's re-boosted to `0.5`. Combined with
+eastward speed ever drops near zero it's re-boosted to `0.5`. The ride cart's pitch is locked horizontally, and the player's inventory is cleared every tick. Combined with
 the always-powered rails, the ride can never stop — and because both carts
 always carry a passenger, neither can be entered by right-click or scoop up
 passing mobs.

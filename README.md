@@ -75,7 +75,7 @@ want to move around afterward.)
   summit before the rail even gets there — while descents ease down on the
   same reactive glide. The camera never sinks into terrain and the cart never
   bounces, tilts or shifts against your view (you, the cart and the camera
-  move as one rigid unit). You mount **once** at ride start and
+  move as one rigid unit, and the cart is locked perfectly horizontal to prevent tilting). You mount **once** at ride start and
   are never remounted, so there are no visible transitions and no repeated
   "press ⇧ to dismount" hints. Meanwhile a hidden **pace cart** rides the
   physical rails ~64 blocks behind you and sets the speed — however fast the
@@ -86,9 +86,10 @@ want to move around afterward.)
 - **Carts that can't be hijacked** — an invisible "plug" entity permanently
   occupies the pace cart, and you occupy your own. Occupied minecarts can't
   scoop up passing animals and can't be entered by right-click, so nothing
-  ever climbs into the view.
+  ever climbs into the view. Your inventory is also continuously cleared to
+  hide held items and prevent you from picking anything up.
 - **Auto-start** — in a fresh world the ride begins automatically for the first
-  player to appear. It only auto-starts once per world: stopping with
+  player to appear, after a 5-second countdown to ensure chunks are loaded. It only auto-starts once per world: stopping with
   `/function infinite_rail:stop` stays stopped, even across rejoins. Set
   `#AUTOSTART` to `0` for classic manual starting.
 - **Terrain smoothing** — an invisible track head runs up to `#AHEAD` (160)
@@ -123,15 +124,16 @@ want to move around afterward.)
   `forceload`s terrain `#GENAHEAD` blocks ahead of the track head so the scanner
   always has real heightmap data, and removes forceloads a few hundred blocks
   behind. Note the two independent look-ahead distances: `#AHEAD` is how far
-  ahead of the *cart* the rails are laid, and `#GENAHEAD` is how far ahead of
-  the *rail head* the world is generated (so terrain exists roughly
+  ahead of the *cart* the rails are laid, and `#GENAHEAD` is how far ahead of the
+  *rail head* the world is generated (so terrain exists roughly
   `#AHEAD + #GENAHEAD` blocks ahead of the cart). World spawn (with
   `spawnChunkRadius 0`) and your respawn point roll forward with the ride, so
   nothing stays loaded behind you.
 - **Spectator constraints** — you're switched to Adventure mode with max
   Resistance and Saturation, so you can look around freely but can't break the
-  track, get hurt, or starve. Mob griefing and fire tick are disabled so the
-  scenery can't blow up the line.
+  track, get hurt, or starve, with true invulnerability from damage gamerules.
+  Tile drops, mob griefing and fire tick are disabled so the scenery can't
+  blow up the line.
 
 ## Tuning
 
