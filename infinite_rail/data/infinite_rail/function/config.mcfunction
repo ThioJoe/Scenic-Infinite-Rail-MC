@@ -70,7 +70,7 @@ scoreboard players set #CAMSMOOTH ir 6
 # half of #CAMBLEND (in blocks) makes summit landings progressively harder.
 # Setting this too high will probably make the camera raise too soon.
 # 25 seems to be an optimal number for smooth transitions.
-scoreboard players set #CAMLIFT ir 25
+scoreboard players set #CAMLIFT ir 20
 
 # How many blocks the viewer rides AHEAD of the hidden pace cart. Bigger
 # pushes the empty pacing cart further behind you (it's only visible looking
