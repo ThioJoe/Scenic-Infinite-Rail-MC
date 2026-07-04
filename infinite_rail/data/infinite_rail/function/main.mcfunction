@@ -15,6 +15,12 @@ execute as @e[type=minecart,tag=ir_ride,limit=1] on passengers unless entity @s[
 # only ever happens when the rider left the ride themselves.)
 execute as @a[gamemode=adventure] unless data entity @s RootVehicle run ride @s mount @e[type=minecart,tag=ir_ride,limit=1]
 
+# Keeper: prevent the ride cart from visually tilting due to the minecart_improvements experiment.
+execute as @e[type=minecart,tag=ir_ride,limit=1] run data modify entity @s Rotation[1] set value 0.0f
+
+# Keeper: keep the player's inventory empty to hide held items and prevent picking things up.
+clear @a[gamemode=adventure]
+
 # Keepers: plug on the pace cart, ride cart on the seat. Non-player
 # passengers expose no vehicle tag to query, so the mount attempt itself is
 # the check -- it just fails silently while already seated.
