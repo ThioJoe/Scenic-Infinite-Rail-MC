@@ -1,0 +1,555 @@
+# CONTEXT.md — How the Infinite Rail data pack works
+
+A complete technical reference for the project: the architecture, the shared
+state, every file, and the algorithms. Written for a developer (or an AI) who
+needs to understand or modify the pack. For player-facing usage see `README.md`.
+
+---
+
+## 1. What it is
+
+A **100% vanilla Minecraft: Java Edition data pack** (no mods, no resource pack)
+that turns the game into an endless, relaxing "Slow TV" minecart ride. You run
+one command and are dropped into a minecart that rides a self-building,
+permanently-powered rail line **due east forever**, while an algorithm lays
+smooth track over the procedurally generated terrain — bridging valleys and
+oceans, tunneling through mountains, and hovering a few blocks above the ground
+the rest of the time.
+
+Everything is driven by `.mcfunction` files and a single scoreboard. There is no
+Java, no external process. Target versions: **Java 1.21 through 26.2** (see
+`pack.mcmeta`).
+
+Key design facts to keep in mind while reading:
+
+- **The world is one-dimensional in travel.** The cart only ever moves in **+X
+  (east)**. Z is fixed (the track never turns). Y is what the algorithm decides.
+- **The "column"** is the unit of work: one X-slice of track (a rail, its
+  support below, a light above, and carved air around). The pack builds columns
+  one at a time, ahead of the cart.
+- **All shared state lives in one scoreboard objective, `ir`.** Values are held
+  on fake players whose names start with `#` (a convention for "not a real
+  player / internal variable"). There are no data structures beyond that and a
+  little command storage.
+
+---
+
+## 2. Data pack anatomy & how Minecraft bootstraps it
+
+```
+infinite_rail/
+  pack.mcmeta                                   # pack metadata + version compat
+  data/
+    minecraft/tags/function/
+      load.json                                 # vanilla hook: run on load/reload
+      tick.json                                 # vanilla hook: run every tick
+    infinite_rail/function/
+      *.mcfunction                              # all the logic (namespace: infinite_rail)
+```
+
+Minecraft discovers a data pack by its `pack.mcmeta`. Two **vanilla function
+tags** are the only entry points the game calls on its own:
+
+- `#minecraft:load` → lists `infinite_rail:load`. The game runs it **once when
+  the world loads and again on every `/reload`.** This is where the pack
+  initializes.
+- `#minecraft:tick` → lists `infinite_rail:tick`. The game runs it **every game
+  tick (20×/second).** This is the pack's heartbeat.
+
+Everything else is a normal function reached by `function infinite_rail:<name>`
+calls, or by the player running `/function infinite_rail:start` / `:stop`.
+
+> **Important behavior:** the game loads every `.mcfunction` into memory at
+> load/`/reload` time. Editing a file on disk does **not** change the running
+> game until `/reload` (or a world rejoin). This is why `config` is applied via
+> `/reload`, not by re-running the `config` function (see §6 and README).
+
+---
+
+## 3. Coordinate & geometry conventions
+
+- **+X = east = the direction of travel.** The head advances in +X.
+- **Z is constant** — the centerline of the track. It never changes after start.
+- **Y** is the elevation the algorithm chooses per column.
+- **The head marker** (`ir_head`, §4) sits at the current build position:
+  `(headX + 0.5, railY, centerZ + 0.5)` — block-centered in X/Z, integer Y. Most
+  build commands `execute ... at @e[ir_head]` and then use `~` relative
+  coordinates, so in the place/support/sample functions:
+  - `~` = the rail's cell (Y = railY)
+  - `~-1` = one below the rail (the support / redstone block)
+  - `~3` = three above the rail (the light block)
+  - `~4` / `~5` = top of the carved clearance
+  - `~-8 .. ~8` in Z (forceload) = ±1 chunk around the centerline
+
+A single **column** therefore looks like this vertically (flat case):
+
+```
+  railY+4 .. railY+1   air (carved clearance / tunnel bore)
+  railY+3              minecraft:light[level=11]   (lights tunnels, blocks mob spawns)
+  railY                minecraft:powered_rail (always powered)
+  railY-1              minecraft:redstone_block   (powers the rail; disguised as smooth_stone by a block_display)
+```
+
+Consecutive columns differ in X by 1. On slopes they also differ in Y by 1,
+producing a 45° "corner-to-corner" line of ascending rails (see §7c).
+
+---
+
+## 4. Shared state
+
+### 4.1 The `ir` scoreboard objective
+
+A single `dummy` objective named `ir` holds every variable. All are on `#`-named
+fake players. Grouped by role:
+
+**Tunable config knobs** (set by `config.mcfunction`; see §8):
+
+| Score        | Meaning |
+| ------------ | ------- |
+| `#HOVER`     | Preferred rail clearance (blocks) above the average terrain surface. |
+| `#DEADBAND`  | Minimum `|target − railY|` before a slope change is even considered (hysteresis vs. terrain noise). |
+| `#SAMEGAP`   | Minimum flat columns between two elevation changes **in the same direction**. |
+| `#TURNGAP`   | Minimum flat columns before the rail may **reverse** direction. |
+| `#UPCLAMP`   | Max a single heightmap sample may pull the rolling average **up** per column. |
+| `#DOWNCLAMP` | Max a single heightmap sample may pull the rolling average **down** per column. |
+| `#AHEAD`     | How far (blocks) ahead of the **cart** the rails are kept built. |
+| `#GENAHEAD`  | How far (blocks) ahead of the **rail head** terrain is force-generated. |
+| `#MAXTICK`   | Max columns built per game tick (catch-up budget). |
+
+**Internal constant** (set by `load.mcfunction`, kept out of user config):
+
+| Score  | Meaning |
+| ------ | ------- |
+| `#C12` | Number of heightmap samples per column (**12**) — the divisor for the average. Fixed by `sample_window.mcfunction`; changing one without the other breaks the average. |
+
+**Runtime state:**
+
+| Score       | Meaning |
+| ----------- | ------- |
+| `#started`  | `1` while a ride is active. `tick` does nothing unless this is 1. |
+| `#railY`    | Current rail elevation (Y). Tracks the head marker's Y. |
+| `#headX`    | Current head X (also the column counter / absolute world X of the build front). |
+| `#cartX`    | The cart's current X, sampled each tick, for the build-ahead gap. |
+| `#gap`      | `#headX − #cartX` — how far the build front leads the cart. |
+| `#budget`   | Columns left to build this tick (starts at `#MAXTICK`, counts down). |
+| `#nextLoad` | The `#headX` value at which `roll_chunks` next fires (every 16 blocks). |
+| `#avg`      | Rolling average of the terrain surface from the lookahead scan. |
+| `#sum`      | Accumulator for the 12 samples in `sample_window`. |
+| `#s`        | One sample's Y (temporary, reused per sample). |
+| `#lo`,`#hi` | Per-column clamp bounds `#avg−#DOWNCLAMP` / `#avg+#UPCLAMP`. |
+| `#target`   | Desired rail Y this column = `#avg + #HOVER`. |
+| `#diff`     | `#target − #railY` (how far the rail is from where it wants to be). |
+| `#ndead`    | `−#DEADBAND` (temp, the negative threshold for descending). |
+| `#slope`    | Direction of the **event in progress**: `-1` descending, `0` flat, `1` climbing. Persists across columns. |
+| `#slope0`   | Snapshot of `#slope` taken at the top of `decide` (so mid-function mutations don't confuse the branch logic). |
+| `#dir`      | **This column's** move: `-1` down, `0` flat, `1` up. Read by `advance` to place the column. |
+| `#want`     | Desired direction when flat (before the spacing gaps get a say). |
+| `#need`     | The gap required for the wanted change this column (`#SAMEGAP` or `#TURNGAP`). |
+| `#flat`     | Flat columns counted since the last event ended (compared against `#need`). |
+| `#lastDir`  | Direction of the last event (`1`/`-1`), used to pick `#SAMEGAP` vs `#TURNGAP`. |
+| `#mx`       | The cart's `Motion[0]` × 100 (its eastward speed, for the stall check). |
+
+### 4.2 Entities (all tagged, so selectors are unambiguous)
+
+| Tag        | Type            | Purpose |
+| ---------- | --------------- | ------- |
+| `ir_head`  | `marker`        | The build head. Its position is the current column; it advances east (and up/down on slopes) as track is laid. |
+| `ir_probe` | `marker`        | A scratch probe teleported around by `sample_window` (and once by `begin`) onto the terrain surface to read heightmaps into scores. |
+| `ir_cart`  | `minecart`      | The player's cart. Invulnerable; kept moving and kept occupied by the keepers. |
+| `ir_disp`  | `block_display` | One per column: a smooth-stone visual that disguises the redstone block under the rail. Purely cosmetic. |
+
+### 4.3 Command storage
+
+| Storage              | Path      | Purpose |
+| -------------------- | --------- | ------- |
+| `infinite_rail:tmp`  | `y`(double) | Scratch in `begin` to copy `#railY` into the head marker's `Pos[1]`. |
+| `infinite_rail:args` | `gen`(int)  | The macro argument passed to `forceload` (the `#GENAHEAD` distance). |
+
+---
+
+## 5. Runtime flow (the big picture)
+
+```
+World load / /reload
+        │
+        ▼
+#minecraft:load ─► infinite_rail:load ─► sets up `ir`, #C12, then infinite_rail:config
+                                          (applies all tunable knobs)
+
+Player runs /function infinite_rail:start
+        │
+        ▼
+start ─► (as nearest player, block-aligned) begin
+            ├─ reset any previous run, kill old entities, clear forceloads
+            ├─ setup_world (gamerules)
+            ├─ summon ir_head + ir_probe markers; initial forceload (via GENAHEAD macro)
+            ├─ read terrain here, set #railY = surface + #HOVER, move head to it
+            ├─ init counters (#slope=0, #flat=99, #lastDir=0, seed #avg, #nextLoad…)
+            ├─ place the first column, summon ir_cart, mount player, set adventure + effects
+            └─ pre-build ~32 columns synchronously, then set #started = 1
+
+Every game tick (while #started == 1)
+        │
+        ▼
+#minecraft:tick ─► tick ─► main
+                            ├─ sample #cartX
+                            ├─ keeper: re-mount rider if dismounted
+                            ├─ keeper: re-boost cart if stalled
+                            └─ #budget = #MAXTICK; build_loop
+                                   └─ while (#budget>0 AND head−cart < #AHEAD): build_step
+                                          └─ advance (build ONE column) ─► build_loop (recurse)
+
+advance (per column)
+   1. sample_window ─► #avg (rolling average of the next 48 blocks' surface)
+   2. #target = #avg + #HOVER
+   3. decide ─► #dir (-1/0/1)  [event model; may call consider_start]
+   4. move ir_head and place the column (place_flat / place_up / place_down ─► support)
+   5. every 16 blocks: roll_chunks (forceload ahead, unload behind, move spawn)
+
+Player runs /function infinite_rail:stop
+        │
+        ▼
+stop ─► #started=0, dismount, kill cart+markers, clear forceloads (track stays built)
+```
+
+---
+
+## 6. File-by-file reference
+
+### 6.1 Metadata & vanilla hooks
+
+**`infinite_rail/pack.mcmeta`**
+Pack metadata. Declares the description and version compatibility. Uses the
+current (25w31a+) scheme: `pack_format` (legacy, for old clients),
+`min_format` / `max_format` (the supported *data-pack* format range). `84`/`82`
+/`107` cover 1.21-era through 26.2. (Data-pack format numbers are a **separate
+series** from resource-pack numbers.)
+
+**`data/minecraft/tags/function/load.json`**
+Vanilla tag `#minecraft:load`; its `values` list contains `infinite_rail:load`.
+Makes the game run `load` on world-load and `/reload`.
+
+**`data/minecraft/tags/function/tick.json`**
+Vanilla tag `#minecraft:tick`; lists `infinite_rail:tick`. Makes the game run
+`tick` every game tick.
+
+### 6.2 Initialization & config
+
+**`function/load.mcfunction`**
+Runs on load/reload. `scoreboard objectives add ir dummy` (idempotent) creates
+the objective; sets the internal `#C12 = 12`; calls `infinite_rail:config` to
+apply all tunables; prints a "Loaded, run …:start" message. Does **not** touch
+ride state, so a `/reload` mid-ride refreshes the knobs without stopping it.
+
+**`function/config.mcfunction`**
+The single file a user edits. Sets every tunable score (`#HOVER`, `#DEADBAND`,
+`#SAMEGAP`, `#TURNGAP`, `#UPCLAMP`, `#DOWNCLAMP`, `#AHEAD`, `#GENAHEAD`,
+`#MAXTICK`) with heavily-commented explanations. Called by `load`. Its header
+documents how to apply edits (`/reload`) and that running `config` by itself
+only re-runs the in-memory copy (so it's only good for resetting live
+`/scoreboard` tweaks).
+
+### 6.3 Lifecycle / control
+
+**`function/start.mcfunction`**
+The player entry point. `execute as @p at @s align xz run function
+infinite_rail:begin` — runs `begin` as the nearest player, positioned at that
+player's block (X/Z floored to the grid, so the head marker lands block-aligned).
+
+**`function/begin.mcfunction`**
+Sets up and launches a ride (see the flow in §5). Notable steps:
+- **Reset:** `#started=0`, kill any `ir_head`/`ir_probe`/`ir_cart`, `forceload
+  remove all`, dismount the player — so `start` is safely re-runnable.
+- **World tuning:** calls `setup_world`.
+- **Anchor:** summons the two markers at the player (`~0.5 … ~0.5` = block
+  center); force-loads a small area behind + the `#GENAHEAD` corridor ahead
+  (via the `forceload` macro).
+- **Initial elevation:** teleports `ir_probe` onto the surface here
+  (`positioned over motion_blocking_no_leaves`), reads its Y into `#railY`, adds
+  `#HOVER`, and writes that Y into the head marker via storage `tmp.y`.
+- **Init counters:** `#slope=0`, `#flat=99` (large, so the first change isn't
+  gap-blocked), `#lastDir=0`; seeds `#avg = #railY − #HOVER`; sets `#nextLoad`.
+- **Launch:** places the first column (`place_flat`), summons `ir_cart` (invuln,
+  small eastward motion), mounts the player, switches them to **adventure**, and
+  gives **infinite Resistance 255 + Saturation** (can't break track, get hurt,
+  or starve).
+- **Pre-build:** sets `#budget=32` and runs `build_loop` once synchronously so a
+  stretch of track already exists ahead before handing off; then `#started=1`.
+
+**`function/setup_world.mcfunction`**
+One-time gamerule tuning for a clean ride: silences command feedback/output/
+advancement spam; `spawnChunkRadius 0` (don't keep origin chunks loaded);
+`mobGriefing false` (creepers/endermen can't wreck the track); `doFireTick
+false`, `doInsomnia false` (no fire spread, no phantoms); `doImmediateRespawn
+true` (respawn instantly at the moving spawn point if anything impossible ever
+happens).
+
+**`function/stop.mcfunction`**
+Ends the ride: `#started=0`, dismounts adventure players, kills `ir_cart` and
+both markers, clears all forceloads. **The built track (blocks + `ir_disp`
+displays) is intentionally left in the world.**
+
+**`function/tick.mcfunction`**
+The heartbeat. One line: if `#started == 1`, run `main`. (Gates all per-tick
+work behind an active ride.)
+
+**`function/main.mcfunction`**
+Per-tick driver while riding:
+1. Sample the cart's X into `#cartX`.
+2. **Rider keeper:** any adventure player not currently riding is re-mounted
+   into `ir_cart` (handles dismounts / relog).
+3. **Cart keeper:** read `Motion[0]×100` into `#mx`; if `#mx ≤ 10` (speed
+   < 0.1, i.e. stalled) `data merge` the cart's motion back to `0.5` east.
+4. Set `#budget = #MAXTICK` and run `build_loop` to extend the track.
+   *(Note: a comment here still says "broken torch" — a stale reference from the
+   old torch-based power design; harmless.)*
+
+### 6.4 The build loop
+
+**`function/build_loop.mcfunction`**
+Computes `#gap = #headX − #cartX`. If there is budget left **and** the head is
+closer than `#AHEAD` blocks to the cart, runs `build_step`. This is the loop
+condition; it builds no column itself.
+
+**`function/build_step.mcfunction`**
+`#budget −= 1`, `advance` (build exactly one column), then call `build_loop`
+again. The `build_loop`⇄`build_step` recursion is a bounded loop: it keeps
+building columns until either the head is `#AHEAD` ahead of the cart or the
+per-tick `#budget` is exhausted. (Recursion depth is capped by `#MAXTICK`.)
+
+**`function/advance.mcfunction`**
+Builds **one** column (see §7 for the algorithms it drives):
+1. Zero `#sum`, run `sample_window` at the head, compute `#avg = #sum / #C12`.
+2. `#target = #avg + #HOVER`.
+3. `decide` → sets `#dir` (−1/0/1).
+4. Move the head and place the column, per `#dir`:
+   - `#dir 0`: `tp head ~1 ~ ~`; `place_flat`.
+   - `#dir -1`: `tp head ~1 ~-1 ~`; `place_down`; `#railY −= 1`.
+   - `#dir 1`: `tp head ~1 ~ ~`; `place_up`; `tp head ~ ~1 ~`; `#railY += 1`.
+5. `#headX += 1`.
+6. If `#headX ≥ #nextLoad`, run `roll_chunks`.
+
+### 6.5 Terrain sampling & the slope decision (the algorithm)
+
+**`function/sample_window.mcfunction`**
+Runs positioned at the head. Computes the clamp window `#lo = #avg − #DOWNCLAMP`,
+`#hi = #avg + #UPCLAMP` (using the previous column's `#avg`). Then, for each of
+**12** offsets `~4, ~8, … ~48` blocks east: teleport `ir_probe` there and
+`positioned over motion_blocking_no_leaves` (snaps it to the surface — ignores
+tree leaves, includes water/lava surfaces so oceans read as sea level); read its
+Y into `#s`; discard void/ungenerated reads (`#s ≤ −63 → #s = #avg`); clamp `#s`
+to `[#lo, #hi]`; add to `#sum`. `advance` then divides `#sum` by `#C12` to get
+the new `#avg`. **The clamp is what makes narrow ravines/spikes barely move the
+average** (so they get bridged/tunneled level) while broad mountains still shift
+it. *(This is the one function whose exact number of sample blocks is fixed —
+`#C12` must equal the count here.)*
+
+**`function/decide.mcfunction`**
+Chooses this column's `#dir` using the **event model** (§7b). Computes `#diff =
+#target − #railY` and snapshots `#slope0 = #slope`.
+- If an event is in progress (`#slope0 = ±1`): keep sloping the same way until
+  the rail reaches the target — climb while `#diff ≥ 1`, descend while `#diff ≤
+  −1`; otherwise call `end_event` (the event is complete; this column is flat).
+- If flat (`#slope0 = 0`): call `consider_start` to maybe begin a new event.
+
+**`function/consider_start.mcfunction`**
+Decides, when flat, whether to begin a climb/descent:
+- `#want = 1` if `#diff ≥ #DEADBAND`; `#want = −1` if `#diff ≤ −#DEADBAND` (via
+  `#ndead = −#DEADBAND`); else `0`.
+- If `#want = 0`: stay flat, `#flat += 1` (count toward the next gap).
+- If `#want ≠ 0`: pick `#need = #SAMEGAP` (if `#want == #lastDir`) or `#TURNGAP`
+  (reversal). If `#flat ≥ #need`, call `start_event`; otherwise **hold level**
+  (`#flat += 1`, guarded by `#slope == 0`). Holding is what produces bridges (the
+  ground drops away under a level rail) and tunnels (the ground rises into it).
+
+**`function/start_event.mcfunction`**
+Begins an event: `#dir = #want`, `#slope = #want`, `#lastDir = #want`,
+`#flat = 0`. This column becomes the first sloped column; `decide` continues the
+slope on subsequent columns until the target is reached.
+
+**`function/end_event.mcfunction`**
+Ends an event: `#slope = 0`, `#flat = 0`. `#dir` stays `0`, so the current column
+is placed flat at the elevation just reached, and gap-counting restarts.
+
+### 6.6 Column placement (geometry & blocks)
+
+All three run positioned at the head; the head is already at this column's
+`(X, railY, Z)`. **Order matters:** the carve happens first, then `support`
+(which lays the redstone block *under* the rail), then the rail, then the light —
+because the track hovers above the ground, so the cell under the rail is air and
+the rail would pop off if placed before its support existed.
+
+**`function/place_flat.mcfunction`**
+`fill ~ ~ ~-1 ~ ~4 ~1 air` (carve 3 wide × 5 tall); `support`; `powered_rail
+[shape=east_west,powered=true]` at `~`; `light[level=11]` at `~3`.
+
+**`function/place_up.mcfunction`**
+Climbing column. Same as flat but carves one taller (`~5`, extra headroom as the
+cart rises) and places `powered_rail[shape=ascending_east,powered=true]`.
+
+**`function/place_down.mcfunction`**
+Descending column. Carves `~5` tall; places
+`powered_rail[shape=ascending_west,powered=true]`. (Because a descent moves the
+head down first, the rail sits one lower and slopes up toward the west behind it,
+which is the same physical staircase as a climb viewed the other way.)
+
+**`function/support.mcfunction`**
+Lays the power+disguise under the rail (shared by all three place functions):
+- `setblock ~ ~-1 ~ minecraft:redstone_block` — a block of redstone directly
+  under the rail. It **powers the powered rail resting on it**, is **immune to
+  water**, and **emits no light** (so it can't wash away or melt ice). This
+  single block replaces the old 5-block stone/torch/stone stack + barriers.
+- `execute align xyz run summon minecraft:block_display …` — a smooth-stone
+  `block_display` (tag `ir_disp`) that disguises the red block. Details that
+  matter:
+  - `align xyz` snaps the summon to the block corner (the head is block-centered).
+  - `brightness:{sky:15,block:15}` is **required** — a display samples the light
+    of the cell it occupies, which contains the opaque redstone block (light 0),
+    so without the override it renders solid black.
+  - `scale:[1, 1.01, 1.01]` / `translation:[0, −0.005, −0.005]` — enlarged a hair
+    in **Y and Z only** so the visible faces (underside + the two sides seen from
+    a bridge) sit just outside the redstone block and don't z-fight it. X stays
+    exactly 1 so neighboring supports (one block apart along the track) touch but
+    never overlap — a uniform >1 scale made adjacent displays overlap and shimmer.
+
+### 6.7 Chunk management
+
+**`function/roll_chunks.mcfunction`**
+Runs every 16 blocks of head travel (gated by `#nextLoad` in `advance`),
+positioned at the head. Stores `#GENAHEAD` into `infinite_rail:args gen` and
+calls the `forceload` macro (generate ahead, release behind). Then
+`setworldspawn` and `spawnpoint @a` at `~ ~1 ~` so world spawn and the player's
+respawn point **roll forward with the ride** (nothing anchors to the origin);
+`#nextLoad += 16`.
+
+**`function/forceload.mcfunction`** *(a function macro)*
+`forceload` only accepts literal/relative coordinates, not scoreboard values, so
+the configurable distance arrives as the macro arg `$(gen)`:
+- `$forceload add ~ ~-8 ~$(gen) ~8` — force-generate the corridor from the head
+  out to `#GENAHEAD` blocks ahead (±1 chunk in Z).
+- `forceload remove ~-336 ~-8 ~-256 ~8` — release a band well behind the head;
+  as the head advances 16 at a time these bands tile to clear everything ≳256
+  blocks back. Runs at the caller's position (head), inherited via the call.
+
+---
+
+## 7. The algorithms in depth
+
+### 7a. Heightmap sampling → rolling average
+Per column, `sample_window` reads the surface Y at 12 points spread over the next
+48 blocks and averages them into `#avg`. Two safeguards: void/ungenerated reads
+(`≤ −63`) are replaced by the previous average, and each sample is **clamped to
+`±#DOWNCLAMP / +#UPCLAMP` around the previous average**. The clamp is the
+"smoothing" dial: small values make the line ignore sudden dips/spikes (they get
+bridged/tunneled level); large values make it hug the terrain closely.
+
+### 7b. The event model (slope shaping)
+The target elevation is `#avg + #HOVER`. Rather than nudging one block at a time,
+the rail moves in **events**: once it decides to climb or descend, it does so as
+a single unbroken 45° run (`#slope` persists; `decide` keeps `#dir` nonzero)
+until `#railY` reaches the target — never "up, flat, up, flat." Between events
+the rail is flat, and two spacing gaps govern when a new event may start:
+`#SAMEGAP` (repeat the same direction) and `#TURNGAP` (reverse). `#DEADBAND` adds
+hysteresis so terrain noise below that height difference is ignored. When a
+change is *wanted* but a gap forbids it, the rail **holds level** — which is
+exactly what turns into a **bridge** (ground falls away) or a **tunnel** (ground
+rises into the carve). So bridges and tunnels are not special cases; they emerge
+from "hold the line until the gap allows a change."
+
+### 7c. Column geometry (how slopes map to blocks)
+`advance` moves the head and picks the place function by `#dir`:
+- **Flat:** head east +1; rail at `railY`.
+- **Climb:** head east +1; place `ascending_east` at the *current* `railY`; then
+  head up +1 and `#railY += 1`. So each climbing column's rail is one higher than
+  the last — a staircase of ascending rails a minecart takes as a smooth 45° line.
+- **Descend:** head east +1 **and down −1**; place `ascending_west` at the new
+  (lower) `railY`; `#railY −= 1`.
+Each column then carves clearance above, lays the redstone support below, sets
+the rail, and adds the light (§6.6).
+
+### 7d. Power & the disguise
+Every rail is `powered=true` and sits directly on a **block of redstone**, which
+powers it (a rail resting on a redstone power source is activated) with no torch,
+no support stack, and no barriers. Because a raw redstone block would show red
+from the side of a bridge, each one is covered by a smooth-stone `block_display`
+(`ir_disp`). The display needs a `brightness` override (it sits inside an opaque
+block → samples light 0 → would be black) and a Y/Z-only oversize (to cover its
+visible faces without overlapping neighbors). Cost per column: **1 block + 1
+display + 1 rail** (down from 5 blocks + 1 rail in the old torch design).
+
+### 7e. Chunk loading / unloading
+`forceload` generates a corridor `#GENAHEAD` blocks ahead of the head so the
+heightmap scanner always has real terrain, and releases chunks a few hundred
+blocks behind. There are **two independent look-ahead distances**: `#AHEAD` (how
+far ahead of the *cart* the rails are laid) and `#GENAHEAD` (how far ahead of the
+*rail head* the world is generated) — so terrain exists ≈ `#AHEAD + #GENAHEAD`
+ahead of the cart. Memory stays flat (passed chunks unload), though vanilla
+commands can't delete chunks from disk, so the world folder still grows slowly.
+
+### 7f. The keepers
+Two per-tick guards in `main` make the ride truly unbreakable: if the rider ever
+leaves the cart they're re-mounted, and if the cart's eastward speed ever drops
+near zero it's re-boosted to `0.5`. Combined with the always-powered rails, the
+cart effectively can never stop.
+
+---
+
+## 8. Tuning
+
+All knobs live in `config.mcfunction` (see the table in §4.1). **To apply edits:
+change the value, then run `/reload`** (or rejoin the world) — the game re-reads
+the file and re-runs `config`, updating a ride already in progress. To experiment
+without editing the file, set a score live, e.g. `/scoreboard players set #HOVER
+ir 8` (takes effect on the next column; wiped on the next `/reload`/rejoin).
+Running `/function infinite_rail:config` by itself does **not** pick up file
+edits — it re-runs the copy already in memory.
+
+Current defaults in `config.mcfunction`: `#HOVER 3`, `#DEADBAND 4`, `#SAMEGAP
+50`, `#TURNGAP 50`, `#UPCLAMP 20`, `#DOWNCLAMP 20`, `#AHEAD 160`, `#GENAHEAD
+192`, `#MAXTICK 15`. (These are tuned to taste and change often; the algorithm
+works across a wide range.)
+
+---
+
+## 9. Limitations & gotchas
+
+- **Disk usage grows.** Commands can unload chunks (memory stays flat) but can't
+  delete them from disk, so a very long ride slowly grows the world folder.
+- **Single rider.** One cart, one occupant; designed for a solo viewer.
+- **Overworld only.** The Nether's bedrock ceiling confuses surface heightmaps.
+- **Very low `#HOVER`.** The redstone support is immune to water, but the *rail*
+  is not — at `#HOVER 0` or below, the rail itself can sit in water and wash out.
+  Keep the track hovering above sea level. (The power source is safe regardless.)
+- **Pack-ice tunnels.** The `light[level=11]` block is exactly at the ice-melt
+  threshold, so it doesn't melt ice; the redstone block emits no light. So the
+  power stays safe, but a `light` level raised above 11 could melt ice into the
+  bore.
+- **Display entities accumulate** in the built (and saved) chunks like any block;
+  they unload behind the ride with their chunks. `brightness:{sky:15,block:15}`
+  is full-bright, so the disguised stone won't dim at night — lower `block`
+  toward 0 in `support.mcfunction` if that reads as too bright.
+- **Stale comments.** `main.mcfunction` mentions a "broken torch" and
+  `config.mcfunction` has a note about water destroying "redstone torches" — both
+  are leftovers from the pre-redstone-block power design and don't reflect the
+  current code.
+- **File edits need `/reload`.** See §8 — the single most common point of
+  confusion.
+
+---
+
+## 10. Quick map (function → what calls it)
+
+```
+#minecraft:load ─ load ─ config
+#minecraft:tick ─ tick ─ main ─ build_loop ⇄ build_step ─ advance ─┬─ sample_window
+                          │                                        ├─ decide ─ consider_start ─ start_event
+                          │                                        │                 └─ (decide also calls) end_event
+                          ├─ (keepers, inline)                     ├─ place_flat / place_up / place_down ─ support
+                          └─ #cartX read                           └─ roll_chunks ─ forceload (macro)
+
+/function infinite_rail:start ─ start ─ begin ─┬─ setup_world
+                                               ├─ forceload (macro)
+                                               ├─ place_flat (first column)
+                                               └─ build_loop … (pre-build)
+/function infinite_rail:stop  ─ stop
+```
