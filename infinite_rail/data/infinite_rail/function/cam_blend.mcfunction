@@ -17,5 +17,5 @@ scoreboard players operation #tj ir += #lift ir
 execute if score #fmx ir < #tj ir run scoreboard players operation #tj ir = #fmx ir
 scoreboard players operation #tsum ir += #tj ir
 scoreboard players add #tn ir 1
-scoreboard players add #j ir 2
+scoreboard players add #j ir 1
 execute if score #j ir <= #half ir run function infinite_rail:cam_blend
