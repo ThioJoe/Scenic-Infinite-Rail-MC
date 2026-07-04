@@ -58,7 +58,7 @@ scoreboard players set #CAMBLEND ir 6
 # camera closes 1/N of the remaining gap when the track drops away below it.
 # Climbs don't use this -- they follow the constructed S-curve above with no
 # lag. Higher = softer, floatier drops; lower = tighter; 1 = off.
-scoreboard players set #CAMSMOOTH ir 8
+scoreboard players set #CAMSMOOTH ir 6
 
 # How high (in TENTHS of a block) the camera rides above the rail line while
 # climbing. This is the crest-smoothing budget: the camera reaches the summit
@@ -68,7 +68,7 @@ scoreboard players set #CAMSMOOTH ir 8
 # higher above the rails on the way up; smaller = hugs the climb tighter but
 # lands harder on crests. Keep it <= ~25 for tunnel headroom; going below
 # half of #CAMBLEND (in blocks) makes summit landings progressively harder.
-scoreboard players set #CAMLIFT ir 24
+scoreboard players set #CAMLIFT ir 15
 
 # How many blocks the viewer rides AHEAD of the hidden pace cart. Bigger
 # pushes the empty pacing cart further behind you (it's only visible looking
