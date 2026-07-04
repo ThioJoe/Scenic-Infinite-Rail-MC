@@ -6,3 +6,4 @@ setblock ~ ~-2 ~ minecraft:redstone_torch
 setblock ~ ~-1 ~ minecraft:smooth_stone
 setblock ~ ~ ~ minecraft:powered_rail[shape=ascending_west,powered=true]
 setblock ~ ~3 ~ minecraft:light[level=11]
+function infinite_rail:shield

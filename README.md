@@ -55,9 +55,13 @@ want to move around afterward.)
 - **Perpetual motion** — the track is built exclusively from always-powered
   rails. Each rail sits on a smooth stone block with a redstone torch buried
   beneath it (`stone / torch / stone / rail`), so every single rail is
-  permanently powered. Two per-tick keepers guarantee the ride never ends: if
-  the cart ever stalls (mob collision, freak accident) it is re-boosted, and if
-  the rider ever dismounts they are put straight back in the cart.
+  permanently powered. The torch's two flanks and its leading face are sealed
+  with invisible **barrier blocks**, so oceans, rivers, and meltwater can't wash
+  the torches away and the torches can't melt adjacent ice into themselves —
+  the ride stays powered even skimming low over water. Two per-tick keepers
+  guarantee the ride never ends: if the cart ever stalls (mob collision, freak
+  accident) it is re-boosted, and if the rider ever dismounts they are put
+  straight back in the cart.
 - **Terrain smoothing** — an invisible track head runs up to ~112 blocks ahead
   of the cart. For every column it samples the vanilla terrain heightmap at 12
   points across the next 48 blocks and maintains a rolling average, steering the
