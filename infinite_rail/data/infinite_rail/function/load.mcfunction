@@ -8,9 +8,10 @@ scoreboard objectives add ir dummy
 # here on its own, so it stays out of the user config.
 scoreboard players set #C12 ir 12
 
-# Internal constants: fixed-point multipliers for the smooth-camera math
-# (#CAMHEIGHT is configured in tenths of a block; the seat height #sy is
-# tracked in milliblocks).
+# Internal constants for the camera math: fixed-point multipliers (#CAMHEIGHT
+# is configured in tenths of a block; heights are tracked in milliblocks) and
+# a parity divisor for the scan window.
+scoreboard players set #C2 ir 2
 scoreboard players set #C100 ir 100
 scoreboard players set #C1000 ir 1000
 

@@ -4,6 +4,7 @@ effect clear @a[gamemode=adventure]
 execute as @a[gamemode=adventure] run ride @s dismount
 kill @e[type=minecart,tag=ir_cart]
 kill @e[type=item_display,tag=ir_seat]
+kill @e[type=item_display,tag=ir_plug]
 kill @e[type=marker,tag=ir_head]
 kill @e[type=marker,tag=ir_probe]
 forceload remove all

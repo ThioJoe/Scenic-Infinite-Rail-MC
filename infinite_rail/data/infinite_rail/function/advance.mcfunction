@@ -30,5 +30,11 @@ execute if score #dir ir matches 1 run scoreboard players add #railY ir 1
 
 scoreboard players add #headX ir 1
 
-# --- 5. Rolling chunk management every 16 blocks ---
+# --- 5. Record this column's rail height in the track history ---
+# One int per column (index = X - #trackBase); the camera reads this list to
+# fly a pre-smoothed path along the known profile (see cam_follow).
+data modify storage infinite_rail:track y append value 0
+execute store result storage infinite_rail:track y[-1] int 1 run scoreboard players get #railY ir
+
+# --- 6. Rolling chunk management every 16 blocks ---
 execute if score #headX ir >= #nextLoad ir at @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:roll_chunks
