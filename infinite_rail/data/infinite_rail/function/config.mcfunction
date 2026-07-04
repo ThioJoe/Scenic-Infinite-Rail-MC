@@ -68,7 +68,9 @@ scoreboard players set #CAMSMOOTH ir 6
 # higher above the rails on the way up; smaller = hugs the climb tighter but
 # lands harder on crests. Keep it <= ~25 for tunnel headroom; going below
 # half of #CAMBLEND (in blocks) makes summit landings progressively harder.
-scoreboard players set #CAMLIFT ir 15
+# Setting this too high will probably make the camera raise too soon.
+# 25 seems to be an optimal number for smooth transitions.
+scoreboard players set #CAMLIFT ir 25
 
 # How many blocks the viewer rides AHEAD of the hidden pace cart. Bigger
 # pushes the empty pacing cart further behind you (it's only visible looking
@@ -97,7 +99,7 @@ scoreboard players set #AUTOSTART ir 1
 
 # Minimum height difference (in blocks) before a new climb/descent is started.
 # Also acts as hysteresis, so small terrain noise never nudges the rail.
-scoreboard players set #DEADBAND ir 2
+scoreboard players set #DEADBAND ir 3
 
 # Minimum flat blocks between two changes in the SAME direction.
 # Higher = fewer, longer swoops. Terrain that rises faster than this allows
