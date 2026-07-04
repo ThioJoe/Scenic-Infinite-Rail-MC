@@ -1,8 +1,9 @@
-# One window sample at column offset #k from the rig (recursive: #k advances
-# by 2 until it passes +#CAMWINDOW). Each sample is interpolated between its
-# column and the next by the pace cart's sub-block X (#fx / #fi), so the
-# average moves continuously instead of stepping when the cart crosses a
-# block edge.
+# One profile sample at column offset #k ahead of the rig (recursive: #k
+# advances by 2 until it passes +#CAMWINDOW). Each sample is interpolated
+# between its column and the next by the pace cart's sub-block X (#fx / #fi),
+# so the forward max moves continuously instead of stepping when the cart
+# crosses a block edge -- the pair straddle also means every column in
+# [rig .. rig+#CAMWINDOW+1] is seen.
 scoreboard players operation #si ir = #ci ir
 scoreboard players operation #si ir += #k ir
 execute if score #si ir matches ..-1 run scoreboard players set #si ir 0
@@ -23,8 +24,9 @@ scoreboard players operation #sm ir *= #fi ir
 scoreboard players operation #t2 ir = #yb ir
 scoreboard players operation #t2 ir *= #fx ir
 scoreboard players operation #sm ir += #t2 ir
-scoreboard players operation #csum ir += #sm ir
-scoreboard players add #cn ir 1
+
+# Track the forward maximum.
+execute if score #sm ir > #fmx ir run scoreboard players operation #fmx ir = #sm ir
 
 # The k = 0 sample IS the rail line height right at the rig.
 execute if score #k ir matches 0 run scoreboard players operation #linem ir = #sm ir

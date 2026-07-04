@@ -68,13 +68,14 @@ want to move around afterward.)
 - **Butter-smooth camera (the ride rig)** — you sit in a real minecart, but
   it isn't the one on the rails: your cart is glued to an invisible,
   client-interpolated **camera seat** (an `item_display`) and glides *off*
-  the rails along a **pre-smoothed S-curve computed from the track's own
-  recorded profile**. Because the pack builds the track, it knows every slope
-  in advance: climbs start rising *before* the corner, steady 45° runs are
-  followed exactly parallel with zero lag, and descents ease down on a
-  reactive exponential glide — the camera never sags into terrain and the
-  cart never bounces, tilts or shifts against your view (you, the cart and
-  the camera move as one rigid unit). You mount **once** at ride start and
+  the rails along a **smoothed path computed from the track's own recorded
+  profile**. Because the pack builds the track, it knows every slope in
+  advance: climbs are literally *descents played in reverse* — the camera
+  lifts off before the hill, eases up it, and decelerates level onto the
+  summit before the rail even gets there — while descents ease down on the
+  same reactive glide. The camera never sinks into terrain and the cart never
+  bounces, tilts or shifts against your view (you, the cart and the camera
+  move as one rigid unit). You mount **once** at ride start and
   are never remounted, so there are no visible transitions and no repeated
   "press ⇧ to dismount" hints. Meanwhile a hidden **pace cart** rides the
   physical rails ~64 blocks behind you and sets the speed — however fast the
@@ -162,8 +163,9 @@ temporary — a reload or rejoin resets everything to the values in
 | ------------ | ------- | ------------------------------------------------------------------- |
 | `#HOVER`     | 2       | Cruising altitude above the average terrain surface                 |
 | `#CAMHEIGHT` | 0       | **Extra** rig height above the rail line, in tenths of a block      |
-| `#CAMWINDOW` | 8       | Camera lookahead (blocks each side, even): the S-curve reach        |
-| `#CAMSMOOTH` | 4       | Descent glide: camera closes 1/N of a downward gap per tick         |
+| `#CAMWINDOW` | 8       | How far ahead the camera scouts the profile (climbs ease in early)  |
+| `#CAMSMOOTH` | 4       | Glide: camera closes 1/N of the gap to its target per tick          |
+| `#CAMLIFT`   | 20      | Crest budget (tenths): max float above the rail while climbing      |
 | `#CAMAHEAD`  | 64      | How far the viewer rides ahead of the hidden pace cart              |
 | `#AUTOSTART` | 1       | 1 = ride starts itself in a fresh world; 0 = manual start           |
 | `#DEADBAND`  | 2       | Min. height difference before a climb/descent is triggered          |
@@ -183,16 +185,17 @@ the ride never micro-stutters regardless of how they're set — and since the
 camera glide erases the flat→slope corners entirely, the defaults now lean
 toward more frequent, smaller changes than they used to.
 
-`#CAMWINDOW` and `#CAMSMOOTH` are the feel of the ride: the window is how far
-the camera reads the recorded track profile to each side of the rig — climbs
-start easing in about that many blocks *before* the corner (bigger = softer,
-earlier, floatier). The smooth value is the reactive glide used when the
-camera needs to come *down* (into descents, settling after a crest); climbs
-never lag, so they can't sag the camera into the ground. `#CAMHEIGHT` is
-extra rig height above the rail line — 0 rests your cart on the line exactly
-like a real cart on a rail. `#CAMAHEAD` is where the hidden pace cart trails
-behind you; raise it to push that cart further out of sight when looking
-backward.
+`#CAMWINDOW`, `#CAMSMOOTH` and `#CAMLIFT` are the feel of the ride: the
+window is how far ahead the camera scouts the recorded track profile (climbs
+begin easing in that early), the smooth value is the exponential glide toward
+the target in both directions (higher = softer and floatier), and the lift is
+the crest-smoothing budget — how high the camera may ride above the rail
+while approaching and climbing a hill so it can decelerate and land level on
+the summit (bigger = smoother hilltops, floatier climbs; smaller = tighter
+climbs, harder crest landings). `#CAMHEIGHT` is extra rig height above the
+rail line — 0 rests your cart on the line exactly like a real cart on a
+rail. `#CAMAHEAD` is where the hidden pace cart trails behind you; raise it
+to push that cart further out of sight when looking backward.
 
 ## Vanilla limitations
 

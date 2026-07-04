@@ -113,8 +113,9 @@ fake players. Grouped by role:
 | ------------ | ------- |
 | `#HOVER`     | Preferred rail clearance (blocks) above the average terrain surface. |
 | `#CAMHEIGHT` | **Extra** rig height above the rail line, in **tenths of a block** (0 = the ride cart rests on the smoothed line like a cart on a rail). |
-| `#CAMWINDOW` | Camera profile lookahead, blocks each side of the rig (even). The S-curve reach. |
-| `#CAMSMOOTH` | Descent glide divisor: the camera closes `1/#CAMSMOOTH` of a **downward** gap per tick (climbs never lag; 1 = off). |
+| `#CAMWINDOW` | How far **ahead** (blocks) the camera scouts the recorded profile — climbs begin easing in this early. |
+| `#CAMSMOOTH` | Glide divisor: the camera closes `1/#CAMSMOOTH` of the gap to its target per tick, both directions (1 = off). |
+| `#CAMLIFT`   | Crest-smoothing budget, in **tenths of a block**: how high the camera may ride above the rail line while approaching/climbing hills. Bigger = smoother hilltops, floatier climbs. |
 | `#CAMAHEAD`  | How many blocks the rig (viewer) rides ahead of the hidden pace cart. Keep ≥ ~40 below `#AHEAD`. |
 | `#AUTOSTART` | `1` = the ride auto-starts for the first player in a fresh world; `0` = manual start only. |
 | `#DEADBAND`  | Minimum `|target − railY|` before a slope change is even considered (hysteresis vs. terrain noise). |
@@ -131,8 +132,7 @@ fake players. Grouped by role:
 | Score   | Meaning |
 | ------- | ------- |
 | `#C12`  | Number of heightmap samples per column (**12**) — the divisor for the average. Fixed by `sample_window.mcfunction`; changing one without the other breaks the average. |
-| `#C2`   | Constant **2**: parity divisor forcing the camera scan window to even offsets (so the k = 0 rail-line sample always lands). |
-| `#C100` | Fixed-point multiplier **100**: converts `#CAMHEIGHT` (tenths of a block) to milliblocks. |
+| `#C100` | Fixed-point multiplier **100**: converts `#CAMHEIGHT`/`#CAMLIFT` (tenths of a block) to milliblocks. |
 | `#C1000`| Fixed-point multiplier **1000**: converts whole blocks to milliblocks / extracts the cart's sub-block X fraction. |
 
 **Runtime state:**
@@ -164,11 +164,11 @@ fake players. Grouped by role:
 | `#autodone` | `1` once a ride has ever been started in this world; blocks the auto-starter forever after (persists in the world save). |
 | `#trackBase`| World X of index 0 of the track-history list (storage `infinite_rail:track y`). |
 | `#sy`       | The smoothed rail-line height under the rig, in **milliblocks** — the state of the glide. |
-| `#ty`       | The glide target in milliblocks: the window average, clamped to ≥ the rail line and ≤ line + 2 blocks. |
+| `#ty`       | The glide target in milliblocks: `min(forward max of the profile, rail line + #CAMLIFT×100)`. |
 | `#dy`       | The glide step this tick (`cam_glide`). |
 | `#cxm`,`#ci`,`#cmaxi`,`#fx`,`#fi` | Pace-cart X×1000, the rig's column index into the history (cart index + `#CAMAHEAD`, clamped), max valid index, sub-block X fraction (milli, floorMod) and complement — index and fraction derive from the one `#cxm` read so they can't disagree. |
-| `#k`,`#kk`,`#si`,`#sj`,`#ya`,`#yb`,`#sm`,`#t2` | `cam_scan` loop state: window offset (+parity temp), clamped sample indices, the two column heights, the interpolated sample, scratch (also reused by `cam_move`). |
-| `#csum`,`#cn`,`#linem`,`#ly` | Window sum/count, rail line at the rig (milli), `cam_get` output. |
+| `#k`,`#si`,`#sj`,`#ya`,`#yb`,`#sm`,`#t2` | `cam_scan` loop state: lookahead offset, clamped sample indices, the two column heights, the interpolated sample, scratch (also reused by `cam_move` and `cam_follow`). |
+| `#fmx`,`#linem`,`#ly` | Forward maximum of the profile (milli), rail line at the rig (milli), `cam_get` output. |
 
 ### 4.2 Entities (all tagged, so selectors are unambiguous)
 
@@ -514,16 +514,17 @@ over a ride in progress). Reads the pace cart's X once as fixed-point
 (`#cxm = X×1000`) and derives both the sub-block fraction `#fx` (floorMod)
 and the rig's column index `#ci` (cart column + `#CAMAHEAD`, clamped to the
 valid history range) from it; runs `cam_scan`; computes the glide target
-`#ty = window average`, clamped to ≥ `#linem` (never below the rail line) and
-≤ `#linem + 2000` (2 blocks of S-curve bulge, tunnel-roof headroom); then
-`cam_glide` and `cam_move`. See §7g for why this shape.
+`#ty = min(#fmx, #linem + #CAMLIFT×100)` — the forward max of the profile,
+capped `#CAMLIFT` above the rail line (never below it: the k = 0 sample is in
+the max); then `cam_glide` and `cam_move`. See §7g for why this shape.
 
 **`function/cam_scan.mcfunction`** *(recursive)*
-One window sample per call: offset `#k` runs from −`#CAMWINDOW` (forced even)
-to +`#CAMWINDOW` in steps of 2. Each sample reads two adjacent column heights
-via `cam_get` and interpolates them by `#fx`/`#fi` so the average moves
-continuously rather than stepping at block edges. Accumulates `#csum`/`#cn`
-and captures the k = 0 sample as `#linem` (the rail line at the rig).
+One profile sample per call: offset `#k` runs from 0 to +`#CAMWINDOW` in steps
+of 2. Each sample reads two adjacent column heights via `cam_get` and
+interpolates them by `#fx`/`#fi`, so the forward max `#fmx` moves continuously
+rather than stepping at block edges (and the pair straddle means every column
+in `[rig .. rig+#CAMWINDOW+1]` is seen). Captures the k = 0 sample as `#linem`
+(the rail line at the rig).
 
 **`function/cam_get.mcfunction`** *(a function macro)*
 `$execute store result score #ly ir run data get storage infinite_rail:track y[$(i)]`
@@ -531,10 +532,9 @@ and captures the k = 0 sample as `#linem` (the rail line at the rig).
 (storage `infinite_rail:cami i`).
 
 **`function/cam_glide.mcfunction`**
-Advances `#sy` toward `#ty`: upward differences are followed immediately
-(climbs are already pre-smoothed by the window average; capped at 1 block/tick
-so a clamp edge can't jolt), downward differences ease by `1/#CAMSMOOTH` per
-tick.
+Advances `#sy` toward `#ty` by `1/#CAMSMOOTH` of the remaining gap per tick,
+in either direction, with a 1 block/tick jolt guard and a final floor at
+`#linem` so the rig can never sink into the track.
 
 **`function/cam_move.mcfunction`**
 Teleports the seat — and with it the rigid ride-cart + rider stack — to
@@ -633,18 +633,21 @@ The design has three pillars:
    server-side. (Vehicle-swap designs also physically move the player,
    because passenger attachment offsets differ between entity types — the
    rig sidesteps both problems.)
-2. **Profile-driven S-curve.** The pack *built* the track, so it knows the
-   exact elevation profile — `advance` records every column's rail Y into a
-   storage list. The rig's height target is the **symmetric average of that
-   profile over ±`#CAMWINDOW` blocks around the rig** (samples interpolated
-   by the pace cart's sub-block X), clamped to never fall below the rail line
-   and bulge-capped at +2 blocks. A symmetric window is a zero-phase filter:
-   the rig starts rising ~`#CAMWINDOW` blocks **before** a climb corner
-   (predictive, not reactive) and rides **exactly parallel to a steady 45°
-   run with zero lag** — it can never sink into terrain. Upward moves are
-   followed immediately (they're already smooth); downward moves use the
-   reactive `1/#CAMSMOOTH` exponential glide — the pleasant "drop into the
-   valley" feel.
+2. **Profile-driven glide, symmetric by design.** The pack *built* the track,
+   so it knows the exact elevation profile — `advance` records every column's
+   rail Y into a storage list. The rig's height target is the **maximum of
+   that profile over the next `#CAMWINDOW` blocks** (samples interpolated by
+   the pace cart's sub-block X), capped `#CAMLIFT` above the local rail line,
+   and the rig eases toward it by `1/#CAMSMOOTH` per tick in both directions.
+   This makes climbs literally *descents played in reverse*: a descent is an
+   ease toward a line that drops away ahead; a climb is an ease toward a
+   target that rises **before** the corner (the max sees the hill early), so
+   the camera lifts off ahead of the slope, floats at most `#CAMLIFT` above
+   the rail on the way up, reaches the summit level early, and **decelerates
+   level onto hilltops** instead of being pinned to the 45° line and kinking
+   over the crest. On flats the target equals the line (parked, zero drift);
+   descents keep the reactive "drop into the valley" glide unchanged. A final
+   floor at the rail line means it can never sink into the track.
 3. **A hidden cart sets the pace.** The rig rides `#CAMAHEAD` blocks east of
    the pace cart (`ir_cart`), which rolls along the physical rails behind the
    viewer, out of forward view. Whatever speed the rails push it — including
@@ -671,9 +674,9 @@ Running `/function infinite_rail:config` by itself does **not** pick up file
 edits — it re-runs the copy already in memory.
 
 Current defaults in `config.mcfunction`: `#HOVER 2`, `#CAMHEIGHT 0`,
-`#CAMWINDOW 8`, `#CAMSMOOTH 4`, `#CAMAHEAD 64`, `#AUTOSTART 1`, `#DEADBAND 2`,
-`#SAMEGAP 5`, `#TURNGAP 40`, `#UPCLAMP 75`, `#DOWNCLAMP 25`, `#AHEAD 224`,
-`#GENAHEAD 192`, `#MAXTICK 15`. (These are tuned to taste and change often;
+`#CAMWINDOW 8`, `#CAMSMOOTH 4`, `#CAMLIFT 20`, `#CAMAHEAD 64`, `#AUTOSTART 1`,
+`#DEADBAND 2`, `#SAMEGAP 5`, `#TURNGAP 40`, `#UPCLAMP 75`, `#DOWNCLAMP 25`,
+`#AHEAD 224`, `#GENAHEAD 192`, `#MAXTICK 15`. (These are tuned to taste and change often;
 the algorithm works across a wide range. The gaps and deadband are far lower
 than the pre-camera 50/50/4 because the profile-driven camera erases slope
 corners entirely, so frequent small elevation changes are now visually free.

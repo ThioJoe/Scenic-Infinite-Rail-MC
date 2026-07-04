@@ -6,13 +6,21 @@
 # the hidden pace cart (ir_cart), which rides the physical rails behind the
 # viewer and sets the pace:
 #
-#   avg  = symmetric average of railY over [rigX-W .. rigX+W]  (W = #CAMWINDOW)
-#   ty   = clamp(avg, >= railY at the rig, <= railY + 2)
-#   rise -> follow immediately (the symmetric window starts climbs ~W blocks
-#           BEFORE the corner -- a predictive S-curve -- and has ZERO lag on a
-#           steady 45-degree run, so the rig rides exactly parallel to the
-#           rail and can never sink into terrain)
-#   fall -> ease by 1/#CAMSMOOTH per tick (the reactive descent glide)
+#   ty = min( max of railY over [rigX .. rigX+W],  railY + #CAMLIFT )
+#   sy += (ty - sy) / #CAMSMOOTH        (the same ease in BOTH directions)
+#   sy = max(sy, railY)                 (never below the rail line)
+#
+# The forward-max target is what makes climbs feel like descents played in
+# reverse: a descent is an exponential ease toward a line that drops away
+# ahead; a climb becomes an exponential ease toward a target that RISES ahead
+# of the corner (the max sees the hill #CAMWINDOW blocks early). The camera
+# lifts off before the slope, floats at most #CAMLIFT above the rail while
+# climbing, and -- because the target reaches the summit level #CAMLIFT
+# blocks before the rail does -- decelerates and lands level on the hilltop
+# instead of being pinned to the full 45-degree line and kinking over the
+# crest. On flats the target equals the line exactly (parked); on descents
+# the max of what's ahead IS the current line, so the reactive drop-glide is
+# unchanged.
 #
 # All heights are in milliblocks. Column heights come from the history list
 # appended by advance (storage infinite_rail:track y, index = X - #trackBase),
@@ -41,26 +49,19 @@ scoreboard players operation #cmaxi ir -= #trackBase ir
 execute if score #ci ir matches ..-1 run scoreboard players set #ci ir 0
 execute if score #ci ir > #cmaxi ir run scoreboard players operation #ci ir = #cmaxi ir
 
-# --- Scan the +/-#CAMWINDOW window (step 2): fills #csum/#cn (the average)
-# and #linem (the rail line right at the rig) ---
-scoreboard players set #csum ir 0
-scoreboard players set #cn ir 0
+# --- Scan the profile from the rig to +#CAMWINDOW ahead (step 2): fills
+# #fmx (the forward maximum) and #linem (the rail line right at the rig) ---
+scoreboard players set #fmx ir -2000000000
 scoreboard players set #k ir 0
-scoreboard players operation #k ir -= #CAMWINDOW ir
-# Force an even starting offset so the k=0 sample (the rail line) always lands.
-scoreboard players operation #kk ir = #k ir
-scoreboard players operation #kk ir %= #C2 ir
-scoreboard players operation #k ir -= #kk ir
 function infinite_rail:cam_scan
 
-# --- Target height: the window average, never below the rail line, and never
-# more than 2 blocks of S-curve bulge above it (tunnel-roof headroom) ---
-scoreboard players operation #ty ir = #csum ir
-scoreboard players operation #ty ir /= #cn ir
-execute if score #ty ir < #linem ir run scoreboard players operation #ty ir = #linem ir
-scoreboard players operation #t2 ir = #linem ir
-scoreboard players add #t2 ir 2000
-execute if score #ty ir > #t2 ir run scoreboard players operation #ty ir = #t2 ir
+# --- Target height: the forward max, capped #CAMLIFT above the rail line.
+# The k=0 sample is included in the max, so #fmx (and thus #ty) can never be
+# below the line. ---
+scoreboard players operation #ty ir = #CAMLIFT ir
+scoreboard players operation #ty ir *= #C100 ir
+scoreboard players operation #ty ir += #linem ir
+execute if score #fmx ir < #ty ir run scoreboard players operation #ty ir = #fmx ir
 
 # --- Glide #sy toward #ty, then move the rig there ---
 function infinite_rail:cam_glide

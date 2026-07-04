@@ -44,18 +44,26 @@ scoreboard players set #HOVER ir 2
 # tunnel roofs.
 scoreboard players set #CAMHEIGHT ir 0
 
-# How far (in blocks, each side of the rig, even numbers only) the camera
-# looks along the recorded track profile. This is the S-curve reach: climbs
-# start rising about this many blocks before the slope and the camera floats
-# up to ~1/4 of this above the line while cresting into one (capped at 2
-# blocks). Bigger = softer, earlier, floatier transitions; smaller = tighter.
+# How far AHEAD (in blocks) the camera scouts the recorded track profile.
+# Climbs begin easing in about this many blocks before the slope. Bigger =
+# earlier, softer lift-off into hills; smaller = tighter, later reactions.
 scoreboard players set #CAMWINDOW ir 8
 
-# Descent glide: each tick the camera closes 1/N of the remaining gap when its
-# target is BELOW it (drops into valleys, easing out after a crest). Climbs
-# are not affected -- they're pre-smoothed by the window above and follow with
-# zero lag, so they can never sag into the ground. 1 = off.
+# Glide strength: each tick the camera closes 1/N of the remaining gap to its
+# target height, in BOTH directions. Climbs ease toward a target that rises
+# ahead of the hill and flattens at the summit early, so the camera
+# decelerates and lands level on hilltops (a descent played in reverse);
+# descents ease down after the line drops away. Higher = softer and floatier,
+# lower = tighter; 1 = off.
 scoreboard players set #CAMSMOOTH ir 4
+
+# How high (in TENTHS of a block) the camera may ride above the rail line
+# while approaching and climbing hills. This is the crest-smoothing budget:
+# the camera reaches the summit level about this many blocks early and glides
+# level over the top. Bigger = smoother hilltops but floatier climbs (the
+# cart visibly rides above the rails on the way up); smaller = hugs the
+# climb tighter but lands harder on crests. Keep <= ~25 for tunnel headroom.
+scoreboard players set #CAMLIFT ir 20
 
 # How many blocks the viewer rides AHEAD of the hidden pace cart. Bigger
 # pushes the empty pacing cart further behind you (it's only visible looking
