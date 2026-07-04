@@ -96,8 +96,6 @@ effect give @s minecraft:saturation infinite 0 true
 # The rider is visible again (they sit in a real cart) -- clear any leftover
 # invisibility from rides started on older pack versions.
 effect clear @s minecraft:invisibility
-# Bedrock only: hide the rider's hand/held item (no-op on Java -- see hide_hand).
-function infinite_rail:hide_hand
 
 # --- Snap the rig to its cruising position and hand off to the ticker ---
 # The S-curve (c1) is stateless; only the descent chaser (#s2) needs seeding.

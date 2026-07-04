@@ -1,15 +1,21 @@
-# CONTEXT.md — How the Infinite Rail data pack works
+# CONTEXT.md — How the Infinite Rail pack works
 
 A complete technical reference for the project: the architecture, the shared
 state, every file, and the algorithms. Written for a developer (or an AI) who
-needs to understand or modify the pack. For player-facing usage see `README.md`.
+needs to understand or modify the pack. For player-facing usage see `README.md`;
+for the repository layout and build workflow see `BUILDING.md`.
+
+Sections 1–10 document the **Java Edition** data pack (the original and richest
+implementation); **section 11** documents the **Bedrock Edition** port and how
+the two editions share one codebase.
 
 ---
 
 ## 1. What it is
 
 A **100% vanilla Minecraft: Java Edition data pack** (no mods, no resource pack)
-that turns the game into an endless, relaxing "Slow TV" minecart ride. The ride
+that turns the game into an endless, relaxing "Slow TV" minecart ride. (A
+Bedrock behavior-pack port built from the same sources is covered in §11.) The ride
 starts by itself in a fresh world (or via one command): the player is placed on
 a self-building, permanently-powered rail line heading **due east forever**,
 while an algorithm lays smooth track over the procedurally generated terrain —
@@ -41,6 +47,9 @@ Key design facts to keep in mind while reading:
 
 ## 2. Data pack anatomy & how Minecraft bootstraps it
 
+The **shipped** Java pack (what `tools/build.mjs` assembles into
+`dist/java/infinite_rail/`) looks like this:
+
 ```
 infinite_rail/
   pack.mcmeta                                   # pack metadata + version compat + overlays
@@ -55,6 +64,13 @@ infinite_rail/
       setup_world.mcfunction                    # snake_case gamerules (26.x)
       names.mcfunction                          # snake_case command/gamerule names (26.x)
 ```
+
+**In the repository**, these files are split across `src/java/` and
+`src/shared/functions/`: five functions (`config`, `decide`, `consider_start`,
+`start_event`, `end_event`) are *shared source* used verbatim by both the Java
+pack and the Bedrock port, and the build drops them into
+`data/infinite_rail/function/` alongside the Java-only files (see `BUILDING.md`
+and §11). Nothing about the shipped pack differs from the layout above.
 
 **Version overlay.** `pack.mcmeta` declares an *overlay* (`overlay_snake`) that
 applies on data-pack **format 92+** (25w44a onward, the 26.x "snake_case
@@ -137,6 +153,7 @@ fake players. Grouped by role:
 | `#CAMSMOOTH` | Descent glide divisor: the camera closes `1/#CAMSMOOTH` of a **downward** gap per tick (climbs use the constructed S-curve instead; 1 = off). |
 | `#CAMLIFT`   | Climb float / crest budget, in **tenths of a block**: how high the camera rides above the rail line while climbing, and how early it reaches the summit level. |
 | `#CAMAHEAD`  | How many blocks the rig (viewer) rides ahead of the hidden pace cart. Keep ≥ ~40 below `#AHEAD`. |
+| `#CAMMODE`   | **Bedrock-only** (inert on Java): `0` = native free-look rig, `1` = eased cinematic camera via Bedrock's camera system (§11). |
 | `#AUTOSTART` | `1` = the ride auto-starts for the first player in a fresh world; `0` = manual start only. |
 | `#DEADBAND`  | Minimum `|target − railY|` before a slope change is even considered (hysteresis vs. terrain noise). |
 | `#SAMEGAP`   | Minimum flat columns between two elevation changes **in the same direction**. |
@@ -256,7 +273,7 @@ start ─► (as nearest player, block-aligned) begin
             ├─ pre-build #CAMAHEAD+32 columns synchronously
             ├─ summon ir_seat + ir_ride at the head; ride cart onto seat;
             │    mount player INTO THE RIDE CART (the only mount of the ride);
-            │    set adventure + Resistance/Saturation; hide_hand (Bedrock no-op on Java)
+            │    set adventure + Resistance/Saturation
             └─ seed #sy, snap the rig into place (cam_follow), set #started = 1
 
 Every game tick (while #started == 1)
@@ -330,8 +347,9 @@ into storage `infinite_rail:speed rule`); prints a "Loaded" message. Does **not*
 touch ride state (including `#autodone`), so a `/reload` mid-ride refreshes the
 knobs without stopping it, and a stopped world stays stopped.
 
-**`function/config.mcfunction`**
-The single file a user edits. Sets every tunable score (`#HOVER`, `#TUNNEL`,
+**`function/config.mcfunction`** *(shared source: `src/shared/functions/`)*
+The single file a user edits — and the same file, byte for byte, that the
+Bedrock port runs (§11). Sets every tunable score (`#HOVER`, `#TUNNEL`,
 `#CAMHEIGHT`, `#CAMSMOOTH`, `#AUTOSTART`, `#MAXSPEED`, `#OCEANSPEED`,
 `#OCEANCHUNKS`, `#LANDCHUNKS`, `#DEADBAND`, `#SAMEGAP`, `#TURNGAP`, `#UPCLAMP`,
 `#DOWNCLAMP`, `#AHEAD`, `#GENAHEAD`, `#MAXTICK`) with heavily-commented
@@ -380,8 +398,8 @@ Sets up and launches a ride (see the flow in §5). Notable steps:
   they must never repeat). Adventure mode + **infinite Resistance 255 +
   Saturation** (can't break track, get hurt, or starve); any leftover
   invisibility from older pack versions is cleared — the rider is meant to be
-  visible in their cart. Finally calls `hide_hand` (a Bedrock-only `/hud` command
-  that hides the held item; the file is dropped on Java, so it's a no-op there).
+  visible in their cart. (The rider's held item stays hidden because the
+  per-tick keeper clears the inventory.)
 - **Handoff:** seeds `#sy = #railY×1000`, runs `cam_follow` once to snap the
   rig to its cruising position, then `#started=1`.
 
@@ -424,16 +442,6 @@ is the tidy home for anything that is a *pure rename* between versions: the base
 file holds the camelCase names, the `overlay_snake` overlay replaces it with the
 snake_case names on format 92+, and the shared logic reads the variable. `load`
 calls it once. Add more entries here as new version-renamed names come up.
-
-**`function/hide_hand.mcfunction`**
-Bedrock-only: `hud @s hide hand` hides the rider's held item / arm. `/hud` is a
-Bedrock command; on Java Edition it's unknown, so this whole file fails to
-compile and is silently dropped (calling it is a no-op). This stays a
-**compile-drop** rather than a pack.mcmeta overlay because it's an *edition*
-difference (Bedrock vs Java), not a Java-*version* one — overlays key on the
-data-pack format, and Bedrock doesn't read Java overlays. Called once from
-`begin` as the rider, so a Bedrock port starts with the hand hidden and Java is
-unaffected.
 
 **`function/stop.mcfunction`**
 Ends the ride: `#started=0`, clears effects from and dismounts adventure
@@ -839,9 +847,9 @@ ir 8` (takes effect on the next column; wiped on the next `/reload`/rejoin).
 Running `/function infinite_rail:config` by itself does **not** pick up file
 edits — it re-runs the copy already in memory.
 
-Current defaults in `config.mcfunction`: `#HOVER 2`, `#TUNNEL 4`,
+Current defaults in `config.mcfunction`: `#HOVER 2`, `#TUNNEL 6`,
 `#CAMHEIGHT 0`, `#CAMBLEND 6`, `#CAMSMOOTH 6`, `#CAMLIFT 20`, `#CAMAHEAD 64`,
-`#AUTOSTART 1`, `#MAXSPEED 8`, `#OCEANSPEED 32`, `#OCEANCHUNKS 6`,
+`#CAMMODE 0`, `#AUTOSTART 1`, `#MAXSPEED 8`, `#OCEANSPEED 32`, `#OCEANCHUNKS 6`,
 `#LANDCHUNKS 4`, `#DEADBAND 3`, `#SAMEGAP 25`, `#TURNGAP 40`, `#UPCLAMP 150`,
 `#DOWNCLAMP 50`, `#AHEAD 224`, `#GENAHEAD 192`, `#MAXTICK 15`, `#DEBUGMODE 0`. (These are tuned to taste and change often;
 the algorithm works across a wide range. The gaps and deadband are far lower
@@ -905,10 +913,10 @@ corners entirely, so frequent small elevation changes are now visually free.
   unknown gamerule would abort the function, so the wrong name is never emitted).
   If a speed change still doesn't take, set `#DEBUGMODE 1` — it prints the speed
   being set and the pace cart's real `Motion[0]×100` each chunk.
-- **Hide-hand is Bedrock-only.** `hide_hand` uses `/hud`, which exists only on
-  Bedrock Edition; on Java it's a dropped-file no-op. It's included for a
-  Bedrock port of the pack and does nothing on Java (where the rider's hand is
-  empty anyway, since the inventory is cleared each tick).
+- **The rider's hand is hidden by inventory clearing.** There is no way to
+  hide the first-person arm itself on either edition (Bedrock's `/hud` has no
+  `hand` element); both editions keep the rider's inventory empty every tick
+  instead, so nothing is ever held.
 
 ---
 
@@ -936,7 +944,137 @@ corners entirely, so frequent small elevation changes are now visually free.
                                                ├─ place_flat (first column) ─ summon ir_cart + ir_plug
                                                ├─ build_loop … (pre-build past the rig position)
                                                ├─ summon ir_seat + ir_ride, mount the stack
-                                               ├─ hide_hand (Bedrock no-op on Java)
                                                └─ cam_follow (snap the rig into place)
 /function infinite_rail:stop  ─ stop
 ```
+
+---
+
+## 11. The Bedrock Edition port & the shared codebase
+
+The repository is a monorepo: `src/shared/functions/` + `src/java/` build the
+Java data pack documented above, and `src/shared/functions/` + `src/bedrock/`
+build a native **Bedrock behavior pack** (`tools/build.mjs`; see `BUILDING.md`
+for the workflow). The port is not a transliteration of the Java files — it is
+the same *design* re-implemented on Bedrock's strengths, sharing the one part
+that is pure algorithm.
+
+### 11a. The logic boundary: what is shared and what is native
+
+**Shared (identical `.mcfunction` source, both editions):** the event-model
+brain — `decide`, `consider_start`, `start_event`, `end_event` — plus
+`config`. These are pure scoreboard math on the `ir` objective. Each engine
+boils its world down to two integers per column (`#target`, `#railY`), calls
+`decide`, and reads back one integer (`#dir`). All event state (`#slope`,
+`#flat`, `#lastDir`, the gap rules, the deadband) lives *only* inside the
+shared files, so the slope-shaping behavior of the two editions cannot drift
+apart. `tools/simulate.mjs` enforces this in CI by interpreting both emitted
+copies over synthetic terrains and failing if their decisions ever differ.
+
+Two mechanical rewrites are applied to the Bedrock copies at build time (the
+entire dialect delta): `function infinite_rail:name` → `function
+infinite_rail/name` (Bedrock addresses functions by folder path), and `#NAME` →
+`.NAME` score holders (`#` is a Java fake-player convention; `.` is the prefix
+documented to parse on Bedrock). So a live tweak is `/scoreboard players set
+#HOVER ir 8` on Java and `/scoreboard players set .HOVER ir 8` on Bedrock —
+same variable, same objective.
+
+**Native per edition (same job, different machinery):** everything that
+touches the engine. Java's implementations are described in §6–§7; Bedrock's
+counterparts all live in `src/bedrock/scripts/main.js` (stable
+`@minecraft/server` Script API — no experiments, no betas):
+
+| Job | Java mechanism (kept) | Bedrock mechanism (replaces it) |
+| --- | --- | --- |
+| Heightmap sampling | `ir_probe` marker + `execute positioned over motion_blocking_no_leaves` | `dimension.getTopmostBlock()` + a short walk down past leaves/foliage (liquids count, so oceans read as sea level) |
+| Track history | storage `infinite_rail:track y` list + `cam_get` macro (NBT paths need literal indices) | a plain JS array (`trackY`), trimmed behind the ride and persisted (below) |
+| The build loop | `build_loop` ⇄ `build_step` bounded recursion (mcfunction has no loops) | a `while` loop with the same `#budget` / `#AHEAD` conditions |
+| Camera math | fixed-point milliblock scoreboard arithmetic (`cam_follow`/`cam_blend`/`cam_scan`/`cam_sample`) | the same construction in ordinary floating point (`camFollow()` / `lifted()`) |
+| Moving the rig | `ir_seat` item_display with `teleport_duration:1` + `cam_tp` macro (client-interpolated teleports) | per-tick **velocity drive** of the ride cart (`clearVelocity` + `applyImpulse`; Bedrock clients interpolate physics motion, not teleports), with a teleport fallback for drift |
+| The pace | hidden `ir_cart` on the physical rails + `ir_plug` + stall keeper + the minecart max-speed gamerule | a **virtual pace position** (`paceX`) advanced by scripted speed with smooth acceleration — no entity, no keepers, nothing visible behind the rider |
+| Ocean detection | `execute if biome ~ ~ ~ #minecraft:is_ocean` | `dimension.getBiome()` against an explicit ocean-id set (Bedrock has no biome tags) |
+| Chunk management | `forceload` macro corridor | two named `/tickingarea`s leapfrogging every 16 blocks (Bedrock caps: 10 areas × 100 chunks — the corridor uses 2 × ~39) |
+| Column placement | `place_flat/up/down` + `carve` macro + `support` | `fillBlocks` + `setBlockPermutation` (`golden_rail` `rail_direction` 1/2/3, `redstone_block`, `light_block_11`) |
+| Start/stop entry | `/function infinite_rail:start` | `/function infinite_rail/start` — a one-line function bridging into the script via `/scriptevent` |
+| World tuning | `setup_world` (camelCase) + overlay (snake_case) | `setup_world` (Bedrock's lowercase gamerule names) — a third small file, same rules |
+
+### 11b. The Bedrock rig and camera
+
+The rider sits in a **real, visible minecart** (tag `ir_ride`), exactly one
+seat, mounted once per ride — occupied Bedrock carts can't be entered or scoop
+up mobs, which is what the Java plug hack existed to guarantee. The script
+computes the same smoothed height `sy` as Java (§7g, float port) and glides
+the cart toward `(paceX + #CAMAHEAD, sy + 0.062 + #CAMHEIGHT/10, centerZ +
+0.5)` by setting its velocity each tick; the client renders that as smooth
+motion, and the player's normal first-person camera rides along — **full
+native free-look with zero added latency**, the same experience as Java.
+
+Why not the `/camera` (Camera API) rig by default? Bedrock's `minecraft:free`
+preset **does not follow look input** — the official camera-system docs state
+input keeps rotating the *player*, not the detached camera. A Camera-API rig
+therefore needs the script to pass `player.getRotation()` back into
+`setCamera` every tick, which adds a perceptible beat of look latency. That
+trade is available as **`#CAMMODE 1`** (cinematic mode): the view detaches
+onto `minecraft:free` at eye height above the cart, eased ~0.15 s Linear per
+tick for extra positional glide, rotation passed through from the player.
+`#CAMMODE 0` (default) keeps the native camera.
+
+Keepers (the Bedrock subset of §7f): non-player riders are ejected from the
+ride cart; a dismounted adventure-mode rider is re-seated; the cart is
+re-summoned on the rig position if it ever goes missing; the rider's inventory
+is cleared every tick (this is also what keeps the hand empty — Bedrock's
+`/hud` has no `hand` element). The plug, stall re-boost, and pace-cart
+ejections have no Bedrock equivalent because the virtual pace made them
+obsolete.
+
+### 11c. Speed without the gamerule
+
+Bedrock has no minecart max-speed gamerule, so `#MAXSPEED`/`#OCEANSPEED`
+steer the **virtual pace speed** directly: `ocean_check`'s shared trigger
+logic (same per-chunk cadence, same `#OCEANCHUNKS`/`#LANDCHUNKS` hysteresis,
+sampled at the rider) sets a target speed in blocks/tick, and the pace eases
+toward it at ~0.4 blocks/s² — reproducing the gradual physics acceleration the
+Java cart gets from its rails. Consequently `.MAXSPEED` is *continuously*
+honored on Bedrock (tweak it live and the ride adjusts within seconds),
+whereas Java applies it once at start via the gamerule.
+
+### 11d. State & persistence
+
+The shared brain's state (`.slope`, `.flat`, `.lastDir`, all config) lives in
+the scoreboard, which Bedrock persists in the world save exactly like Java.
+The script's own state (headX, railY, centerZ, avg, the pace position and
+speed, the ocean counters, the descent chaser, the rider's name, and the last
+1024 columns of track history) is saved to a world **dynamic property**
+(`ir:state`, a few KB of JSON) every 2 seconds and on every lifecycle change —
+so a Bedrock ride **survives quitting and rejoining the world**, resuming
+where it left off. `#autodone` lives there too, so auto-start stays
+once-per-world across rejoins. The in-memory history is trimmed to the last
+~2048 columns (the camera only reads a few hundred around the rig), so an
+endless ride can't grow memory forever — unlike Java's storage list (§9),
+which is unbounded by design.
+
+### 11e. Bedrock-specific behavior differences & gotchas
+
+- **The redstone support block is undisguised.** Bedrock has no
+  `block_display` entities, so the block of redstone under each rail shows its
+  red sides when a bridge is viewed from outside the ride. Function and water
+  immunity are identical; it's purely cosmetic, and invisible from the cart.
+- **Requires Bedrock 1.21.120+** (`@minecraft/server` module `2.3.0`,
+  `min_engine_version [1,21,120]` — `dimension.getBiome` is the newest API
+  used). Both pins can be raised freely for newer-only targets.
+- **Rails are decorative for physics.** No entity rides the physical rails on
+  Bedrock (the pace is virtual, the ride cart is velocity-driven), but the
+  track is still built from genuinely powered golden rails on redstone blocks,
+  so it works for manual minecart rides after `stop`.
+- **`/reload` reloads both functions and scripts** on Bedrock; the script
+  re-initializes lazily and resumes the ride from its persisted state. Editing
+  `config.mcfunction` + `/reload` refreshes knobs mid-ride, same as Java.
+- **Terrain generation is asynchronous** behind `/tickingarea` (as it is
+  behind Java's `forceload`): the builder never places columns into
+  ungenerated chunks — it pauses and the pace holds (`paceX` is capped at
+  `headX − #CAMAHEAD − 8`) rather than letting the ride outrun the track, a
+  guard Java doesn't need thanks to its larger margins.
+- **Single scripted rider:** the ride belongs to the player who started it
+  (or the first player, on auto-start); only that player is re-seated by the
+  keeper. Leave the ride the sanctioned way — switch to creative or run
+  `stop` — exactly like Java.
