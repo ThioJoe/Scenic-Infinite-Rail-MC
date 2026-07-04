@@ -40,7 +40,7 @@ scoreboard players set #SAMEGAP ir 50
 # Minimum flat blocks required before the rail may REVERSE direction.
 # Higher = no quick up-then-down bobbing; small bumps get tunneled through and
 # small dips get bridged across.
-scoreboard players set #TURNGAP ir 30
+scoreboard players set #TURNGAP ir 50
 
 
 # --- Terrain-smoothing sensitivity -----------------------------------------
@@ -49,18 +49,18 @@ scoreboard players set #TURNGAP ir 30
 
 # Larger = approaching mountains raise the target sooner (earlier, gentler
 # "one swoop" climbs).
-scoreboard players set #UPCLAMP ir 64
+scoreboard players set #UPCLAMP ir 100
 
 # Smaller = ravines, holes and canyons are ignored and bridged dead level
 # instead of dipped into.
-scoreboard players set #DOWNCLAMP ir 64
+scoreboard players set #DOWNCLAMP ir 100
 
 
 # --- Performance / world generation ----------------------------------------
 
 # How far ahead of the minecart (in blocks) the track is kept built. Must stay
 # comfortably less than the forced-generation lead (~190) in roll_chunks.
-scoreboard players set #AHEAD ir 150
+scoreboard players set #AHEAD ir 160
 
 # Maximum track columns built per game tick. Higher = better catch-up if the
 # server hitches, at the cost of more work per tick.
