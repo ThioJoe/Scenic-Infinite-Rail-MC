@@ -14,7 +14,8 @@ packs.
 - Minecraft: Java Edition **1.21 / 1.21.1** through **26.2**. The manifest
   declares the full span, so the in-game GUI accepts it on all of these without
   the "made for a different version" warning.
-- Cheats enabled (you need to run one command to start the ride)
+- Cheats are optional: the ride starts by itself in a fresh world. You only
+  need cheats to stop it, restart it somewhere else, or tweak it live.
 
 > **Note on version numbers:** these are all *data pack* format numbers, which
 > are a **separate series** from *resource pack* format numbers — the same
@@ -32,14 +33,17 @@ packs.
    recommended since the ride permanently modifies terrain along its path.
 2. Copy the `infinite_rail` folder into the world's `datapacks` folder, or add
    it via the **Data Packs** screen during world creation.
-3. Enter the world and run:
+3. Enter the world. **The ride starts by itself** the moment you spawn in — no
+   command needed.
 
-   ```
-   /function infinite_rail:start
-   ```
+If you'd rather start it manually (or restart it at a new location later), set
+`#AUTOSTART` to `0` in the config (see Tuning) and/or run:
 
-That's it. You are placed in a minecart at your current location and the ride
-begins, heading east. Press **F1** for the full ambient experience.
+```
+/function infinite_rail:start
+```
+
+That's it. The ride begins at your location, heading east. Press **F1** for the full ambient experience.
 
 To end the ride:
 
@@ -60,11 +64,26 @@ want to move around afterward.)
   display**, so from the side (e.g. on a bridge) it reads as a plain stone
   support. Two per-tick keepers guarantee the ride never ends: if the cart ever
   stalls (mob collision, freak accident) it is re-boosted, and if the rider ever
-  dismounts they are put straight back in the cart.
-- **Terrain smoothing** — an invisible track head runs up to ~112 blocks ahead
-  of the cart. For every column it samples the vanilla terrain heightmap at 12
-  points across the next 48 blocks and maintains a rolling average, steering the
-  rail toward *average terrain + 4 blocks*. Approaching mountains raise the
+  dismounts they are put straight back on the ride.
+- **Butter-smooth camera** — you don't actually sit in the bouncing minecart.
+  You ride an invisible **camera seat** (an `item_display` with client-side
+  teleport interpolation) that copies the cart's exact X/Z every tick — so the
+  real cart always sets the pace, however fast the rails push it — while its
+  height **glides on an exponential curve** toward the cart's. The cart still
+  physically rides the rails below you, but its stair-step bounce, rail-physics
+  jitter and hard flat→45° corners never reach your eyes: every slope becomes
+  one eased swoop. You're made invisible (plus the usual Resistance and
+  Saturation), so no floating body photobombs the view. This is the closest
+  vanilla Java gets to Bedrock's `/camera` command — and unlike `/camera`, you
+  keep full free-look the whole time.
+- **Auto-start** — in a fresh world the ride begins automatically for the first
+  player to appear. It only auto-starts once per world: stopping with
+  `/function infinite_rail:stop` stays stopped, even across rejoins. Set
+  `#AUTOSTART` to `0` for classic manual starting.
+- **Terrain smoothing** — an invisible track head runs up to `#AHEAD` (160)
+  blocks ahead of the cart. For every column it samples the vanilla terrain
+  heightmap at 12 points across the next 48 blocks and maintains a rolling
+  average, steering the rail toward *average terrain + `#HOVER` blocks*. Approaching mountains raise the
   average early, so climbs start well in advance and ascend in one smooth swoop.
 - **The "event" model (no stair-stepping)** — the rail is never stepped up one
   block, held flat, then stepped up again. Instead every elevation change is a
@@ -131,21 +150,32 @@ temporary — a reload or rejoin resets everything to the values in
 
 | Constant     | Default | Meaning                                                             |
 | ------------ | ------- | ------------------------------------------------------------------- |
-| `#HOVER`     | 2       | Cruising altitude above the average terrain surface                 |
+| `#HOVER`     | 3       | Cruising altitude above the average terrain surface                 |
+| `#CAMHEIGHT` | 15      | Camera seat height above the cart, in **tenths** of a block         |
+| `#CAMSMOOTH` | 6       | Camera glide: seat closes 1/N of the height gap per tick (1 = off)  |
+| `#AUTOSTART` | 1       | 1 = ride starts itself in a fresh world; 0 = manual start           |
 | `#DEADBAND`  | 3       | Min. height difference before a climb/descent is triggered          |
-| `#SAMEGAP`   | 50      | Min. flat blocks before sloping again in the **same** direction     |
-| `#TURNGAP`   | 50      | Min. flat blocks before **reversing** direction                     |
+| `#SAMEGAP`   | 30      | Min. flat blocks before sloping again in the **same** direction     |
+| `#TURNGAP`   | 40      | Min. flat blocks before **reversing** direction                     |
 | `#AHEAD`     | 160     | How far ahead of the cart the **rails** are built                   |
 | `#GENAHEAD`  | 192     | How far ahead of the rail head the **world is generated** (≥ ~64)   |
-| `#MAXTICK`   | 30      | Max track columns built per game tick                               |
-| `#UPCLAMP`   | 100     | How hard approaching mountains may pull the average up              |
-| `#DOWNCLAMP` | 100     | How hard dips pull the average down (small = level bridges)         |
+| `#MAXTICK`   | 15      | Max track columns built per game tick                               |
+| `#UPCLAMP`   | 20      | How hard approaching mountains may pull the average up              |
+| `#DOWNCLAMP` | 20      | How hard dips pull the average down (small = level bridges)         |
 
 `#SAMEGAP` and `#TURNGAP` are the two knobs from the design: raise them for
 longer flats and bigger, rarer 45° swoops (with more terrain punched through as
 tunnels/bridges); lower them for a track that hugs the ground more closely with
 more frequent slopes. Because each change is always a single unbroken 45° line,
-the ride never micro-stutters regardless of how they're set.
+the ride never micro-stutters regardless of how they're set — and since the
+camera glide erases the flat→slope corners entirely, the defaults now lean
+toward more frequent, smaller changes than they used to.
+
+`#CAMSMOOTH` is the feel of the ride: higher values swoop more (the camera
+cuts every corner, sagging under long climbs and floating over long descents),
+lower values track the rail line more tightly. `#CAMHEIGHT` is simply how high
+above the cart you float — keep it below ~2.5 blocks (25) so your view stays
+inside tunnel bores.
 
 ## Vanilla limitations
 
@@ -164,3 +194,10 @@ second marker is a probe that gets teleported around with
 heightmap into scoreboards. Column placement, slope decisions (flat /
 `ascending_east` / `ascending_west`), chunk management, and the keepers are
 all plain scoreboard math in `data/infinite_rail/function/`.
+
+The smooth camera is an invisible `item_display` the player rides (Java has no
+`/camera` command — that's Bedrock-only — so this is the vanilla-Java
+equivalent). Every tick it is teleported to the cart's X/Z with an
+exponentially smoothed Y (fixed-point milliblock math on the scoreboard, fed
+to `tp` through a function macro), and its `teleport_duration` makes the
+client interpolate each hop over a few frames.

@@ -2,14 +2,21 @@
 
 # --- Reset any previous run ---
 scoreboard players set #started ir 0
+# A ride has now been started in this world: the auto-starter must never fire again.
+scoreboard players set #autodone ir 1
 kill @e[type=marker,tag=ir_head]
 kill @e[type=marker,tag=ir_probe]
 kill @e[type=minecart,tag=ir_cart]
+kill @e[type=item_display,tag=ir_seat]
 forceload remove all
 ride @s dismount
 
 # --- World tuning ---
+# Two variants: camelCase gamerules for 1.21-era, snake_case for 26.x-era
+# (25w44a renamed them all). Only the variant that compiles on the running
+# version exists in memory; calling the other is a harmless no-op.
 function infinite_rail:setup_world
+function infinite_rail:setup_world_26
 
 # --- Anchor the line at the player's position ---
 summon minecraft:marker ~0.5 0.0 ~0.5 {Tags:["ir_head"]}
@@ -37,13 +44,30 @@ scoreboard players operation #avg ir -= #HOVER ir
 scoreboard players operation #nextLoad ir = #headX ir
 scoreboard players add #nextLoad ir 16
 
+# --- Camera seat: the invisible entity the rider actually sits on ---
+# An item_display with no item (renders nothing). teleport_duration makes the
+# client glide it between the per-tick teleports from cam_follow, which is
+# what makes the ride buttery instead of tick-quantized.
+execute at @e[type=marker,tag=ir_head,limit=1] run summon minecraft:item_display ~ ~1 ~ {Tags:["ir_seat"],teleport_duration:3}
+# Seed the smoothed seat height #sy (milliblocks): railY + #CAMHEIGHT.
+scoreboard players operation #sy ir = #railY ir
+scoreboard players operation #sy ir *= #C1000 ir
+scoreboard players operation #ty ir = #CAMHEIGHT ir
+scoreboard players operation #ty ir *= #C100 ir
+scoreboard players operation #sy ir += #ty ir
+
 # --- First column, cart, and rider ---
 execute at @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:place_flat
 execute at @e[type=marker,tag=ir_head,limit=1] run summon minecraft:minecart ~ ~0.1 ~ {Tags:["ir_cart"],Invulnerable:1b,Motion:[0.4,0.0,0.0]}
-ride @s mount @e[type=minecart,tag=ir_cart,limit=1]
+# The rider sits on the camera seat, NOT in the cart. The physical cart still
+# rides the rails and sets the pace -- however fast the rails push it -- and
+# the seat glides along its path every tick (see cam_follow).
+ride @s mount @e[type=item_display,tag=ir_seat,limit=1]
 gamemode adventure @s
 effect give @s minecraft:resistance infinite 255 true
 effect give @s minecraft:saturation infinite 0 true
+# Invisible, so the rider's floating body never shows above the empty cart.
+effect give @s minecraft:invisibility infinite 0 true
 
 # --- Pre-build the first stretch synchronously, then hand off to the ticker ---
 execute store result score #cartX ir run data get entity @e[type=minecart,tag=ir_cart,limit=1] Pos[0] 1

@@ -9,12 +9,14 @@ needs to understand or modify the pack. For player-facing usage see `README.md`.
 ## 1. What it is
 
 A **100% vanilla Minecraft: Java Edition data pack** (no mods, no resource pack)
-that turns the game into an endless, relaxing "Slow TV" minecart ride. You run
-one command and are dropped into a minecart that rides a self-building,
-permanently-powered rail line **due east forever**, while an algorithm lays
-smooth track over the procedurally generated terrain — bridging valleys and
-oceans, tunneling through mountains, and hovering a few blocks above the ground
-the rest of the time.
+that turns the game into an endless, relaxing "Slow TV" minecart ride. The ride
+starts by itself in a fresh world (or via one command): the player is placed on
+a self-building, permanently-powered rail line heading **due east forever**,
+while an algorithm lays smooth track over the procedurally generated terrain —
+bridging valleys and oceans, tunneling through mountains, and hovering a few
+blocks above the ground the rest of the time. The player doesn't sit in the
+physical minecart: they ride an invisible, interpolated **camera seat** that
+glides along the cart's path, so rail physics never reach their eyes (§7g).
 
 Everything is driven by `.mcfunction` files and a single scoreboard. There is no
 Java, no external process. Target versions: **Java 1.21 through 26.2** (see
@@ -107,6 +109,9 @@ fake players. Grouped by role:
 | Score        | Meaning |
 | ------------ | ------- |
 | `#HOVER`     | Preferred rail clearance (blocks) above the average terrain surface. |
+| `#CAMHEIGHT` | Camera seat height above the cart, in **tenths of a block** (15 = 1.5). |
+| `#CAMSMOOTH` | Camera glide divisor: the seat closes `1/#CAMSMOOTH` of its vertical gap per tick (1 = no smoothing). |
+| `#AUTOSTART` | `1` = the ride auto-starts for the first player in a fresh world; `0` = manual start only. |
 | `#DEADBAND`  | Minimum `|target − railY|` before a slope change is even considered (hysteresis vs. terrain noise). |
 | `#SAMEGAP`   | Minimum flat columns between two elevation changes **in the same direction**. |
 | `#TURNGAP`   | Minimum flat columns before the rail may **reverse** direction. |
@@ -116,11 +121,13 @@ fake players. Grouped by role:
 | `#GENAHEAD`  | How far (blocks) ahead of the **rail head** terrain is force-generated. |
 | `#MAXTICK`   | Max columns built per game tick (catch-up budget). |
 
-**Internal constant** (set by `load.mcfunction`, kept out of user config):
+**Internal constants** (set by `load.mcfunction`, kept out of user config):
 
-| Score  | Meaning |
-| ------ | ------- |
-| `#C12` | Number of heightmap samples per column (**12**) — the divisor for the average. Fixed by `sample_window.mcfunction`; changing one without the other breaks the average. |
+| Score   | Meaning |
+| ------- | ------- |
+| `#C12`  | Number of heightmap samples per column (**12**) — the divisor for the average. Fixed by `sample_window.mcfunction`; changing one without the other breaks the average. |
+| `#C100` | Fixed-point multiplier **100**: converts `#CAMHEIGHT` (tenths of a block) to milliblocks. |
+| `#C1000`| Fixed-point multiplier **1000**: converts whole blocks to milliblocks (used to seed `#sy`). |
 
 **Runtime state:**
 
@@ -148,6 +155,11 @@ fake players. Grouped by role:
 | `#flat`     | Flat columns counted since the last event ended (compared against `#need`). |
 | `#lastDir`  | Direction of the last event (`1`/`-1`), used to pick `#SAMEGAP` vs `#TURNGAP`. |
 | `#mx`       | The cart's `Motion[0]` × 100 (its eastward speed, for the stall check). |
+| `#autodone` | `1` once a ride has ever been started in this world; blocks the auto-starter forever after (persists in the world save). |
+| `#sy`       | The camera seat's smoothed Y in **milliblocks** (Y × 1000) — the state of the exponential glide. |
+| `#cy`       | The cart's `Pos[1]` × 1000 (this tick's raw camera-height input). |
+| `#ty`       | The seat's target Y in milliblocks (`#cy + #CAMHEIGHT×100`); also a temp in `begin`. |
+| `#dy`       | The glide step this tick (`(#ty − #sy) / #CAMSMOOTH`). |
 
 ### 4.2 Entities (all tagged, so selectors are unambiguous)
 
@@ -155,7 +167,8 @@ fake players. Grouped by role:
 | ---------- | --------------- | ------- |
 | `ir_head`  | `marker`        | The build head. Its position is the current column; it advances east (and up/down on slopes) as track is laid. |
 | `ir_probe` | `marker`        | A scratch probe teleported around by `sample_window` (and once by `begin`) onto the terrain surface to read heightmaps into scores. |
-| `ir_cart`  | `minecart`      | The player's cart. Invulnerable; kept moving and kept occupied by the keepers. |
+| `ir_cart`  | `minecart`      | The pace-setting cart. Invulnerable; rides the physical rails (empty) and is kept moving by the stall keeper. |
+| `ir_seat`  | `item_display`  | The **camera seat** the player actually rides. Displays no item; `teleport_duration:3` makes the client interpolate its per-tick teleports. Teleported along the cart's path by `cam_follow`. |
 | `ir_disp`  | `block_display` | One per column: a smooth-stone visual that disguises the redstone block under the rail. Purely cosmetic. |
 
 ### 4.3 Command storage
@@ -164,6 +177,7 @@ fake players. Grouped by role:
 | -------------------- | --------- | ------- |
 | `infinite_rail:tmp`  | `y`(double) | Scratch in `begin` to copy `#railY` into the head marker's `Pos[1]`. |
 | `infinite_rail:args` | `gen`(int)  | The macro argument passed to `forceload` (the `#GENAHEAD` distance). |
+| `infinite_rail:cam`  | `x`,`y`,`z`(double) | The camera seat's position for this tick — macro arguments for `cam_tp`. `x`/`z` are copied straight from the cart's NBT (full double precision, no overflow however far east); `y` is the smoothed `#sy` × 0.001. |
 
 ---
 
@@ -177,15 +191,19 @@ World load / /reload
                                           (applies all tunable knobs)
 
 Player runs /function infinite_rail:start
+(or the auto-starter fires: tick runs start by itself for the first player to
+ appear in a fresh world, while #AUTOSTART=1, #started=0 and #autodone≠1)
         │
         ▼
 start ─► (as nearest player, block-aligned) begin
-            ├─ reset any previous run, kill old entities, clear forceloads
+            ├─ reset any previous run, kill old entities, clear forceloads; #autodone=1
             ├─ setup_world (gamerules)
             ├─ summon ir_head + ir_probe markers; initial forceload (via GENAHEAD macro)
             ├─ read terrain here, set #railY = surface + #HOVER, move head to it
             ├─ init counters (#slope=0, #flat=99, #lastDir=0, seed #avg, #nextLoad…)
-            ├─ place the first column, summon ir_cart, mount player, set adventure + effects
+            ├─ summon the ir_seat camera seat, seed its smoothed height #sy
+            ├─ place the first column, summon ir_cart (empty), mount player ON THE SEAT,
+            │    set adventure + Resistance/Saturation/Invisibility
             └─ pre-build ~32 columns synchronously, then set #started = 1
 
 Every game tick (while #started == 1)
@@ -193,8 +211,9 @@ Every game tick (while #started == 1)
         ▼
 #minecraft:tick ─► tick ─► main
                             ├─ sample #cartX
-                            ├─ keeper: re-mount rider if dismounted
+                            ├─ keeper: re-mount rider on the seat if dismounted
                             ├─ keeper: re-boost cart if stalled
+                            ├─ cam_follow: glide the seat along the cart's path (§7g)
                             └─ #budget = #MAXTICK; build_loop
                                    └─ while (#budget>0 AND head−cart < #AHEAD): build_step
                                           └─ advance (build ONE column) ─► build_loop (recurse)
@@ -237,17 +256,19 @@ Vanilla tag `#minecraft:tick`; lists `infinite_rail:tick`. Makes the game run
 
 **`function/load.mcfunction`**
 Runs on load/reload. `scoreboard objectives add ir dummy` (idempotent) creates
-the objective; sets the internal `#C12 = 12`; calls `infinite_rail:config` to
-apply all tunables; prints a "Loaded, run …:start" message. Does **not** touch
-ride state, so a `/reload` mid-ride refreshes the knobs without stopping it.
+the objective; sets the internal constants `#C12 = 12`, `#C100 = 100`,
+`#C1000 = 1000`; calls `infinite_rail:config` to apply all tunables; prints a
+"Loaded" message. Does **not** touch ride state (including `#autodone`), so a
+`/reload` mid-ride refreshes the knobs without stopping it, and a stopped world
+stays stopped.
 
 **`function/config.mcfunction`**
-The single file a user edits. Sets every tunable score (`#HOVER`, `#DEADBAND`,
-`#SAMEGAP`, `#TURNGAP`, `#UPCLAMP`, `#DOWNCLAMP`, `#AHEAD`, `#GENAHEAD`,
-`#MAXTICK`) with heavily-commented explanations. Called by `load`. Its header
-documents how to apply edits (`/reload`) and that running `config` by itself
-only re-runs the in-memory copy (so it's only good for resetting live
-`/scoreboard` tweaks).
+The single file a user edits. Sets every tunable score (`#HOVER`, `#CAMHEIGHT`,
+`#CAMSMOOTH`, `#AUTOSTART`, `#DEADBAND`, `#SAMEGAP`, `#TURNGAP`, `#UPCLAMP`,
+`#DOWNCLAMP`, `#AHEAD`, `#GENAHEAD`, `#MAXTICK`) with heavily-commented
+explanations. Called by `load`. Its header documents how to apply edits
+(`/reload`) and that running `config` by itself only re-runs the in-memory copy
+(so it's only good for resetting live `/scoreboard` tweaks).
 
 ### 6.3 Lifecycle / control
 
@@ -258,8 +279,10 @@ player's block (X/Z floored to the grid, so the head marker lands block-aligned)
 
 **`function/begin.mcfunction`**
 Sets up and launches a ride (see the flow in §5). Notable steps:
-- **Reset:** `#started=0`, kill any `ir_head`/`ir_probe`/`ir_cart`, `forceload
-  remove all`, dismount the player — so `start` is safely re-runnable.
+- **Reset:** `#started=0`, `#autodone=1` (a ride has now been started in this
+  world — the auto-starter must never fire again), kill any
+  `ir_head`/`ir_probe`/`ir_cart`/`ir_seat`, `forceload remove all`, dismount
+  the player — so `start` is safely re-runnable.
 - **World tuning:** calls `setup_world`.
 - **Anchor:** summons the two markers at the player (`~0.5 … ~0.5` = block
   center); force-loads a small area behind + the `#GENAHEAD` corridor ahead
@@ -269,40 +292,54 @@ Sets up and launches a ride (see the flow in §5). Notable steps:
   `#HOVER`, and writes that Y into the head marker via storage `tmp.y`.
 - **Init counters:** `#slope=0`, `#flat=99` (large, so the first change isn't
   gap-blocked), `#lastDir=0`; seeds `#avg = #railY − #HOVER`; sets `#nextLoad`.
+- **Camera seat:** summons the `ir_seat` item_display at the head
+  (`teleport_duration:3`) and seeds its smoothed height
+  `#sy = #railY×1000 + #CAMHEIGHT×100` (milliblocks; see §7g).
 - **Launch:** places the first column (`place_flat`), summons `ir_cart` (invuln,
-  small eastward motion), mounts the player, switches them to **adventure**, and
-  gives **infinite Resistance 255 + Saturation** (can't break track, get hurt,
-  or starve).
+  small eastward motion, **no rider**), mounts the player **on the seat**,
+  switches them to **adventure**, and gives **infinite Resistance 255 +
+  Saturation + Invisibility** (can't break track, get hurt, or starve; the
+  floating body doesn't show above the empty cart).
 - **Pre-build:** sets `#budget=32` and runs `build_loop` once synchronously so a
   stretch of track already exists ahead before handing off; then `#started=1`.
 
-**`function/setup_world.mcfunction`**
+**`function/setup_world.mcfunction`** / **`function/setup_world_26.mcfunction`**
 One-time gamerule tuning for a clean ride: silences command feedback/output/
-advancement spam; `spawnChunkRadius 0` (don't keep origin chunks loaded);
-`mobGriefing false` (creepers/endermen can't wreck the track); `doFireTick
-false`, `doInsomnia false` (no fire spread, no phantoms); `doImmediateRespawn
-true` (respawn instantly at the moving spawn point if anything impossible ever
-happens).
+advancement spam; don't keep origin chunks loaded; no mob griefing (creepers/
+endermen can't wreck the track); no fire spread, no phantoms; immediate respawn
+at the moving spawn point if anything impossible ever happens. It exists
+**twice** because snapshot 25w44a (the 26.x era) renamed every gamerule to
+snake_case (and reworked a few: `announceAdvancements` →
+`show_advancement_messages`, `doInsomnia` → `spawn_phantoms`, `doFireTick` →
+removed in favor of `fire_spread_radius_around_player`, `spawnChunkRadius` →
+gone): a `.mcfunction` with an unknown gamerule fails to *compile* and is
+silently dropped from the pack, so on any given version exactly one of the two
+variants exists in memory. `begin` calls both; the missing one is a harmless
+runtime no-op. Keep them in sync when changing a rule.
 
 **`function/stop.mcfunction`**
-Ends the ride: `#started=0`, dismounts adventure players, kills `ir_cart` and
-both markers, clears all forceloads. **The built track (blocks + `ir_disp`
-displays) is intentionally left in the world.**
+Ends the ride: `#started=0`, clears effects from and dismounts adventure
+players, kills `ir_cart`, `ir_seat` and both markers, clears all forceloads.
+`#autodone` stays `1`, so a stopped world never auto-restarts. **The built
+track (blocks + `ir_disp` displays) is intentionally left in the world.**
 
 **`function/tick.mcfunction`**
-The heartbeat. One line: if `#started == 1`, run `main`. (Gates all per-tick
-work behind an active ride.)
+The heartbeat. If `#started == 1`, run `main`. Below that, the **auto-starter**:
+while `#AUTOSTART == 1`, `#started == 0` and `#autodone ≠ 1`, it runs `start`
+every tick — a no-op until a player exists to start the ride for, at which
+point `begin` sets `#autodone = 1` and it never fires again (the score persists
+in the world save).
 
 **`function/main.mcfunction`**
 Per-tick driver while riding:
 1. Sample the cart's X into `#cartX`.
 2. **Rider keeper:** any adventure player not currently riding is re-mounted
-   into `ir_cart` (handles dismounts / relog).
+   onto `ir_seat` (handles dismounts / relog).
 3. **Cart keeper:** read `Motion[0]×100` into `#mx`; if `#mx ≤ 10` (speed
    < 0.1, i.e. stalled) `data merge` the cart's motion back to `0.5` east.
-4. Set `#budget = #MAXTICK` and run `build_loop` to extend the track.
-   *(Note: a comment here still says "broken torch" — a stale reference from the
-   old torch-based power design; harmless.)*
+4. **Camera:** if the cart exists, run `cam_follow` (§7g) to glide the seat
+   along its path.
+5. Set `#budget = #MAXTICK` and run `build_loop` to extend the track.
 
 ### 6.4 The build loop
 
@@ -431,6 +468,23 @@ the configurable distance arrives as the macro arg `$(gen)`:
   as the head advances 16 at a time these bands tile to clear everything ≳256
   blocks back. Runs at the caller's position (head), inherited via the call.
 
+### 6.8 Smooth camera
+
+**`function/cam_follow.mcfunction`**
+The per-tick camera driver, called from `main` (gated on `ir_cart` existing).
+Copies the cart's `Pos[0]`/`Pos[2]` **directly as NBT doubles** into storage
+`infinite_rail:cam` `x`/`z` (never through a scoreboard, so there is no
+precision loss or integer overflow however far east the ride goes), reads
+`Pos[1]×1000` into `#cy`, computes the target `#ty = #cy + #CAMHEIGHT×#C100`,
+steps the smoothed height `#sy += (#ty − #sy) / #CAMSMOOTH` (the exponential
+glide), stores `#sy×0.001` into `cam.y`, and calls the `cam_tp` macro. See §7g
+for why this shape.
+
+**`function/cam_tp.mcfunction`** *(a function macro)*
+One line: `$tp @e[type=item_display,tag=ir_seat,limit=1] $(x) $(y) $(z)`.
+`tp` only takes literal/relative coordinates, so the computed position arrives
+as macro arguments from storage `infinite_rail:cam`.
+
 ---
 
 ## 7. The algorithms in depth
@@ -488,9 +542,40 @@ commands can't delete chunks from disk, so the world folder still grows slowly.
 
 ### 7f. The keepers
 Two per-tick guards in `main` make the ride truly unbreakable: if the rider ever
-leaves the cart they're re-mounted, and if the cart's eastward speed ever drops
-near zero it's re-boosted to `0.5`. Combined with the always-powered rails, the
-cart effectively can never stop.
+leaves the camera seat they're re-mounted, and if the cart's eastward speed ever
+drops near zero it's re-boosted to `0.5`. Combined with the always-powered
+rails, the cart effectively can never stop.
+
+### 7g. The smooth camera
+Java has no `/camera` command (that's Bedrock-only), so the pack uses the
+vanilla-Java equivalent: **the player rides an invisible `item_display`** (the
+"camera seat", `ir_seat`) instead of the minecart, and the seat is teleported
+along a smoothed version of the cart's path every tick. Three layers combine:
+
+1. **The cart sets the pace.** The (empty) minecart still physically rides the
+   rails; the seat copies its X/Z exactly each tick. Whatever speed the rails
+   push the cart — including a changed `minecartMaxSpeed` under the
+   `minecart_improvements` experiment — the camera inherits automatically.
+   There is no hard-coded velocity anywhere.
+2. **Server-side vertical glide.** The seat's height is not the cart's height:
+   `#sy` (milliblocks, for sub-block precision in integer scoreboard math)
+   chases the target `cartY + #CAMHEIGHT` by `1/#CAMSMOOTH` of the remaining
+   gap per tick — an exponential ease. Rail-physics bounce and the hard
+   flat→45°→flat corners of the event model come out as one smooth swoop; the
+   camera "cuts the corner", sagging slightly below the line on long climbs and
+   floating slightly above it on long descents (bounded by
+   ≈ `(#CAMSMOOTH−1) × cart vertical speed`, ~2 blocks at the defaults — which
+   is why `#CAMHEIGHT` defaults to 1.5 blocks of margin and the config warns
+   against very large `#CAMSMOOTH`).
+3. **Client-side interpolation.** The seat has `teleport_duration:3`, so the
+   client tweens every teleport over ~3 ticks (re-targeting mid-glide when the
+   next one lands). Per-tick quantization never reaches the screen.
+
+Because riding only carries *position* (never view), the player keeps full
+free-look — better than Bedrock's `/camera`, which locks the view. The player
+is given Invisibility so their floating body doesn't photobomb the view above
+the visibly empty cart, and the rider keeper (§7f) re-mounts them onto the seat
+if they try to dismount.
 
 ---
 
@@ -504,10 +589,13 @@ ir 8` (takes effect on the next column; wiped on the next `/reload`/rejoin).
 Running `/function infinite_rail:config` by itself does **not** pick up file
 edits — it re-runs the copy already in memory.
 
-Current defaults in `config.mcfunction`: `#HOVER 3`, `#DEADBAND 4`, `#SAMEGAP
-50`, `#TURNGAP 50`, `#UPCLAMP 20`, `#DOWNCLAMP 20`, `#AHEAD 160`, `#GENAHEAD
-192`, `#MAXTICK 15`. (These are tuned to taste and change often; the algorithm
-works across a wide range.)
+Current defaults in `config.mcfunction`: `#HOVER 3`, `#CAMHEIGHT 15`,
+`#CAMSMOOTH 6`, `#AUTOSTART 1`, `#DEADBAND 3`, `#SAMEGAP 30`, `#TURNGAP 40`,
+`#UPCLAMP 20`, `#DOWNCLAMP 20`, `#AHEAD 160`, `#GENAHEAD 192`, `#MAXTICK 15`.
+(These are tuned to taste and change often; the algorithm works across a wide
+range. The gaps and deadband are lower than the pre-camera 50/50/4 because the
+camera glide erases slope corners, so frequent small elevation changes are now
+visually free.)
 
 ---
 
@@ -528,10 +616,14 @@ works across a wide range.)
   they unload behind the ride with their chunks. `brightness:{sky:15,block:15}`
   is full-bright, so the disguised stone won't dim at night — lower `block`
   toward 0 in `support.mcfunction` if that reads as too bright.
-- **Stale comments.** `main.mcfunction` mentions a "broken torch" and
-  `config.mcfunction` has a note about water destroying "redstone torches" — both
-  are leftovers from the pre-redstone-block power design and don't reflect the
-  current code.
+- **Large `#CAMSMOOTH` values lag.** The camera glide's steady-state lag on a
+  45° slope is ≈ `(#CAMSMOOTH−1) ×` the cart's vertical speed. Past ~10 the
+  camera can sag below the rail line on long climbs (or float far above it on
+  descents) and clip terrain or the tunnel bore. Stay in the 4–10 range.
+- **Auto-start on upgraded worlds.** `#autodone` didn't exist before the
+  smooth-camera update, so a pre-existing world that had used the pack will
+  auto-start once on its first load after upgrading (its `#autodone` is unset).
+  Run `stop` once, or set `#AUTOSTART 0`, if that's unwanted.
 - **File edits need `/reload`.** See §8 — the single most common point of
   confusion.
 
@@ -541,14 +633,17 @@ works across a wide range.)
 
 ```
 #minecraft:load ─ load ─ config
-#minecraft:tick ─ tick ─ main ─ build_loop ⇄ build_step ─ advance ─┬─ sample_window
-                          │                                        ├─ decide ─ consider_start ─ start_event
-                          │                                        │                 └─ (decide also calls) end_event
-                          ├─ (keepers, inline)                     ├─ place_flat / place_up / place_down ─ support
-                          └─ #cartX read                           └─ roll_chunks ─ forceload (macro)
+#minecraft:tick ─ tick ─┬─ main ─ build_loop ⇄ build_step ─ advance ─┬─ sample_window
+                        │         │                                  ├─ decide ─ consider_start ─ start_event
+                        │         │                                  │                 └─ (decide also calls) end_event
+                        │         ├─ (keepers, inline)               ├─ place_flat / place_up / place_down ─ support
+                        │         ├─ #cartX read                     └─ roll_chunks ─ forceload (macro)
+                        │         └─ cam_follow ─ cam_tp (macro)
+                        └─ (auto-start, once per world) start
 
-/function infinite_rail:start ─ start ─ begin ─┬─ setup_world
+/function infinite_rail:start ─ start ─ begin ─┬─ setup_world / setup_world_26 (one compiles per version)
                                                ├─ forceload (macro)
+                                               ├─ summon ir_seat (camera)
                                                ├─ place_flat (first column)
                                                └─ build_loop … (pre-build)
 /function infinite_rail:stop  ─ stop

@@ -21,28 +21,64 @@
 
 # Cruising altitude: how many blocks of clearance the rail keeps above the
 # average terrain surface. Higher = a more sweeping, birds-eye view.
-# Note: Currently should be at least 2, or else water may destroy the redstone torches
+# Keep it at least 2: the redstone power block under the rail is immune to
+# water, but the rail itself is not, so the track must stay above sea level.
 scoreboard players set #HOVER ir 3
+
+
+# --- Smooth camera ----------------------------------------------------------
+# The rider does not sit in the physical minecart. They ride an invisible
+# "camera seat" (an item_display with client-side teleport interpolation) that
+# copies the cart's X/Z every tick -- so the real cart always sets the pace,
+# however fast the rails push it (relevant with the minecart_improvements
+# experiment, where the max cart speed is a gamerule and can change) -- while
+# its HEIGHT glides on an exponential curve toward the cart's. Stair-step
+# bounce and hard flat->slope corners never reach the rider's eyes.
+
+# Camera seat height above the cart, in TENTHS of a block (15 = 1.5 blocks).
+# The rider's eyes sit roughly 1.3 blocks above the seat. Keep it modest
+# (below ~25) so the view stays inside the carved tunnel bore.
+scoreboard players set #CAMHEIGHT ir 15
+
+# Vertical smoothing strength: each tick the seat closes 1/N of the remaining
+# gap to its target height. Higher = softer, longer swoops that "cut the
+# corner" of every slope more (the camera sags below the rail line on long
+# climbs and floats above it on long descents); lower = tighter tracking;
+# 1 = no smoothing. 4-10 is the sweet spot -- very large values make the
+# camera lag several blocks behind on sustained slopes.
+scoreboard players set #CAMSMOOTH ir 6
+
+
+# --- Auto-start -------------------------------------------------------------
+
+# 1 = the ride starts by itself for the first player to appear in a fresh
+# world -- no command needed. It only ever auto-starts once per world, and
+# stopping with /function infinite_rail:stop stays stopped across rejoins.
+# 0 = classic manual start via /function infinite_rail:start.
+scoreboard players set #AUTOSTART ir 1
 
 
 # --- Slope shaping (the "event" model) -------------------------------------
 # Every elevation change is a single continuous 45-degree line ("event") that
 # runs until it reaches the target height, then the rail goes flat. These
-# control how large and how frequent those changes are.
+# control how large and how frequent those changes are. Now that the smooth
+# camera irons out every flat->slope corner, the track can afford smaller,
+# more frequent elevation changes than the old 50/50 gaps -- the line hugs the
+# scenery closer and the rider never feels a single corner.
 
 # Minimum height difference (in blocks) before a new climb/descent is started.
 # Also acts as hysteresis, so small terrain noise never nudges the rail.
-scoreboard players set #DEADBAND ir 4
+scoreboard players set #DEADBAND ir 3
 
 # Minimum flat blocks between two changes in the SAME direction.
 # Higher = fewer, longer swoops. Terrain that rises faster than this allows
 # gets tunneled through instead of climbed.
-scoreboard players set #SAMEGAP ir 50
+scoreboard players set #SAMEGAP ir 30
 
 # Minimum flat blocks required before the rail may REVERSE direction.
 # Higher = no quick up-then-down bobbing; small bumps get tunneled through and
 # small dips get bridged across.
-scoreboard players set #TURNGAP ir 50
+scoreboard players set #TURNGAP ir 40
 
 
 # --- Terrain-smoothing sensitivity -----------------------------------------
