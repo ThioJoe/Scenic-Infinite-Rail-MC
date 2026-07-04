@@ -1,9 +1,11 @@
-# One-time world tuning -- 26.x-era twin of setup_world.mcfunction.
+# One-time world tuning -- 26.x snake_case copy of setup_world.
 #
-# Snapshot 25w44a renamed every gamerule to snake_case (and reworked a few),
-# so this file only compiles on those versions; on 1.21-era versions it fails
-# to compile and is silently skipped while the camelCase setup_world runs
-# instead. begin calls both. Keep the two files in sync when changing a rule.
+# This overlay file (overlay_snake/, applied on data-pack format 92+ via
+# pack.mcmeta) REPLACES the base data/.../setup_world.mcfunction on 26.x-era
+# versions. Snapshot 25w44a renamed every gamerule to snake_case (and reworked a
+# few), so the base camelCase file would fail to compile here; the overlay
+# supplies these names instead. begin calls setup_world once -- whichever copy is
+# active for the running version runs. Keep the two copies in sync.
 gamerule send_command_feedback false
 gamerule command_block_output false
 gamerule log_admin_commands false

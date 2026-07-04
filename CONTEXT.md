@@ -43,14 +43,28 @@ Key design facts to keep in mind while reading:
 
 ```
 infinite_rail/
-  pack.mcmeta                                   # pack metadata + version compat
+  pack.mcmeta                                   # pack metadata + version compat + overlays
   data/
     minecraft/tags/function/
       load.json                                 # vanilla hook: run on load/reload
       tick.json                                 # vanilla hook: run every tick
     infinite_rail/function/
       *.mcfunction                              # all the logic (namespace: infinite_rail)
+  overlay_snake/                                # version overlay: replaces files on format 92+
+    data/infinite_rail/function/
+      setup_world.mcfunction                    # snake_case gamerules (26.x)
+      names.mcfunction                          # snake_case command/gamerule names (26.x)
 ```
+
+**Version overlay.** `pack.mcmeta` declares an *overlay* (`overlay_snake`) that
+applies on data-pack **format 92+** (25w44a onward, the 26.x "snake_case
+gamerule" era). Files inside it transparently **replace** the same-path files in
+`data/` on those versions, so the base pack carries the camelCase (format 82-91)
+copies and the overlay carries the snake_case ones. The shared logic just calls
+`setup_world` / `names` once and always gets the version-correct copy — no
+runtime branching, no compile-drop, no duplicate calls. (Overlay format numbers:
+92 = 25w44a's rename; 107 = 26.2 — bump the overlay `max_format` alongside the
+pack's when extending support.)
 
 Minecraft discovers a data pack by its `pack.mcmeta`. Two **vanilla function
 tags** are the only entry points the game calls on its own:
@@ -282,11 +296,19 @@ stop ─► #started=0, dismount, kill cart+markers, clear forceloads (track sta
 ### 6.1 Metadata & vanilla hooks
 
 **`infinite_rail/pack.mcmeta`**
-Pack metadata. Declares the description and version compatibility. Uses the
-current (25w31a+) scheme: `pack_format` (legacy, for old clients),
-`min_format` / `max_format` (the supported *data-pack* format range). `84`/`82`
-/`107` cover 1.21-era through 26.2. (Data-pack format numbers are a **separate
-series** from resource-pack numbers.)
+Pack metadata. Declares the description and version compatibility with the
+current (25w31a+) scheme: `pack_format` (`84`), `min_format` (`82`) /
+`max_format` (`107`) — the supported *data-pack* format range (25w31a-era
+through 26.2; a **separate series** from resource-pack numbers). Also:
+- `features.enabled: ["minecraft:minecart_improvements"]` — **the pack itself
+  turns on the Minecart Improvements feature**, so the minecart max-speed
+  gamerule always exists while the pack is loaded (no manual experiment toggle
+  needed for `#MAXSPEED` / the ocean speed-up).
+- `overlays.entries` — one overlay, `overlay_snake`, for `min_format` 92 /
+  `max_format` 107. On those versions (25w44a+, snake_case gamerules) the files
+  in `overlay_snake/` replace the base copies (see §2). The `formats` field is
+  omitted deliberately: it's only required when an overlay range dips below
+  format 82, and this pack's floor is 82.
 
 **`data/minecraft/tags/function/load.json`**
 Vanilla tag `#minecraft:load`; its `values` list contains `infinite_rail:load`.
@@ -302,11 +324,11 @@ Vanilla tag `#minecraft:tick`; lists `infinite_rail:tick`. Makes the game run
 Runs on load/reload. `scoreboard objectives add ir dummy` (idempotent) creates
 the objective; sets the internal constants `#C12 = 12`, `#C16 = 16`,
 `#C100 = 100`, `#C1000 = 1000`; calls `infinite_rail:config` to apply all
-tunables; derives `#TUNNELUP = #TUNNEL + 1`; detects the version-correct
-minecart-speed gamerule name into storage `infinite_rail:speed rule` (default +
-`speed_name` / `speed_name_26`); prints a "Loaded" message. Does **not** touch
-ride state (including `#autodone`), so a `/reload` mid-ride refreshes the knobs
-without stopping it, and a stopped world stays stopped.
+tunables; derives `#TUNNELUP = #TUNNEL + 1`; calls `names` to load the
+version-correct command/gamerule names (e.g. the minecart-speed gamerule name
+into storage `infinite_rail:speed rule`); prints a "Loaded" message. Does **not**
+touch ride state (including `#autodone`), so a `/reload` mid-ride refreshes the
+knobs without stopping it, and a stopped world stays stopped.
 
 **`function/config.mcfunction`**
 The single file a user edits. Sets every tunable score (`#HOVER`, `#TUNNEL`,
@@ -363,18 +385,24 @@ Sets up and launches a ride (see the flow in §5). Notable steps:
 - **Handoff:** seeds `#sy = #railY×1000`, runs `cam_follow` once to snap the
   rig to its cruising position, then `#started=1`.
 
-**`function/setup_world.mcfunction`** / **`function/setup_world_26.mcfunction`**
+**`function/setup_world.mcfunction`** (+ `overlay_snake/…/setup_world.mcfunction`)
 One-time gamerule tuning for a clean ride: silences command feedback/output/
 advancement spam; don't keep origin chunks loaded; no mob griefing (creepers/
-endermen can't wreck the track); no fire spread, no phantoms; disabled tile drops; disabled all environmental damage; immediate respawn at the moving spawn point if anything impossible ever happens. It exists
-**twice** because snapshot 25w44a (the 26.x era) renamed every gamerule to
-snake_case (and reworked a few: `announceAdvancements` →
-`show_advancement_messages`, `doInsomnia` → `spawn_phantoms`, `doFireTick` →
-removed in favor of `fire_spread_radius_around_player`, `spawnChunkRadius` →
-gone): a `.mcfunction` with an unknown gamerule fails to *compile* and is
-silently dropped from the pack, so on any given version exactly one of the two
-variants exists in memory. `begin` calls both; the missing one is a harmless
-runtime no-op. Keep them in sync when changing a rule.
+endermen can't wreck the track); no fire spread, no phantoms; disabled tile
+drops; disabled all environmental damage; immediate respawn at the moving spawn
+point if anything impossible ever happens. It exists in **two copies** because
+snapshot 25w44a (format 92+, the 26.x era) renamed every gamerule to snake_case
+and reworked a few (`announceAdvancements` → `show_advancement_messages`,
+`doInsomnia` → `spawn_phantoms`, `doFireTick` → removed in favor of
+`fire_spread_radius_around_player`, `spawnChunkRadius` → gone). The base copy is
+camelCase (formats 82-91); the `overlay_snake` overlay copy is snake_case and
+**replaces** the base on format 92+ (see §2). `begin` calls `setup_world` once
+and always gets the right copy — no dropped-file no-op, no duplicate call. Keep
+the two copies in sync when changing a rule. *(A full names-macro rewrite isn't
+worth it here: several rules aren't pure renames — `doFireTick`→
+`fire_spread_radius_around_player` changes name **and** value, and
+`spawnChunkRadius` has no 26.x equivalent — so two small whole files read cleaner
+than one macro'd file plus a big name map.)*
 
 **`function/set_speed.mcfunction`** *(a function macro)*
 A single line, `$gamerule $(rule) $(v)` — sets the minecart max-speed gamerule
@@ -382,30 +410,30 @@ named `rule` to value `v`, both read from storage `infinite_rail:speed`. **The
 gamerule name is a macro arg, not a literal, on purpose:** a macro line that
 expands to an *unknown* gamerule aborts the whole function (everything after it
 is skipped), so we can never afford to emit the wrong-version name. Instead the
-correct name is detected once at load (see `speed_name` / `speed_name_26`) and
-stored in `rule`, so this line only ever runs the name that is valid on the
-running version. The rule only exists when the world enables the **Minecart
-Improvements** feature — without it this errors harmlessly and the ride stays at
-vanilla speed. Called by `begin` (with `#MAXSPEED`), `speed_up` (`#OCEANSPEED`,
-every ocean chunk) and `speed_down` (`#MAXSPEED`).
+correct name is set once at load into `rule` by the version-selected
+`names.mcfunction`, so this line only ever runs the name valid on the running
+version. The rule always exists because the pack enables the **Minecart
+Improvements** feature in `pack.mcmeta`. Called by `begin` (with `#MAXSPEED`),
+`speed_up` (`#OCEANSPEED`, every ocean chunk) and `speed_down` (`#MAXSPEED`).
 
-**`function/speed_name.mcfunction`** / **`function/speed_name_26.mcfunction`**
-Detect the version-correct gamerule name into storage `infinite_rail:speed rule`
-(`minecartMaxSpeed` for 1.21-era, `max_minecart_speed` for 26.x). Each has a
-never-true guard (`execute if score #C1000 ir matches 0 run gamerule <name> …`)
-whose sole job is to force a **load-time** validation of that gamerule name: on
-the wrong-era version the name is unknown, so the whole file fails to compile
-and is dropped (the same compile-drop mechanism as `setup_world` /
-`setup_world_26`), leaving the other twin to set the name. `load` seeds a default
-name first and calls both, so a world without the feature (both dropped) still
-has a `rule` string (its `set_speed` just no-ops).
+**`function/names.mcfunction`** (+ `overlay_snake/…/names.mcfunction`)
+Sets the version-specific command/gamerule **names** into storage — currently
+just the minecart max-speed gamerule name into `infinite_rail:speed rule`
+(`minecartMaxSpeed` in the base copy, `max_minecart_speed` in the overlay). This
+is the tidy home for anything that is a *pure rename* between versions: the base
+file holds the camelCase names, the `overlay_snake` overlay replaces it with the
+snake_case names on format 92+, and the shared logic reads the variable. `load`
+calls it once. Add more entries here as new version-renamed names come up.
 
 **`function/hide_hand.mcfunction`**
 Bedrock-only: `hud @s hide hand` hides the rider's held item / arm. `/hud` is a
 Bedrock command; on Java Edition it's unknown, so this whole file fails to
-compile and is silently dropped (calling it is a no-op) — the same
-compile-drop mechanism as the `setup_world` split. Called once from `begin` as
-the rider, so a Bedrock port starts with the hand hidden and Java is unaffected.
+compile and is silently dropped (calling it is a no-op). This stays a
+**compile-drop** rather than a pack.mcmeta overlay because it's an *edition*
+difference (Bedrock vs Java), not a Java-*version* one — overlays key on the
+data-pack format, and Bedrock doesn't read Java overlays. Called once from
+`begin` as the rider, so a Bedrock port starts with the hand hidden and Java is
+unaffected.
 
 **`function/stop.mcfunction`**
 Ends the ride: `#started=0`, clears effects from and dismounts adventure
@@ -866,19 +894,17 @@ corners entirely, so frequent small elevation changes are now visually free.
   Run `stop` once, or set `#AUTOSTART 0`, if that's unwanted.
 - **File edits need `/reload`.** See §8 — the single most common point of
   confusion.
-- **Minecart speed needs the experiment.** `#MAXSPEED` and the ocean speed-up
-  (§7h) drive the minecart max-speed gamerule, which only exists when the world
-  has the **Minecart Improvements** feature enabled (a data-driven feature/
-  experiment toggle, chosen at world creation). Without it the speed writes are
-  harmless no-ops and the ride runs at vanilla pace — this is the usual reason a
-  changed `#MAXSPEED` "does nothing" or the ocean never speeds up. Set
-  `#DEBUGMODE 1` to watch: it prints the speed being set and the pace cart's real
-  `Motion[0]×100` each chunk; if that number never climbs after a speed change,
-  the feature isn't enabled. The rule is `minecartMaxSpeed` on 1.21-era versions
-  and `max_minecart_speed` on 26.x (renamed in 25w44a); `load` detects which one
-  the running version uses and `set_speed` only ever runs that name (a macro line
-  that expands to an unknown gamerule would abort the function, so the wrong name
-  is never emitted).
+- **Minecart speed & the feature flag.** `#MAXSPEED` and the ocean speed-up
+  (§7h) drive the minecart max-speed gamerule, which exists only with the
+  **Minecart Improvements** feature. The pack **enables that feature itself**
+  (`features.enabled` in `pack.mcmeta`), so the gamerule is present whenever the
+  pack is loaded — no manual experiment toggle needed. The rule is named
+  `minecartMaxSpeed` on formats 82-91 and `max_minecart_speed` on 92+ (renamed in
+  25w44a); `names.mcfunction` (base vs `overlay_snake`) supplies the right name
+  into `rule` and `set_speed` runs only that one (a macro line that expands to an
+  unknown gamerule would abort the function, so the wrong name is never emitted).
+  If a speed change still doesn't take, set `#DEBUGMODE 1` — it prints the speed
+  being set and the pace cart's real `Motion[0]×100` each chunk.
 - **Hide-hand is Bedrock-only.** `hide_hand` uses `/hud`, which exists only on
   Bedrock Edition; on Java it's a dropped-file no-op. It's included for a
   Bedrock port of the pack and does nothing on Java (where the rider's hand is
@@ -890,7 +916,7 @@ corners entirely, so frequent small elevation changes are now visually free.
 
 ```
 #minecraft:load ─ load ─┬─ config   (then load derives #TUNNELUP)
-                        └─ speed_name / speed_name_26 (detect gamerule name; one compiles per version)
+                        └─ names   (version-selected by overlay: gamerule names → storage)
 #minecraft:tick ─ tick ─┬─ main ─┬─ build_loop ⇄ build_step ─ advance ─┬─ sample_window
                         │        │                                     ├─ decide ─ consider_start ─ start_event
                         │        │                                     │                 └─ (decide also calls) end_event
@@ -903,7 +929,7 @@ corners entirely, so frequent small elevation changes are now visually free.
                         │                       └─ cam_move ─ cam_tp (macro)
                         └─ (auto-start, once per world) start
 
-/function infinite_rail:start ─ start ─ begin ─┬─ setup_world / setup_world_26 (one compiles per version)
+/function infinite_rail:start ─ start ─ begin ─┬─ setup_world (version-selected by overlay)
                                                ├─ set_speed (macro, apply #MAXSPEED)
                                                ├─ forceload (macro)
                                                ├─ (track-history reset)

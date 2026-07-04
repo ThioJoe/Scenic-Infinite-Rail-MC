@@ -11,21 +11,28 @@ packs.
 
 ## Requirements
 
-- Minecraft: Java Edition **1.21 / 1.21.1** through **26.2**. The manifest
-  declares the full span, so the in-game GUI accepts it on all of these without
-  the "made for a different version" warning.
+- Minecraft: Java Edition, **data-pack format 82 through 107** — the 25w31a-era
+  format scheme through **26.2**. The manifest declares that full span, so the
+  in-game GUI accepts it without the "made for a different version" warning.
 - Cheats are optional: the ride starts by itself in a fresh world. You only
   need cheats to stop it, restart it somewhere else, or tweak it live.
+- No experiments to toggle: the pack enables the **Minecart Improvements**
+  feature itself (via `pack.mcmeta`), which is what the fast-over-ocean speed-up
+  relies on.
 
-> **Note on version numbers:** these are all *data pack* format numbers, which
-> are a **separate series** from *resource pack* format numbers — the same
-> release has different numbers for each (for 26.1, data format 101 vs resource
-> format 84). Since this is a data pack, only the data numbers apply: 1.21.1 =
-> 48, 26.2 = **107**. `pack.mcmeta` declares `pack_format: 48` for old clients
-> (1.21/1.21.1) plus `min_format: 82` / `max_format: 107` for the current scheme
-> (introduced in 25w31a), which covers everything up to 26.2. To extend support
-> to a newer release, just raise `max_format` to that version's data-pack
-> number.
+> **Note on version numbers:** these are *data pack* format numbers, a
+> **separate series** from *resource pack* format numbers (for 26.1, data format
+> 101 vs resource format 84). `pack.mcmeta` declares `pack_format: 84` with
+> `min_format: 82` / `max_format: 107`, covering the 25w31a format scheme up to
+> 26.2. To extend support to a newer release, raise `max_format` (and the
+> overlay's `max_format`, below) to that version's data-pack number.
+>
+> **Snake_case gamerules (25w44a+):** snapshot 25w44a (data format **92**)
+> renamed every gamerule to snake_case. The pack handles both eras with a
+> `pack.mcmeta` **overlay**: the base files use the old camelCase names (formats
+> 82–91) and the `overlay_snake` folder transparently swaps in the snake_case
+> versions on format 92+. Nothing to configure — the game picks the right set by
+> version.
 
 ## Installation
 
@@ -126,9 +133,9 @@ want to move around afterward.)
   you've crossed `#OCEANCHUNKS` (6) chunks in a row of ocean biome (sampled at
   your own position), the vanilla minecart max-speed gamerule is raised to
   `#OCEANSPEED` (32); after `#LANDCHUNKS` (4) consecutive non-ocean chunks it
-  eases back to the default. (This needs the **Minecart Improvements** feature
-  enabled in the world — see the note under Tuning; set `#OCEANSPEED` to 0 to
-  turn it off.)
+  eases back to the default. (This rides on the **Minecart Improvements**
+  feature, which the pack enables itself — nothing to toggle; set `#OCEANSPEED`
+  to 0 to turn the speed-up off.)
 - **Forced generation ahead, aggressive unloading behind** — the pack
   `forceload`s terrain `#GENAHEAD` blocks ahead of the track head so the scanner
   always has real heightmap data, and removes forceloads a few hundred blocks
@@ -218,22 +225,20 @@ line — 0 rests your cart on the line exactly like a real cart on a rail.
 that cart further out of sight when looking backward.
 
 `#MAXSPEED` is the vanilla minecart max-speed gamerule
-(`minecartMaxSpeed` / `max_minecart_speed`), applied **once** at ride start — it
-isn't re-enforced, so you're free to `/gamerule` a different speed mid-ride. The
-default is 8 (vanilla). Over long ocean crossings the ride bumps that up to
-`#OCEANSPEED` after `#OCEANCHUNKS` chunks of ocean biome, then eases back down
-after `#LANDCHUNKS` chunks of anything else (set `#OCEANSPEED` to 0 to disable).
-All of this only takes effect when the world has the **Minecart Improvements**
-feature enabled (it's what adds the gamerule) — turn it on in the
-*Experiments* / feature-toggle list when creating the world. Without it the
-gamerule doesn't exist, so `#MAXSPEED` and the ocean speed-up silently do
-nothing and the ride cruises at the vanilla 8 m/s. If speed changes aren't
-working, set **`#DEBUGMODE` to 1**: the ride will print the speed it's setting,
-every ocean/land chunk it crosses (with the running counters), and the pace
-cart's *actual* speed each chunk — if that number never rises after a speed
-change, the feature isn't enabled. `#TUNNEL` sets how tall each column's carved
-bore is — raise it for airier tunnels and cuttings, keep it at least 3 so the
-tunnel light still fits.
+(`minecartMaxSpeed` / `max_minecart_speed`, whichever your version uses),
+applied **once** at ride start as the on-land default — it isn't re-enforced, so
+you're free to `/gamerule` a different speed while over land. The default is 8
+(vanilla). Over long ocean crossings the ride raises it to `#OCEANSPEED` after
+`#OCEANCHUNKS` chunks of ocean biome (re-asserted the whole way, so the config
+value always wins), then eases back to `#MAXSPEED` after `#LANDCHUNKS` chunks of
+anything else (set `#OCEANSPEED` to 0 to disable). This all works out of the box:
+the pack turns on the **Minecart Improvements** feature itself (via
+`pack.mcmeta`), so the gamerule always exists — no experiment to enable. If a
+speed change ever seems not to take, set **`#DEBUGMODE` to 1**: the ride prints
+the speed it's setting, the ocean/land chunks it crosses (with the running
+counters, until they hit the threshold), and the pace cart's *actual* speed each
+chunk. `#TUNNEL` sets how tall each column's carved bore is — raise it for airier
+tunnels and cuttings, keep it at least 3 so the tunnel light still fits.
 
 ## Vanilla limitations
 

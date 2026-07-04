@@ -9,5 +9,14 @@
     "enabled": [
       "minecraft:minecart_improvements"
     ]
+  },
+  "overlays": {
+    "entries": [
+      {
+        "directory": "overlay_snake",
+        "min_format": 92,
+        "max_format": 107
+      }
+    ]
   }
 }

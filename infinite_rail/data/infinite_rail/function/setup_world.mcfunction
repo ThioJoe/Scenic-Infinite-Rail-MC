@@ -1,12 +1,11 @@
 # One-time world tuning for a clean, unbreakable, quiet ride.
 #
-# VERSION NOTE: snapshot 25w44a (the 26.x era) renamed every gamerule to
-# snake_case, so this file -- which uses the classic camelCase names -- fails
-# to compile there and is silently skipped, while setup_world_26.mcfunction
-# (the snake_case twin) compiles instead. begin calls BOTH: on any given
-# version exactly one of the two files exists in memory and runs; the call to
-# the other is a harmless runtime no-op. Keep the two files in sync when
-# changing a rule.
+# VERSION NOTE: this is the BASE (camelCase) copy, used on data-pack formats
+# 82-91. Snapshot 25w44a (format 92+, the 26.x era) renamed every gamerule to
+# snake_case, so on those versions the `overlay_snake` overlay replaces this
+# whole file with its snake_case twin (see pack.mcmeta). begin calls
+# `setup_world` once; whichever copy is active for the running version runs.
+# Keep the base and overlay copies in sync when changing a rule.
 gamerule sendCommandFeedback false
 gamerule commandBlockOutput false
 gamerule logAdminCommands false

@@ -14,11 +14,10 @@ forceload remove all
 ride @s dismount
 
 # --- World tuning ---
-# Two variants: camelCase gamerules for 1.21-era, snake_case for 26.x-era
-# (25w44a renamed them all). Only the variant that compiles on the running
-# version exists in memory; calling the other is a harmless no-op.
+# setup_world exists in two copies -- a base (camelCase) one and a snake_case
+# one in the overlay_snake overlay -- and pack.mcmeta selects the right copy by
+# version (format 92+ gets the overlay). Just call it once.
 function infinite_rail:setup_world
-function infinite_rail:setup_world_26
 
 # Apply the configured default minecart max-speed gamerule once, at the start.
 # (Not enforced afterwards -- change /gamerule yourself mid-ride if you want.)
