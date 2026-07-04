@@ -14,7 +14,9 @@ function infinite_rail:setup_world
 # --- Anchor the line at the player's position ---
 summon minecraft:marker ~0.5 0.0 ~0.5 {Tags:["ir_head"]}
 summon minecraft:marker ~0.5 0.0 ~0.5 {Tags:["ir_probe"]}
-forceload add ~-16 ~-8 ~191 ~8
+forceload add ~-16 ~-8 ~ ~8
+execute store result storage infinite_rail:args gen int 1 run scoreboard players get #GENAHEAD ir
+function infinite_rail:forceload with storage infinite_rail:args
 
 # --- Initial rail elevation = terrain surface here + hover altitude ---
 execute positioned over motion_blocking_no_leaves run tp @e[type=marker,tag=ir_probe,limit=1] ~ ~ ~

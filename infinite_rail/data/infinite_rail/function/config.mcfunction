@@ -58,9 +58,17 @@ scoreboard players set #DOWNCLAMP ir 100
 
 # --- Performance / world generation ----------------------------------------
 
-# How far ahead of the minecart (in blocks) the track is kept built. Must stay
-# comfortably less than the forced-generation lead (~190) in roll_chunks.
+# How far ahead of the minecart (in blocks) the RAILS are kept built.
 scoreboard players set #AHEAD ir 160
+
+# How far ahead of the track head (in blocks) terrain is force-GENERATED, so the
+# world exists before the rails reach it. Separate from #AHEAD: rails are built
+# #AHEAD ahead of the cart, and chunks are generated #GENAHEAD ahead of the rail
+# head -- so terrain exists roughly #AHEAD + #GENAHEAD blocks ahead of the cart.
+# Bigger = more generation time (fewer flat "not generated yet" spots if the
+# ride outruns world-gen) at the cost of more loaded chunks. Keep it above ~64
+# (the heightmap scanner samples 48 blocks past the head).
+scoreboard players set #GENAHEAD ir 192
 
 # Maximum track columns built per game tick. Higher = better catch-up if the
 # server hitches, at the cost of more work per tick.

@@ -53,15 +53,14 @@ want to move around afterward.)
 ## What it does
 
 - **Perpetual motion** — the track is built exclusively from always-powered
-  rails. Each rail sits on a smooth stone block with a redstone torch buried
-  beneath it (`stone / torch / stone / rail`), so every single rail is
-  permanently powered. The torch's two flanks and its leading face are sealed
-  with invisible **barrier blocks**, so oceans, rivers, and meltwater can't wash
-  the torches away and the torches can't melt adjacent ice into themselves —
-  the ride stays powered even skimming low over water. Two per-tick keepers
-  guarantee the ride never ends: if the cart ever stalls (mob collision, freak
-  accident) it is re-boosted, and if the rider ever dismounts they are put
-  straight back in the cart.
+  rails. Each rail sits directly on a **block of redstone**, which powers it,
+  is immune to water, and emits no light — so the power source can never be
+  washed away by oceans/rivers or melt the surrounding ice, even skimming low
+  over water. The redstone block is disguised as smooth stone by a **block
+  display**, so from the side (e.g. on a bridge) it reads as a plain stone
+  support. Two per-tick keepers guarantee the ride never ends: if the cart ever
+  stalls (mob collision, freak accident) it is re-boosted, and if the rider ever
+  dismounts they are put straight back in the cart.
 - **Terrain smoothing** — an invisible track head runs up to ~112 blocks ahead
   of the cart. For every column it samples the vanilla terrain heightmap at 12
   points across the next 48 blocks and maintains a rolling average, steering the
@@ -91,10 +90,14 @@ want to move around afterward.)
   over it"). An invisible vanilla light block is embedded above the rail in
   every column, so tunnels are gently lit and nothing can spawn on the track.
 - **Forced generation ahead, aggressive unloading behind** — the pack
-  `forceload`s terrain ~190 blocks ahead of the track head so the scanner
+  `forceload`s terrain `#GENAHEAD` blocks ahead of the track head so the scanner
   always has real heightmap data, and removes forceloads a few hundred blocks
-  behind. World spawn (with `spawnChunkRadius 0`) and your respawn point roll
-  forward with the ride, so nothing stays loaded behind you.
+  behind. Note the two independent look-ahead distances: `#AHEAD` is how far
+  ahead of the *cart* the rails are laid, and `#GENAHEAD` is how far ahead of
+  the *rail head* the world is generated (so terrain exists roughly
+  `#AHEAD + #GENAHEAD` blocks ahead of the cart). World spawn (with
+  `spawnChunkRadius 0`) and your respawn point roll forward with the ride, so
+  nothing stays loaded behind you.
 - **Spectator constraints** — you're switched to Adventure mode with max
   Resistance and Saturation, so you can look around freely but can't break the
   track, get hurt, or starve. Mob griefing and fire tick are disabled so the
@@ -123,14 +126,15 @@ temporary — a reload or rejoin resets everything to the values in
 
 | Constant     | Default | Meaning                                                             |
 | ------------ | ------- | ------------------------------------------------------------------- |
-| `#HOVER`     | 4       | Cruising altitude above the average terrain surface                 |
-| `#DEADBAND`  | 2       | Min. height difference before a climb/descent is triggered          |
-| `#SAMEGAP`   | 6       | Min. flat blocks before sloping again in the **same** direction     |
-| `#TURNGAP`   | 10      | Min. flat blocks before **reversing** direction                     |
-| `#AHEAD`     | 112     | How far ahead of the cart the track is kept built                   |
-| `#MAXTICK`   | 8       | Max track columns built per game tick                               |
-| `#UPCLAMP`   | 8       | How hard approaching mountains may pull the target up               |
-| `#DOWNCLAMP` | 2       | How hard dips may pull the target down (small = level bridges)      |
+| `#HOVER`     | 2       | Cruising altitude above the average terrain surface                 |
+| `#DEADBAND`  | 3       | Min. height difference before a climb/descent is triggered          |
+| `#SAMEGAP`   | 50      | Min. flat blocks before sloping again in the **same** direction     |
+| `#TURNGAP`   | 50      | Min. flat blocks before **reversing** direction                     |
+| `#AHEAD`     | 160     | How far ahead of the cart the **rails** are built                   |
+| `#GENAHEAD`  | 192     | How far ahead of the rail head the **world is generated** (≥ ~64)   |
+| `#MAXTICK`   | 30      | Max track columns built per game tick                               |
+| `#UPCLAMP`   | 100     | How hard approaching mountains may pull the average up              |
+| `#DOWNCLAMP` | 100     | How hard dips pull the average down (small = level bridges)         |
 
 `#SAMEGAP` and `#TURNGAP` are the two knobs from the design: raise them for
 longer flats and bigger, rarer 45° swoops (with more terrain punched through as
