@@ -18,6 +18,8 @@ gamerule mobGriefing false
 # No fire creeping onto the line, no phantoms circling the cart.
 gamerule doFireTick false
 gamerule doInsomnia false
+# Prevent blocks broken by the track builder (like unsupported torches) from dropping items.
+gamerule doTileDrops false
 # Disable all environmental damage to ensure true invulnerability (no damage sounds or fire screen).
 gamerule fallDamage false
 gamerule fireDamage false

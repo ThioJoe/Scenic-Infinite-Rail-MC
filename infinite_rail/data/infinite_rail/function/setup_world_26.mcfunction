@@ -19,6 +19,8 @@ gamerule mob_griefing false
 gamerule fire_spread_radius_around_player 0
 # doInsomnia became spawn_phantoms.
 gamerule spawn_phantoms false
+# Prevent blocks broken by the track builder (like unsupported torches) from dropping items.
+gamerule do_tile_drops false
 # Disable all environmental damage to ensure true invulnerability (no damage sounds or fire screen).
 gamerule fall_damage false
 gamerule fire_damage false
