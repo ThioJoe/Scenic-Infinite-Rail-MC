@@ -18,5 +18,10 @@ gamerule mobGriefing false
 # No fire creeping onto the line, no phantoms circling the cart.
 gamerule doFireTick false
 gamerule doInsomnia false
+# Disable all environmental damage to ensure true invulnerability (no damage sounds or fire screen).
+gamerule fallDamage false
+gamerule fireDamage false
+gamerule freezeDamage false
+gamerule drownDamage false
 # If something impossible happens, come straight back (spawnpoint follows the ride).
 gamerule doImmediateRespawn true

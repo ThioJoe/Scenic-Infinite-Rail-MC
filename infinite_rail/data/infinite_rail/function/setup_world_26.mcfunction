@@ -19,5 +19,10 @@ gamerule mob_griefing false
 gamerule fire_spread_radius_around_player 0
 # doInsomnia became spawn_phantoms.
 gamerule spawn_phantoms false
+# Disable all environmental damage to ensure true invulnerability (no damage sounds or fire screen).
+gamerule fall_damage false
+gamerule fire_damage false
+gamerule freeze_damage false
+gamerule drown_damage false
 # If something impossible happens, come straight back (spawnpoint follows the ride).
 gamerule immediate_respawn true
