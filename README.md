@@ -65,28 +65,27 @@ want to move around afterward.)
   support. Two per-tick keepers guarantee the ride never ends: if the cart ever
   stalls (mob collision, freak accident) it is re-boosted, and if the rider ever
   dismounts they are put straight back on the ride.
-- **Butter-smooth hybrid camera** — on flat track you sit in the real
-  minecart, so the ride looks and feels exactly like riding a cart. Around
-  every elevation change you're switched — seamlessly, at identical eye
-  height — onto an invisible gliding **camera seat** (an `item_display` with
-  client-side teleport interpolation) that follows the cart's exact X/Z (the
-  cart always sets the pace, however fast the rails push it) while its height
-  flies a **pre-smoothed S-curve computed from the track's own recorded
-  profile**. Because the pack builds the track, it knows every slope in
-  advance: climbs start rising *before* the corner and the camera rides
-  exactly parallel to steady 45° runs with zero lag — it never sags into the
-  cart's tilted model or into the ground. Descents use a reactive exponential
-  glide. Once the track flattens out, you're handed back to the real cart.
-  You keep full free-look the whole time (this is the vanilla-Java answer to
-  Bedrock's `/camera`, which doesn't exist on Java — and unlike `/camera`, it
-  doesn't lock your view). You're made invisible so no floating body
-  photobombs the view while you're on the seat.
-- **A cart that's never hijacked** — an invisible "plug" entity always
-  occupies whichever perch you don't (the cart while you're on the camera
-  seat, the seat while you're in the cart). An occupied minecart can't scoop
-  up passing animals and can't be entered by right-click, so nothing ever
-  blocks the view — and the cart keeps passenger physics at all times, so its
-  speed is identical in both modes.
+- **Butter-smooth camera (the ride rig)** — you sit in a real minecart, but
+  it isn't the one on the rails: your cart is glued to an invisible,
+  client-interpolated **camera seat** (an `item_display`) and glides *off*
+  the rails along a **pre-smoothed S-curve computed from the track's own
+  recorded profile**. Because the pack builds the track, it knows every slope
+  in advance: climbs start rising *before* the corner, steady 45° runs are
+  followed exactly parallel with zero lag, and descents ease down on a
+  reactive exponential glide — the camera never sags into terrain and the
+  cart never bounces, tilts or shifts against your view (you, the cart and
+  the camera move as one rigid unit). You mount **once** at ride start and
+  are never remounted, so there are no visible transitions and no repeated
+  "press ⇧ to dismount" hints. Meanwhile a hidden **pace cart** rides the
+  physical rails ~64 blocks behind you and sets the speed — however fast the
+  rails push it — so the ride inherits genuine cart pace without any of its
+  bounce. You keep full free-look the whole time (this is the vanilla-Java
+  answer to Bedrock's `/camera`, which doesn't exist on Java — and unlike
+  `/camera`, it doesn't lock your view).
+- **Carts that can't be hijacked** — an invisible "plug" entity permanently
+  occupies the pace cart, and you occupy your own. Occupied minecarts can't
+  scoop up passing animals and can't be entered by right-click, so nothing
+  ever climbs into the view.
 - **Auto-start** — in a fresh world the ride begins automatically for the first
   player to appear. It only auto-starts once per world: stopping with
   `/function infinite_rail:stop` stays stopped, even across rejoins. Set
@@ -162,14 +161,15 @@ temporary — a reload or rejoin resets everything to the values in
 | Constant     | Default | Meaning                                                             |
 | ------------ | ------- | ------------------------------------------------------------------- |
 | `#HOVER`     | 2       | Cruising altitude above the average terrain surface                 |
-| `#CAMHEIGHT` | 0       | **Extra** camera height over the normal in-cart seat, in tenths     |
+| `#CAMHEIGHT` | 0       | **Extra** rig height above the rail line, in tenths of a block      |
 | `#CAMWINDOW` | 8       | Camera lookahead (blocks each side, even): the S-curve reach        |
 | `#CAMSMOOTH` | 4       | Descent glide: camera closes 1/N of a downward gap per tick         |
+| `#CAMAHEAD`  | 64      | How far the viewer rides ahead of the hidden pace cart              |
 | `#AUTOSTART` | 1       | 1 = ride starts itself in a fresh world; 0 = manual start           |
 | `#DEADBAND`  | 2       | Min. height difference before a climb/descent is triggered          |
 | `#SAMEGAP`   | 5       | Min. flat blocks before sloping again in the **same** direction     |
 | `#TURNGAP`   | 40      | Min. flat blocks before **reversing** direction                     |
-| `#AHEAD`     | 160     | How far ahead of the cart the **rails** are built                   |
+| `#AHEAD`     | 224     | How far ahead of the pace cart the **rails** are built (< ~250)     |
 | `#GENAHEAD`  | 192     | How far ahead of the rail head the **world is generated** (≥ ~64)   |
 | `#MAXTICK`   | 15      | Max track columns built per game tick                               |
 | `#UPCLAMP`   | 75      | How hard approaching mountains may pull the average up              |
@@ -184,13 +184,15 @@ camera glide erases the flat→slope corners entirely, the defaults now lean
 toward more frequent, smaller changes than they used to.
 
 `#CAMWINDOW` and `#CAMSMOOTH` are the feel of the ride: the window is how far
-the camera reads the recorded track profile to each side of the cart — climbs
+the camera reads the recorded track profile to each side of the rig — climbs
 start easing in about that many blocks *before* the corner (bigger = softer,
-earlier, floatier; 0 turns the camera system off entirely). The smooth value
-is the reactive glide used when the camera needs to come *down* (into
-descents, settling after a crest); climbs never lag, so they can't sag the
-camera into the cart or the ground. `#CAMHEIGHT` is extra height over the
-normal in-cart seating position — 0 looks exactly like sitting in the cart.
+earlier, floatier). The smooth value is the reactive glide used when the
+camera needs to come *down* (into descents, settling after a crest); climbs
+never lag, so they can't sag the camera into the ground. `#CAMHEIGHT` is
+extra rig height above the rail line — 0 rests your cart on the line exactly
+like a real cart on a rail. `#CAMAHEAD` is where the hidden pace cart trails
+behind you; raise it to push that cart further out of sight when looking
+backward.
 
 ## Vanilla limitations
 
@@ -210,13 +212,15 @@ heightmap into scoreboards. Column placement, slope decisions (flat /
 `ascending_east` / `ascending_west`), chunk management, and the keepers are
 all plain scoreboard math in `data/infinite_rail/function/`.
 
-The smooth camera is an invisible `item_display` the player rides around
-slopes (Java has no `/camera` command — that's Bedrock-only — so this is the
-vanilla-Java equivalent). As the builder lays track it appends every column's
-rail height to a command-storage list; each tick the camera averages that
-profile over a window centered on the cart (interpolated by the cart's
-sub-block X, all in fixed-point milliblock scoreboard math), clamps it to
-never dip below the rail line, and teleports the seat there through a function
-macro, with `teleport_duration` making the client interpolate each hop. A
-one-time calibration measures exactly how high a passenger sits in the cart,
-so handing the player between cart and seat never moves the camera.
+The smooth camera is a rigid riding stack — player in a real (off-rail)
+minecart, which rides an invisible `item_display` — teleported along the
+smoothed path every tick (Java has no `/camera` command — that's
+Bedrock-only — so this is the vanilla-Java equivalent, with free-look). As
+the builder lays track it appends every column's rail height to a
+command-storage list; each tick the camera averages that profile over a
+window centered on the rig (interpolated by the pace cart's sub-block X, all
+in fixed-point milliblock scoreboard math), clamps it to never dip below the
+rail line, and teleports the seat there through a function macro run at the
+pace cart (relative X, absolute Y — full double precision forever), with
+`teleport_duration` making the client interpolate each hop. The player mounts
+exactly once per ride, so no vehicle-transition artifacts ever appear.

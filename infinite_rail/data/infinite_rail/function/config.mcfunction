@@ -26,36 +26,43 @@
 scoreboard players set #HOVER ir 2
 
 
-# --- Smooth camera (hybrid) --------------------------------------------------
-# On flat track the rider sits in the REAL minecart -- native feel, perfectly
-# in sync with the cart model. Around every elevation change they are switched
-# (seamlessly, at identical eye height) onto an invisible gliding "camera
-# seat" that follows the cart's X/Z exactly -- the cart always sets the pace,
-# however fast the rails push it -- while its height flies a pre-smoothed
-# S-curve computed from the track's own recorded profile. Climbs begin rising
-# BEFORE the corner and the camera never drops below the rail line; descents
-# use a reactive exponential glide. Once the track is flat again the rider is
-# handed back to the real cart.
+# --- Smooth camera (the ride rig) --------------------------------------------
+# The rider sits -- mounted once, never remounted -- in a real minecart that
+# is glued to an invisible interpolated "camera seat", gliding OFF the rails
+# along a pre-smoothed S-curve computed from the track's recorded profile:
+# climbs begin rising BEFORE the corner, steady 45-degree runs are followed
+# exactly parallel with zero lag, and descents use a reactive exponential
+# glide. The camera never drops below the rail line. Meanwhile a hidden
+# "pace cart" rides the physical rails #CAMAHEAD blocks BEHIND the viewer and
+# sets the speed -- however fast the rails push it -- so the rig inherits real
+# cart pace without any of its bounce.
 
-# EXTRA camera height above the normal in-cart seating position, in TENTHS of
-# a block. 0 = exactly the view you'd have sitting in the cart (recommended).
-# Keep it small (<= ~5) so climb corners can't lift your head into tunnel
-# roofs.
+# EXTRA rig height above the rail line, in TENTHS of a block. 0 = the ride
+# cart rests on the smoothed line exactly like a cart on a rail (recommended).
+# Also the fine-tune knob if the ride cart ever looks like it floats or sinks
+# a hair. Keep it small (<= ~5) so climb corners can't lift your head into
+# tunnel roofs.
 scoreboard players set #CAMHEIGHT ir 0
 
-# How far (in blocks, each side of the cart, even numbers only) the camera
+# How far (in blocks, each side of the rig, even numbers only) the camera
 # looks along the recorded track profile. This is the S-curve reach: climbs
 # start rising about this many blocks before the slope and the camera floats
-# up to ~1/4 of this above the cart while cresting into one (capped at 2
+# up to ~1/4 of this above the line while cresting into one (capped at 2
 # blocks). Bigger = softer, earlier, floatier transitions; smaller = tighter.
-# 0 disables the camera system entirely (pure cart riding).
 scoreboard players set #CAMWINDOW ir 8
 
 # Descent glide: each tick the camera closes 1/N of the remaining gap when its
 # target is BELOW it (drops into valleys, easing out after a crest). Climbs
 # are not affected -- they're pre-smoothed by the window above and follow with
-# zero lag, so they can never sag into the cart or the ground. 1 = off.
+# zero lag, so they can never sag into the ground. 1 = off.
 scoreboard players set #CAMSMOOTH ir 4
+
+# How many blocks the viewer rides AHEAD of the hidden pace cart. Bigger
+# pushes the empty pacing cart further behind you (it's only visible looking
+# backward). Keep it at least ~40 below #AHEAD so there's always smoothed
+# track under the rig. Applied cleanly on the next ride start; changing it
+# mid-ride shifts the view by the difference once.
+scoreboard players set #CAMAHEAD ir 64
 
 
 # --- Auto-start -------------------------------------------------------------
@@ -105,8 +112,12 @@ scoreboard players set #DOWNCLAMP ir 25
 
 # --- Performance / world generation ----------------------------------------
 
-# How far ahead of the minecart (in blocks) the RAILS are kept built.
-scoreboard players set #AHEAD ir 160
+# How far ahead of the (hidden) pace cart the RAILS are kept built. The
+# viewer rides #CAMAHEAD ahead of that cart, so the visible track ahead of
+# them is roughly #AHEAD - #CAMAHEAD. Keep this comfortably above #CAMAHEAD,
+# and below ~250 (the rolling forceload releases chunks 256 behind the build
+# head -- the pace cart must never fall into that zone).
+scoreboard players set #AHEAD ir 224
 
 # How far ahead of the track head (in blocks) terrain is force-GENERATED, so the
 # world exists before the rails reach it. Separate from #AHEAD: rails are built

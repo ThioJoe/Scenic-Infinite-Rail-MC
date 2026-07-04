@@ -14,11 +14,12 @@ starts by itself in a fresh world (or via one command): the player is placed on
 a self-building, permanently-powered rail line heading **due east forever**,
 while an algorithm lays smooth track over the procedurally generated terrain —
 bridging valleys and oceans, tunneling through mountains, and hovering a few
-blocks above the ground the rest of the time. On flat track the player sits in
-the real minecart; around every elevation change they are seamlessly handed to
-an invisible, interpolated **camera seat** that flies a pre-smoothed S-curve
-computed from the track's own recorded profile, so slope corners and rail
-physics never reach their eyes (§7g).
+blocks above the ground the rest of the time. The player sits in a real
+minecart — but not the one on the rails: their cart is glued to an invisible,
+interpolated **camera seat** that flies a pre-smoothed S-curve computed from
+the track's own recorded profile, while a hidden **pace cart** rides the
+physical rails behind them and sets the speed. Slope corners and rail physics
+never reach the player's eyes, and they mount exactly once per ride (§7g).
 
 Everything is driven by `.mcfunction` files and a single scoreboard. There is no
 Java, no external process. Target versions: **Java 1.21 through 26.2** (see
@@ -111,9 +112,10 @@ fake players. Grouped by role:
 | Score        | Meaning |
 | ------------ | ------- |
 | `#HOVER`     | Preferred rail clearance (blocks) above the average terrain surface. |
-| `#CAMHEIGHT` | **Extra** camera height over the calibrated in-cart seating position, in **tenths of a block** (0 = exactly the in-cart view). |
-| `#CAMWINDOW` | Camera profile lookahead, blocks each side of the cart (even). The S-curve reach; 0 disables the camera system. |
+| `#CAMHEIGHT` | **Extra** rig height above the rail line, in **tenths of a block** (0 = the ride cart rests on the smoothed line like a cart on a rail). |
+| `#CAMWINDOW` | Camera profile lookahead, blocks each side of the rig (even). The S-curve reach. |
 | `#CAMSMOOTH` | Descent glide divisor: the camera closes `1/#CAMSMOOTH` of a **downward** gap per tick (climbs never lag; 1 = off). |
+| `#CAMAHEAD`  | How many blocks the rig (viewer) rides ahead of the hidden pace cart. Keep ≥ ~40 below `#AHEAD`. |
 | `#AUTOSTART` | `1` = the ride auto-starts for the first player in a fresh world; `0` = manual start only. |
 | `#DEADBAND`  | Minimum `|target − railY|` before a slope change is even considered (hysteresis vs. terrain noise). |
 | `#SAMEGAP`   | Minimum flat columns between two elevation changes **in the same direction**. |
@@ -161,16 +163,12 @@ fake players. Grouped by role:
 | `#mx`       | The cart's `Motion[0]` × 100 (its eastward speed, for the stall check). |
 | `#autodone` | `1` once a ride has ever been started in this world; blocks the auto-starter forever after (persists in the world save). |
 | `#trackBase`| World X of index 0 of the track-history list (storage `infinite_rail:track y`). |
-| `#onSeat`   | `1` while the rider is on the camera seat (slope mode), `0` while in the real cart (flat mode). |
-| `#sbOk` / `#seatBase` | Calibration flag / measured milliblock offset of a cart passenger above the rail line (`cam_base`). |
-| `#sy`       | The camera seat's smoothed Y in **milliblocks** — the state of the glide. Parked at parity while in cart mode. |
-| `#ty`       | The camera's target Y in milliblocks: clamped window average + `#seatBase` + `#CAMHEIGHT`×100 (bulge-capped); also a temp in `begin`. |
-| `#dy`       | The glide step this tick; also doubles as the settle check for remounting the cart. |
-| `#wantSeat` | This tick's desired mode (window not flat, or glide not settled). |
-| `#cxm`,`#ci`,`#cmaxi`,`#fx`,`#fi` | Cart X×1000, its column index into the history (clamped), max valid index, sub-block X fraction (milli, floorMod) and complement — index and fraction derive from the one `#cxm` read so they can't disagree. |
-| `#flat0`    | `1` when the rail is level across the cart's own column pair (the calibration precondition). |
-| `#k`,`#kk`,`#si`,`#sj`,`#ya`,`#yb`,`#sm`,`#t2` | `cam_scan` loop state: window offset (+parity temp), clamped sample indices, the two column heights, the interpolated sample, scratch. |
-| `#csum`,`#cn`,`#cmin`,`#cmax`,`#linem`,`#avgm`,`#ly`,`#py` | Window sum/count, min/max (flatness detection), rail line at the cart (milli), window average (milli), `cam_get` output, rider Y during calibration. |
+| `#sy`       | The smoothed rail-line height under the rig, in **milliblocks** — the state of the glide. |
+| `#ty`       | The glide target in milliblocks: the window average, clamped to ≥ the rail line and ≤ line + 2 blocks. |
+| `#dy`       | The glide step this tick (`cam_glide`). |
+| `#cxm`,`#ci`,`#cmaxi`,`#fx`,`#fi` | Pace-cart X×1000, the rig's column index into the history (cart index + `#CAMAHEAD`, clamped), max valid index, sub-block X fraction (milli, floorMod) and complement — index and fraction derive from the one `#cxm` read so they can't disagree. |
+| `#k`,`#kk`,`#si`,`#sj`,`#ya`,`#yb`,`#sm`,`#t2` | `cam_scan` loop state: window offset (+parity temp), clamped sample indices, the two column heights, the interpolated sample, scratch (also reused by `cam_move`). |
+| `#csum`,`#cn`,`#linem`,`#ly` | Window sum/count, rail line at the rig (milli), `cam_get` output. |
 
 ### 4.2 Entities (all tagged, so selectors are unambiguous)
 
@@ -178,9 +176,10 @@ fake players. Grouped by role:
 | ---------- | --------------- | ------- |
 | `ir_head`  | `marker`        | The build head. Its position is the current column; it advances east (and up/down on slopes) as track is laid. |
 | `ir_probe` | `marker`        | A scratch probe teleported around by `sample_window` (and once by `begin`) onto the terrain surface to read heightmaps into scores. |
-| `ir_cart`  | `minecart`      | The pace-setting cart. Invulnerable; rides the physical rails, kept moving by the stall keeper. Carries the rider on flat track and the plug around slopes — it is **never empty** (an empty cart scoops up mobs and can be right-click entered). |
-| `ir_seat`  | `item_display`  | The **camera seat**, ridden around elevation changes. Displays no item; `teleport_duration:1` keeps its client interpolation in the same class as the cart's so the two stay in visual sync. Teleported along the smoothed path by `cam_move` every tick (in both modes — it carries the plug in cart mode). |
-| `ir_plug`  | `item_display`  | The **seat-blocker**: always occupies whichever of cart/seat the rider doesn't, swapped by `cam_to_seat`/`cam_to_cart`. Keeps the cart un-enterable and its passenger physics constant. |
+| `ir_cart`  | `minecart`      | The hidden **pace cart**. Invulnerable; rides the physical rails `#CAMAHEAD` blocks behind the viewer, kept moving by the stall keeper. Permanently occupied by the plug — a cart with a passenger can't scoop up mobs or be right-click entered. |
+| `ir_seat`  | `item_display`  | The **camera seat** — the mover of the rig. Displays no item; `teleport_duration:1` makes the client interpolate its per-tick teleports. Teleported along the smoothed path by `cam_move` every tick; carries the ride cart. |
+| `ir_ride`  | `minecart`      | The **ride cart** the player actually sits in — a real minecart, off the rails, permanently a passenger of the seat. The whole stack (seat → ride cart → player) moves rigidly, so the cart can never bounce, tilt or shift against the view. |
+| `ir_plug`  | `item_display`  | The **seat-blocker**: permanently occupies the pace cart. |
 | `ir_disp`  | `block_display` | One per column: a smooth-stone visual that disguises the redstone block under the rail. Purely cosmetic. |
 
 ### 4.3 Command storage
@@ -189,7 +188,7 @@ fake players. Grouped by role:
 | -------------------- | --------- | ------- |
 | `infinite_rail:tmp`  | `y`(double) | Scratch in `begin` to copy `#railY` into the head marker's `Pos[1]`. |
 | `infinite_rail:args` | `gen`(int)  | The macro argument passed to `forceload` (the `#GENAHEAD` distance). |
-| `infinite_rail:cam`  | `x`,`y`,`z`(double) | The camera seat's position for this tick — macro arguments for `cam_tp`. `x`/`z` are copied straight from the cart's NBT (full double precision, no overflow however far east); `y` is the smoothed `#sy` × 0.001. |
+| `infinite_rail:cam`  | `dx`(int), `y`(double) | Macro arguments for `cam_tp`: the eastward offset from the pace cart (`#CAMAHEAD`) and the rig's absolute height (`(#sy + 62 + #CAMHEIGHT×100) × 0.001`). X/Z stay relative to the execution position (the pace cart), so they never pass through a scoreboard. |
 | `infinite_rail:track`| `y`(list of int) | The **track history**: one rail-Y per built column, appended by `advance` (and once by `begin`); index = world X − `#trackBase`. The camera's entire knowledge of the path. Grows ~4 bytes/column for the life of a ride; reset by `begin`. |
 | `infinite_rail:cami` | `i`(int) | Macro argument for `cam_get` (the history index to read). |
 
@@ -216,22 +215,25 @@ start ─► (as nearest player, block-aligned) begin
             ├─ read terrain here, set #railY = surface + #HOVER, move head to it
             ├─ init counters (#slope=0, #flat=99, #lastDir=0, seed #avg, #nextLoad…)
             ├─ reset the track-history list; #trackBase = #headX; record column 0
-            ├─ summon ir_seat + ir_plug; #onSeat=0, #sbOk=0, seed #sy
-            ├─ place the first column, summon ir_cart, mount player IN THE CART,
-            │    plug on the seat; set adventure + Resistance/Saturation/Invisibility
-            └─ pre-build ~32 columns synchronously, then set #started = 1
+            ├─ place the first column; summon ir_cart (pace cart) + ir_plug; plug in cart
+            ├─ pre-build #CAMAHEAD+32 columns synchronously
+            ├─ summon ir_seat + ir_ride at the head; ride cart onto seat;
+            │    mount player INTO THE RIDE CART (the only mount of the ride);
+            │    set adventure + Resistance/Saturation
+            └─ seed #sy, snap the rig into place (cam_follow), set #started = 1
 
 Every game tick (while #started == 1)
         │
         ▼
 #minecraft:tick ─► tick ─► main
-                            ├─ sample #cartX
-                            ├─ keeper: eject anything from the cart that isn't rider/plug
-                            ├─ keeper: re-mount rider (cart or seat, per #onSeat)
-                            ├─ keeper: plug occupies whichever perch the rider doesn't
-                            ├─ keeper: re-boost cart if stalled
-                            ├─ cam_follow: hybrid camera — scan the recorded profile,
-                            │    swap rider cart⇄seat around slopes, glide the seat (§7g)
+                            ├─ sample #cartX (pace cart)
+                            ├─ keeper: eject anything but the plug from the pace cart,
+                            │    anything but players from the ride cart
+                            ├─ keeper: re-mount a dismounted rider into the ride cart
+                            ├─ keeper: plug→pace cart, ride cart→seat (self-healing)
+                            ├─ keeper: re-boost the pace cart if stalled
+                            ├─ cam_follow: fly the rig along the recorded profile,
+                            │    #CAMAHEAD blocks ahead of the pace cart (§7g)
                             └─ #budget = #MAXTICK; build_loop
                                    └─ while (#budget>0 AND head−cart < #AHEAD): build_step
                                           └─ advance (build ONE column) ─► build_loop (recurse)
@@ -312,16 +314,21 @@ Sets up and launches a ride (see the flow in §5). Notable steps:
   gap-blocked), `#lastDir=0`; seeds `#avg = #railY − #HOVER`; sets `#nextLoad`.
 - **Track history:** empties storage `infinite_rail:track y`, sets
   `#trackBase = #headX` and records the first column's rail Y (index 0).
-- **Camera rig:** summons the `ir_seat` (`teleport_duration:1`) and `ir_plug`
-  item_displays at the head; `#onSeat=0`, `#sbOk=0`; seeds `#sy` (see §7g).
-- **Launch:** places the first column (`place_flat`), summons `ir_cart`
-  (invuln, small eastward motion), mounts the player **in the cart** (flat
-  start = native riding) and the plug on the seat, switches the player to
-  **adventure**, and gives **infinite Resistance 255 + Saturation +
-  Invisibility** (can't break track, get hurt, or starve; no floating body
-  while on the seat).
-- **Pre-build:** sets `#budget=32` and runs `build_loop` once synchronously so a
-  stretch of track already exists ahead before handing off; then `#started=1`.
+- **Pace cart:** places the first column (`place_flat`), summons `ir_cart`
+  (invuln, small eastward motion) and `ir_plug`, and plugs the cart.
+- **Pre-build:** sets `#budget = #CAMAHEAD + 32` and runs `build_loop` once
+  synchronously — the head ends up past the rig's starting position, so the
+  viewer starts on ready track.
+- **Camera rig:** summons `ir_seat` (`teleport_duration:1`) and `ir_ride`
+  (invuln, yaw 90) at the head, mounts the ride cart onto the seat and the
+  player **into the ride cart** — the one and only player mount of the ride
+  (mount events flash the client's un-hideable "press ⇧ to dismount" hint, so
+  they must never repeat). Adventure mode + **infinite Resistance 255 +
+  Saturation** (can't break track, get hurt, or starve); any leftover
+  invisibility from older pack versions is cleared — the rider is meant to be
+  visible in their cart.
+- **Handoff:** seeds `#sy = #railY×1000`, runs `cam_follow` once to snap the
+  rig to its cruising position, then `#started=1`.
 
 **`function/setup_world.mcfunction`** / **`function/setup_world_26.mcfunction`**
 One-time gamerule tuning for a clean ride: silences command feedback/output/
@@ -339,8 +346,8 @@ runtime no-op. Keep them in sync when changing a rule.
 
 **`function/stop.mcfunction`**
 Ends the ride: `#started=0`, clears effects from and dismounts adventure
-players, kills `ir_cart`, `ir_seat`, `ir_plug` and both markers, clears all
-forceloads.
+players, kills `ir_cart`, `ir_ride`, `ir_seat`, `ir_plug` and both markers,
+clears all forceloads.
 `#autodone` stays `1`, so a stopped world never auto-restarts. **The built
 track (blocks + `ir_disp` displays) is intentionally left in the world.**
 
@@ -353,18 +360,20 @@ in the world save).
 
 **`function/main.mcfunction`**
 Per-tick driver while riding:
-1. Sample the cart's X into `#cartX`.
-2. **Cart-purity keeper:** `execute on passengers` ejects anything riding the
-   cart that isn't a player or the plug (mobs the cart scooped up in the
-   instant between swaps, etc.).
+1. Sample the pace cart's X into `#cartX`.
+2. **Purity keepers:** `execute on passengers` ejects anything riding the pace
+   cart that isn't the plug (scooped-up mobs), and anything riding the ride
+   cart that isn't a player.
 3. **Rider keeper:** any adventure player not currently riding is re-mounted
-   per `#onSeat` — into the cart in flat mode, onto the seat around slopes
-   (handles dismounts / relog).
-4. **Plug keeper:** the plug is re-mounted onto whichever perch the rider
-   doesn't occupy, so the cart is never empty/enterable.
-5. **Cart keeper:** read `Motion[0]×100` into `#mx`; if `#mx ≤ 10` (speed
-   < 0.1, i.e. stalled) `data merge` the cart's motion back to `0.5` east.
-6. **Camera:** if the cart exists, run `cam_follow` (§7g).
+   into the ride cart (handles sneak-dismounts / relog — the only times the
+   vanilla dismount hint can reappear).
+4. **Mount keepers:** unconditional `ride … mount` attempts put the plug on
+   the pace cart and the ride cart on the seat; non-player passengers expose
+   no vehicle NBT to query, so the attempt itself is the check (it fails
+   silently while already seated).
+5. **Stall keeper:** read `Motion[0]×100` into `#mx`; if `#mx ≤ 10` (speed
+   < 0.1, i.e. stalled) `data merge` the pace cart's motion back to `0.5` east.
+6. **Camera:** if the pace cart exists, run `cam_follow` (§7g).
 7. Set `#budget = #MAXTICK` and run `build_loop` to extend the track.
 
 ### 6.4 The build loop
@@ -496,66 +505,50 @@ the configurable distance arrives as the macro arg `$(gen)`:
   as the head advances 16 at a time these bands tile to clear everything ≳256
   blocks back. Runs at the caller's position (head), inherited via the call.
 
-### 6.8 Smooth camera (hybrid)
+### 6.8 Smooth camera (the ride rig)
 
 **`function/cam_follow.mcfunction`**
 The per-tick camera driver, called from `main` (gated on `ir_cart` existing;
 returns immediately if there is no track history, e.g. the pack was updated
-over a ride in progress). Computes the cart's column index `#ci` (clamped to
-the valid history range) and sub-block X fraction `#fx`; runs `cam_scan`;
-triggers the one-time `cam_base` calibration; computes the target
-`#ty = max(window average, rail line) + #seatBase + #CAMHEIGHT×100`, capped at
-2 blocks of bulge above the line (tunnel-roof headroom guard); decides the
-mode (`#wantSeat` = window not flat, or glide not settled within 60 milli);
-runs the `cam_to_seat`/`cam_to_cart` swap when the mode changes; parks
-`#sy = #ty` in cart mode or runs `cam_glide` in seat mode; and always finishes
-with `cam_move`. See §7g for why this shape.
+over a ride in progress). Reads the pace cart's X once as fixed-point
+(`#cxm = X×1000`) and derives both the sub-block fraction `#fx` (floorMod)
+and the rig's column index `#ci` (cart column + `#CAMAHEAD`, clamped to the
+valid history range) from it; runs `cam_scan`; computes the glide target
+`#ty = window average`, clamped to ≥ `#linem` (never below the rail line) and
+≤ `#linem + 2000` (2 blocks of S-curve bulge, tunnel-roof headroom); then
+`cam_glide` and `cam_move`. See §7g for why this shape.
 
 **`function/cam_scan.mcfunction`** *(recursive)*
 One window sample per call: offset `#k` runs from −`#CAMWINDOW` (forced even)
 to +`#CAMWINDOW` in steps of 2. Each sample reads two adjacent column heights
 via `cam_get` and interpolates them by `#fx`/`#fi` so the average moves
 continuously rather than stepping at block edges. Accumulates `#csum`/`#cn`
-(average), `#cmin`/`#cmax` (flatness detection — `#yb` peeks one column past
-the window so the seat engages just before the average starts moving), and
-captures the k = 0 sample as `#linem` (the rail line at the cart).
+and captures the k = 0 sample as `#linem` (the rail line at the rig).
 
 **`function/cam_get.mcfunction`** *(a function macro)*
 `$execute store result score #ly ir run data get storage infinite_rail:track y[$(i)]`
 — NBT paths only take literal indices, so the index arrives as a macro arg
 (storage `infinite_rail:cami i`).
 
-**`function/cam_base.mcfunction`**
-One-time calibration, run **as the rider** while seated in the real cart on
-flat track: `#seatBase = rider Pos[1]×1000 − #linem` — exactly how high a cart
-passenger sits above the rail line on this version/physics. Seat mode adds the
-same offset, making cart⇄seat swaps pixel-perfect and `#CAMHEIGHT 0` mean
-"the in-cart view". A sanity range check retries next tick if the mount
-hadn't settled.
-
-**`function/cam_to_seat.mcfunction`** / **`function/cam_to_cart.mcfunction`**
-The mode swaps. Both dismount the plug and the rider, then mount them crosswise
-(rider→seat + plug→cart, or rider→cart + plug→seat) and flip `#onSeat`.
-`cam_to_seat` teleports the seat to the parked parity height first, so the
-hand-over doesn't move the camera at all.
-
 **`function/cam_glide.mcfunction`**
 Advances `#sy` toward `#ty`: upward differences are followed immediately
 (climbs are already pre-smoothed by the window average; capped at 1 block/tick
-so an engage snap can't jolt), downward differences ease by `1/#CAMSMOOTH` per
+so a clamp edge can't jolt), downward differences ease by `1/#CAMSMOOTH` per
 tick.
 
 **`function/cam_move.mcfunction`**
-Teleports the seat to the cart's X/Z at height `#sy` — every tick, in **both**
-modes (in cart mode the seat carries the plug and must keep traveling, or it
-would be left behind in chunks that then unload). X/Z are copied straight from
-the cart's NBT as doubles (no precision loss or integer overflow however far
-east the ride goes); Y is `#sy × 0.001`.
+Teleports the seat — and with it the rigid ride-cart + rider stack — to
+`#CAMAHEAD` blocks east of the pace cart at height
+`#sy + 62 + #CAMHEIGHT×100` milli (62 ≈ how high a minecart rests above a
+rail, so the ride cart sits on the smoothed line like a real cart). Runs
+`cam_tp` **positioned at the pace cart**, so X/Z are relative offsets and
+never pass through a scoreboard (full double precision forever).
 
 **`function/cam_tp.mcfunction`** *(a function macro)*
-One line: `$tp @e[type=item_display,tag=ir_seat,limit=1] $(x) $(y) $(z)`.
-`tp` only takes literal/relative coordinates, so the computed position arrives
-as macro arguments from storage `infinite_rail:cam`.
+One line: `$tp @e[type=item_display,tag=ir_seat,limit=1] ~$(dx) $(y) ~` —
+relative X (the `#CAMAHEAD` offset) and Z with an absolute Y. `tp` only takes
+literal/relative coordinates, so the values arrive as macro arguments from
+storage `infinite_rail:cam`.
 
 ---
 
@@ -614,50 +607,56 @@ commands can't delete chunks from disk, so the world folder still grows slowly.
 
 ### 7f. The keepers
 Per-tick guards in `main` make the ride truly unbreakable: anything riding the
-cart that isn't the rider or the plug is ejected; a dismounted rider is
-re-mounted (cart or seat, per mode); the plug is re-mounted onto whichever
-perch the rider doesn't hold; and if the cart's eastward speed ever drops near
-zero it's re-boosted to `0.5`. Combined with the always-powered rails, the
-cart can never stop — and because it always has a passenger (rider or plug),
-it can never be entered by right-click or scoop up passing mobs.
+pace cart that isn't the plug is ejected, as is anything riding the ride cart
+that isn't a player; a dismounted rider is re-mounted into the ride cart; the
+plug and the ride cart are re-mounted onto their perches (unconditional
+attempts that fail silently while already seated); and if the pace cart's
+eastward speed ever drops near zero it's re-boosted to `0.5`. Combined with
+the always-powered rails, the ride can never stop — and because both carts
+always carry a passenger, neither can be entered by right-click or scoop up
+passing mobs.
 
-### 7g. The smooth camera (hybrid, profile-driven)
+### 7g. The smooth camera (the ride rig)
 Java has no `/camera` command (that's Bedrock-only), so the pack uses the
-vanilla-Java equivalent — **riding an invisible `item_display`** — but only
-when it's needed. The design has three pillars:
+vanilla-Java equivalent — a riding stack teleported along a smoothed path.
+The design has three pillars:
 
-1. **Native cart on flats.** Wherever the recorded track is flat across the
-   scan window, the player sits in the real minecart: perfect visual sync with
-   the cart model, zero relative jitter, native physics feel. The camera
-   system idles (its glide state parked at calibrated parity, so it can take
-   over at any instant without a jump).
-2. **Profile-driven S-curve on slopes.** The pack *built* the track, so it
-   knows the exact elevation profile — `advance` records every column's rail Y
-   into a storage list. The camera target is the **symmetric average of that
-   profile over ±`#CAMWINDOW` blocks around the cart** (samples interpolated by
-   the cart's sub-block X), clamped to never fall below the rail line and
-   bulge-capped at +2 blocks. A symmetric window is a zero-phase filter: the
-   camera starts rising ~`#CAMWINDOW` blocks **before** a climb corner
-   (predictive, not reactive) and rides **exactly parallel to a steady 45° run
-   with zero lag** — it can never sag into the cart's tilted model or the
-   ground (the old "cart covers the screen" / suffocation-sound failure
-   modes). Upward moves are followed immediately (they're already smooth);
-   downward moves use the reactive `1/#CAMSMOOTH` exponential glide, which is
-   the pleasant "drop into the valley" feel. Around such changes the rider is
-   swapped cart→seat ahead of the corner and seat→cart once flat again and
-   settled, both at identical measured eye height (`cam_base`), so the swaps
-   are invisible.
-3. **The cart sets the pace.** The seat copies the cart's X/Z exactly each
-   tick. Whatever speed the rails push the cart — including a changed
-   `max_minecart_speed` gamerule under the `minecart_improvements`
-   experiment — the camera inherits automatically; there is no hard-coded
-   velocity anywhere. `teleport_duration:1` keeps the seat's client
-   interpolation in the same class as the cart's own, so the visible cart
-   doesn't shimmy fore/aft against the view.
+1. **One rigid rig, one mount, zero transitions.** The player sits in a real
+   minecart (`ir_ride`) that is itself a permanent passenger of the
+   interpolated camera seat (`ir_seat`). Clients position passengers from
+   their vehicle every frame, so seat → ride cart → player move as a single
+   rigid body: the cart the player sees can never bounce, tilt or shift
+   against their view, and eye height is genuine minecart-passenger parity by
+   construction — no calibration, no mount swaps. The player mounts exactly
+   once per ride; this matters because every player mount event flashes the
+   client's "press ⇧ to dismount" hint, which cannot be suppressed
+   server-side. (Vehicle-swap designs also physically move the player,
+   because passenger attachment offsets differ between entity types — the
+   rig sidesteps both problems.)
+2. **Profile-driven S-curve.** The pack *built* the track, so it knows the
+   exact elevation profile — `advance` records every column's rail Y into a
+   storage list. The rig's height target is the **symmetric average of that
+   profile over ±`#CAMWINDOW` blocks around the rig** (samples interpolated
+   by the pace cart's sub-block X), clamped to never fall below the rail line
+   and bulge-capped at +2 blocks. A symmetric window is a zero-phase filter:
+   the rig starts rising ~`#CAMWINDOW` blocks **before** a climb corner
+   (predictive, not reactive) and rides **exactly parallel to a steady 45°
+   run with zero lag** — it can never sink into terrain. Upward moves are
+   followed immediately (they're already smooth); downward moves use the
+   reactive `1/#CAMSMOOTH` exponential glide — the pleasant "drop into the
+   valley" feel.
+3. **A hidden cart sets the pace.** The rig rides `#CAMAHEAD` blocks east of
+   the pace cart (`ir_cart`), which rolls along the physical rails behind the
+   viewer, out of forward view. Whatever speed the rails push it — including
+   a changed `max_minecart_speed` gamerule under the `minecart_improvements`
+   experiment — the rig inherits automatically; there is no hard-coded
+   velocity anywhere.
 
 Because riding only carries *position* (never view), the player keeps full
-free-look — better than Bedrock's `/camera`, which locks the view. Invisibility
-hides the rider's body while they hover on the seat.
+free-look — better than Bedrock's `/camera`, which locks the view. The rider
+is visible, sitting in their gliding cart like on any minecart ride. (The
+ride cart, being off-rail, doesn't pitch on slopes — it glides level through
+the smoothed climbs, which reads naturally with the eased motion.)
 
 ---
 
@@ -672,12 +671,14 @@ Running `/function infinite_rail:config` by itself does **not** pick up file
 edits — it re-runs the copy already in memory.
 
 Current defaults in `config.mcfunction`: `#HOVER 2`, `#CAMHEIGHT 0`,
-`#CAMWINDOW 8`, `#CAMSMOOTH 4`, `#AUTOSTART 1`, `#DEADBAND 2`, `#SAMEGAP 5`,
-`#TURNGAP 40`, `#UPCLAMP 75`, `#DOWNCLAMP 25`, `#AHEAD 160`, `#GENAHEAD 192`,
-`#MAXTICK 15`. (These are tuned to taste and change often; the algorithm works
-across a wide range. The gaps and deadband are far lower than the pre-camera
-50/50/4 because the profile-driven camera erases slope corners entirely, so
-frequent small elevation changes are now visually free.)
+`#CAMWINDOW 8`, `#CAMSMOOTH 4`, `#CAMAHEAD 64`, `#AUTOSTART 1`, `#DEADBAND 2`,
+`#SAMEGAP 5`, `#TURNGAP 40`, `#UPCLAMP 75`, `#DOWNCLAMP 25`, `#AHEAD 224`,
+`#GENAHEAD 192`, `#MAXTICK 15`. (These are tuned to taste and change often;
+the algorithm works across a wide range. The gaps and deadband are far lower
+than the pre-camera 50/50/4 because the profile-driven camera erases slope
+corners entirely, so frequent small elevation changes are now visually free.
+`#AHEAD` includes the `#CAMAHEAD` offset — the viewer sees roughly
+`#AHEAD − #CAMAHEAD` blocks of ready track ahead.)
 
 ---
 
@@ -706,8 +707,17 @@ frequent small elevation changes are now visually free.)
   riding); the camera would get a garbage sub-block fraction (≤1 block of
   jitter, track itself unaffected). Everything else uses NBT doubles.
 - **Updating the pack over a ride in progress** leaves the camera idle (no
-  track history exists for the already-built line): the rider just stays in
-  the cart. Run `start` again to begin a ride with the full system.
+  track history exists for the already-built line). Run `start` again to
+  begin a ride with the full system.
+- **The pace cart is visible looking backward** — an empty-looking minecart
+  rolling `#CAMAHEAD` blocks behind the viewer. Raise `#CAMAHEAD` to push it
+  further out of sight (keep `#AHEAD` at least ~40 above it, and `#AHEAD`
+  below ~250 so the rolling forceload never releases the pace cart's chunk).
+- **The vanilla dismount hint** ("press ⇧/left-ctrl to dismount") is a
+  client-side toast shown on every player mount event; it cannot be hidden by
+  a server or data pack. The rig design means it appears exactly once, at
+  ride start (and again only if the rider dismounts themselves and is
+  re-caught by the keeper).
 - **Auto-start on upgraded worlds.** `#autodone` didn't exist before the
   smooth-camera update, so a pre-existing world that had used the pack will
   auto-start once on its first load after upgrading (its `#autodone` is unset).
@@ -728,16 +738,16 @@ frequent small elevation changes are now visually free.)
                         │         ├─ #cartX read                     ├─ (track-history append)
                         │         │                                  └─ roll_chunks ─ forceload (macro)
                         │         └─ cam_follow ─┬─ cam_scan (recursive) ─ cam_get (macro)
-                        │                        ├─ cam_base (once, calibration)
-                        │                        ├─ cam_to_seat / cam_to_cart (mode swaps)
                         │                        ├─ cam_glide
                         │                        └─ cam_move ─ cam_tp (macro)
                         └─ (auto-start, once per world) start
 
 /function infinite_rail:start ─ start ─ begin ─┬─ setup_world / setup_world_26 (one compiles per version)
                                                ├─ forceload (macro)
-                                               ├─ (track-history reset) ─ summon ir_seat + ir_plug
-                                               ├─ place_flat (first column)
-                                               └─ build_loop … (pre-build)
+                                               ├─ (track-history reset)
+                                               ├─ place_flat (first column) ─ summon ir_cart + ir_plug
+                                               ├─ build_loop … (pre-build past the rig position)
+                                               ├─ summon ir_seat + ir_ride, mount the stack
+                                               └─ cam_follow (snap the rig into place)
 /function infinite_rail:stop  ─ stop
 ```

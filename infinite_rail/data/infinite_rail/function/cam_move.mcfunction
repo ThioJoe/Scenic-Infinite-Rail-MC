@@ -1,10 +1,17 @@
-# Teleports the camera seat to the cart's X/Z at the smoothed height #sy.
-# Runs every tick in BOTH modes -- in cart mode the seat carries the plug and
-# still has to travel with the ride (an unmoved entity would be left behind in
-# chunks that then unload). X/Z are copied from the cart's NBT as doubles (no
-# precision loss or overflow however far east the ride gets); tp needs literal
-# coordinates, so everything goes through the cam_tp macro.
-execute store result storage infinite_rail:cam y double 0.001 run scoreboard players get #sy ir
-data modify storage infinite_rail:cam x set from entity @e[type=minecart,tag=ir_cart,limit=1] Pos[0]
-data modify storage infinite_rail:cam z set from entity @e[type=minecart,tag=ir_cart,limit=1] Pos[2]
-function infinite_rail:cam_tp with storage infinite_rail:cam
+# Teleports the camera seat (and with it the whole rigid rig: ride cart +
+# rider) to #CAMAHEAD blocks east of the pace cart at the smoothed height.
+# The seat lands so that the ride cart rests on the smoothed rail line like a
+# real cart would (~1/16 block above it), plus the #CAMHEIGHT extra.
+#
+# X/Z never touch a scoreboard: the tp runs AT the pace cart and moves east by
+# a relative ~#CAMAHEAD, keeping full double precision however far the ride
+# goes. tp needs literal/relative coordinates, so the offsets go through the
+# cam_tp macro.
+scoreboard players operation #t2 ir = #sy ir
+scoreboard players add #t2 ir 62
+scoreboard players operation #kk ir = #CAMHEIGHT ir
+scoreboard players operation #kk ir *= #C100 ir
+scoreboard players operation #t2 ir += #kk ir
+execute store result storage infinite_rail:cam y double 0.001 run scoreboard players get #t2 ir
+execute store result storage infinite_rail:cam dx int 1 run scoreboard players get #CAMAHEAD ir
+execute at @e[type=minecart,tag=ir_cart,limit=1] run function infinite_rail:cam_tp with storage infinite_rail:cam

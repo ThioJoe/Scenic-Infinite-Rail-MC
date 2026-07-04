@@ -3,6 +3,7 @@ scoreboard players set #started ir 0
 effect clear @a[gamemode=adventure]
 execute as @a[gamemode=adventure] run ride @s dismount
 kill @e[type=minecart,tag=ir_cart]
+kill @e[type=minecart,tag=ir_ride]
 kill @e[type=item_display,tag=ir_seat]
 kill @e[type=item_display,tag=ir_plug]
 kill @e[type=marker,tag=ir_head]

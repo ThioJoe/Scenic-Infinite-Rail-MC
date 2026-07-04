@@ -1,7 +1,8 @@
-# One window sample at column offset #k from the cart (recursive: #k advances
+# One window sample at column offset #k from the rig (recursive: #k advances
 # by 2 until it passes +#CAMWINDOW). Each sample is interpolated between its
-# column and the next by the cart's sub-block X (#fx / #fi), so the average
-# moves continuously instead of stepping when the cart crosses a block edge.
+# column and the next by the pace cart's sub-block X (#fx / #fi), so the
+# average moves continuously instead of stepping when the cart crosses a
+# block edge.
 scoreboard players operation #si ir = #ci ir
 scoreboard players operation #si ir += #k ir
 execute if score #si ir matches ..-1 run scoreboard players set #si ir 0
@@ -25,20 +26,8 @@ scoreboard players operation #sm ir += #t2 ir
 scoreboard players operation #csum ir += #sm ir
 scoreboard players add #cn ir 1
 
-# Flatness detection over everything touched (yb peeks one column further
-# ahead, so the seat engages a touch before the average starts to move).
-execute if score #ya ir < #cmin ir run scoreboard players operation #cmin ir = #ya ir
-execute if score #ya ir > #cmax ir run scoreboard players operation #cmax ir = #ya ir
-execute if score #yb ir < #cmin ir run scoreboard players operation #cmin ir = #yb ir
-execute if score #yb ir > #cmax ir run scoreboard players operation #cmax ir = #yb ir
-
-# The k = 0 sample IS the rail line height right at the cart. #flat0 records
-# whether the rail is level across the cart's own column pair -- the only
-# precondition the parity calibration needs (a whole-window flatness test
-# could starve calibration forever in continuously hilly terrain).
+# The k = 0 sample IS the rail line height right at the rig.
 execute if score #k ir matches 0 run scoreboard players operation #linem ir = #sm ir
-execute if score #k ir matches 0 run scoreboard players set #flat0 ir 0
-execute if score #k ir matches 0 if score #ya ir = #yb ir run scoreboard players set #flat0 ir 1
 
 scoreboard players add #k ir 2
 execute if score #k ir <= #CAMWINDOW ir run function infinite_rail:cam_scan
