@@ -29,7 +29,7 @@ scoreboard players set #HOVER ir 2
 # i.e. the tunnel/headroom height. Slope columns automatically carve one block
 # taller. Keep it at least 3 (the tunnel light sits at rail+3). Bigger = airier
 # tunnels and cuttings at the cost of more blocks changed per column.
-scoreboard players set #TUNNEL ir 4
+scoreboard players set #TUNNEL ir 6
 
 
 # --- Smooth camera (the ride rig) --------------------------------------------
