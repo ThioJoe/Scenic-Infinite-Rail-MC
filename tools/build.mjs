@@ -17,9 +17,13 @@
 //  Shared .mcfunction files must parse on BOTH engines, so this script:
 //    1. lints them against a strict dual-dialect subset (scoreboard math,
 //       execute-if-score, and function calls only), and
-//    2. rewrites Java function references ("function infinite_rail:name") to
-//       Bedrock path syntax ("function infinite_rail/name") for the Bedrock
-//       copy. That one mechanical rename is the entire per-edition delta.
+//    2. rewrites two mechanical dialect differences for the Bedrock copy --
+//       the entire per-edition delta:
+//         - "function infinite_rail:name" -> "function infinite_rail/name"
+//           (Bedrock functions are addressed by folder path, not namespace)
+//         - "#NAME" fake players -> ".NAME" (the '#' score-holder prefix is a
+//           Java convention; '.' is the prefix proven safe on Bedrock's
+//           command parser -- see BUILDING.md)
 //
 //  Zero dependencies: the .zip/.mcpack writer below uses only node:zlib.
 //  Usage: node tools/build.mjs [--check]   (--check = lint/validate only)
@@ -134,11 +138,18 @@ if (!CHECK_ONLY) {
   }
 
   // Bedrock: copy the edition tree, then inject the shared functions with the
-  // one mechanical dialect rewrite (namespace colon -> folder slash).
+  // two mechanical dialect rewrites (namespace colon -> folder slash; '#'
+  // score-holder prefix -> '.', skipping comment lines).
   cpSync(SRC_BEDROCK, BEDROCK_OUT, { recursive: true });
   mkdirSync(join(BEDROCK_OUT, 'functions', 'infinite_rail'), { recursive: true });
   for (const [f, content] of shared) {
-    const rewritten = content.replaceAll(/function infinite_rail:([a-z0-9_]+)/g, 'function infinite_rail/$1');
+    const rewritten = content
+      .split('\n')
+      .map((line) => line.trimStart().startsWith('#')
+        ? line
+        : line.replaceAll(/(^|\s)#(?=[A-Za-z0-9_])/g, '$1.'))
+      .join('\n')
+      .replaceAll(/function infinite_rail:([a-z0-9_]+)/g, 'function infinite_rail/$1');
     writeFileSync(join(BEDROCK_OUT, 'functions', 'infinite_rail', f), rewritten);
   }
 }

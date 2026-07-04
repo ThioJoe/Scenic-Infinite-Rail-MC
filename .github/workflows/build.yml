@@ -1,0 +1,66 @@
+name: Build packs
+
+# Builds both release packs from the split src/ tree on every push and PR:
+#   - InfiniteRail-Java     -> the infinite_rail/ datapack folder (drag into
+#                              the world's datapacks screen / folder)
+#   - InfiniteRail-Bedrock  -> the .mcpack file (double-click to import)
+# Pushing a v* tag additionally attaches the .zip and .mcpack to a GitHub
+# Release.
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write # only used by the release step on v* tags
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Lints the shared dual-dialect functions, assembles both packs from
+      # src/shared + src/java + src/bedrock, validates every function
+      # reference resolves, and writes the .zip / .mcpack files.
+      - name: Build both packs
+        run: node tools/build.mjs
+
+      # Interprets the emitted shared .mcfunction files (Java and Bedrock
+      # copies) over synthetic terrains and asserts the event-model and
+      # camera invariants -- and that both editions decide identically.
+      - name: Simulate the shared logic
+        run: node tools/simulate.mjs
+
+      # Downloading this artifact yields a zip that extracts to the
+      # ready-to-use infinite_rail/ datapack FOLDER.
+      - name: Upload Java datapack (folder)
+        uses: actions/upload-artifact@v4
+        with:
+          name: InfiniteRail-Java
+          path: dist/java/
+          if-no-files-found: error
+
+      # Downloading this artifact yields a zip containing the .mcpack file;
+      # extract once and double-click the .mcpack to import into Bedrock.
+      - name: Upload Bedrock pack (.mcpack)
+        uses: actions/upload-artifact@v4
+        with:
+          name: InfiniteRail-Bedrock
+          path: dist/*.mcpack
+          if-no-files-found: error
+
+      - name: Attach packs to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip
+            dist/*.mcpack

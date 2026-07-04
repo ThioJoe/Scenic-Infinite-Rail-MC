@@ -83,7 +83,17 @@ scoreboard players set #CAMLIFT ir 20
 # backward). Keep it at least ~40 below #AHEAD so there's always smoothed
 # track under the rig. Applied cleanly on the next ride start; changing it
 # mid-ride shifts the view by the difference once.
+# (On Bedrock the pace cart is a virtual position computed by the script, so
+# there is nothing to see behind you; the knob works the same.)
 scoreboard players set #CAMAHEAD ir 64
+
+# BEDROCK EDITION ONLY (ignored on Java). Camera mode:
+#   0 = native rig (recommended): you sit in the gliding cart with the normal
+#       first-person camera -- full free-look with zero added latency.
+#   1 = cinematic: the view is detached onto Bedrock's native camera system
+#       and eased along the path for extra glide, at the cost of your look
+#       input reaching the camera a beat (~0.15s) late.
+scoreboard players set #CAMMODE ir 0
 
 
 # --- Auto-start -------------------------------------------------------------
