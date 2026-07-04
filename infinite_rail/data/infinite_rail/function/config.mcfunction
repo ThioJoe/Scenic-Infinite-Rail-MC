@@ -55,7 +55,7 @@ scoreboard players set #CAMWINDOW ir 8
 # decelerates and lands level on hilltops (a descent played in reverse);
 # descents ease down after the line drops away. Higher = softer and floatier,
 # lower = tighter; 1 = off.
-scoreboard players set #CAMSMOOTH ir 4
+scoreboard players set #CAMSMOOTH ir 8
 
 # How high (in TENTHS of a block) the camera may ride above the rail line
 # while approaching and climbing hills. This is the crest-smoothing budget:
@@ -63,7 +63,7 @@ scoreboard players set #CAMSMOOTH ir 4
 # level over the top. Bigger = smoother hilltops but floatier climbs (the
 # cart visibly rides above the rails on the way up); smaller = hugs the
 # climb tighter but lands harder on crests. Keep <= ~25 for tunnel headroom.
-scoreboard players set #CAMLIFT ir 20
+scoreboard players set #CAMLIFT ir 24
 
 # How many blocks the viewer rides AHEAD of the hidden pace cart. Bigger
 # pushes the empty pacing cart further behind you (it's only visible looking
@@ -97,7 +97,7 @@ scoreboard players set #DEADBAND ir 2
 # Minimum flat blocks between two changes in the SAME direction.
 # Higher = fewer, longer swoops. Terrain that rises faster than this allows
 # gets tunneled through instead of climbed.
-scoreboard players set #SAMEGAP ir 5
+scoreboard players set #SAMEGAP ir 25
 
 # Minimum flat blocks required before the rail may REVERSE direction.
 # Higher = no quick up-then-down bobbing; small bumps get tunneled through and
