@@ -27,4 +27,13 @@ function infinite_rail:config
 scoreboard players operation #TUNNELUP ir = #TUNNEL ir
 scoreboard players add #TUNNELUP ir 1
 
+# Detect the version-correct name of the minecart max-speed gamerule into
+# storage infinite_rail:speed rule. Default to the 26.x snake_case name, then
+# let the two detector functions override it: exactly one compiles per version
+# (the other is dropped, like setup_world / setup_world_26). If the world has no
+# Minecart Improvements feature, both are dropped and the default just no-ops.
+data modify storage infinite_rail:speed rule set value "max_minecart_speed"
+function infinite_rail:speed_name
+function infinite_rail:speed_name_26
+
 tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Loaded. A fresh world starts the ride automatically; run ","color":"gray"},{"text":"/function infinite_rail:start","color":"aqua"},{"text":" to (re)start it here.","color":"gray"}]

@@ -211,7 +211,7 @@ fake players. Grouped by role:
 | `infinite_rail:cam`  | `dx`(int), `y`(double) | Macro arguments for `cam_tp`: the eastward offset from the pace cart (`#CAMAHEAD`) and the rig's absolute height (`(#sy + 62 + #CAMHEIGHT×100) × 0.001`). X/Z stay relative to the execution position (the pace cart), so they never pass through a scoreboard. |
 | `infinite_rail:track`| `y`(list of int) | The **track history**: one rail-Y per built column, appended by `advance` (and once by `begin`); index = world X − `#trackBase`. The camera's entire knowledge of the path. Grows ~4 bytes/column for the life of a ride; reset by `begin`. |
 | `infinite_rail:cami` | `i`(int) | Macro argument for `cam_get` (the history index to read). |
-| `infinite_rail:speed`| `v`(int) | Macro argument for `set_speed` (the minecart max-speed gamerule value to apply). |
+| `infinite_rail:speed`| `rule`(string), `v`(int) | Macro args for `set_speed`: the version-correct gamerule name (`rule`, detected once at load) and the value to set (`v`). |
 | `infinite_rail:carve`| `h`(int) | Macro argument for `carve` (the clearance-bore height above the rail). |
 
 ---
@@ -302,9 +302,11 @@ Vanilla tag `#minecraft:tick`; lists `infinite_rail:tick`. Makes the game run
 Runs on load/reload. `scoreboard objectives add ir dummy` (idempotent) creates
 the objective; sets the internal constants `#C12 = 12`, `#C16 = 16`,
 `#C100 = 100`, `#C1000 = 1000`; calls `infinite_rail:config` to apply all
-tunables; then derives `#TUNNELUP = #TUNNEL + 1`; prints a "Loaded" message.
-Does **not** touch ride state (including `#autodone`), so a `/reload` mid-ride
-refreshes the knobs without stopping it, and a stopped world stays stopped.
+tunables; derives `#TUNNELUP = #TUNNEL + 1`; detects the version-correct
+minecart-speed gamerule name into storage `infinite_rail:speed rule` (default +
+`speed_name` / `speed_name_26`); prints a "Loaded" message. Does **not** touch
+ride state (including `#autodone`), so a `/reload` mid-ride refreshes the knobs
+without stopping it, and a stopped world stays stopped.
 
 **`function/config.mcfunction`**
 The single file a user edits. Sets every tunable score (`#HOVER`, `#TUNNEL`,
@@ -375,15 +377,28 @@ variants exists in memory. `begin` calls both; the missing one is a harmless
 runtime no-op. Keep them in sync when changing a rule.
 
 **`function/set_speed.mcfunction`** *(a function macro)*
-Sets the vanilla minecart max-speed gamerule to the value in storage
-`infinite_rail:speed v` (gamerule values can't be scoreboard refs, so it arrives
-as the macro arg `$(v)`). Emits **both** `gamerule minecartMaxSpeed $(v)`
-(1.21-era) and `gamerule max_minecart_speed $(v)` (26.x-era, renamed in 25w44a):
-on any version one name is valid and takes effect and the other is an
-unknown-rule no-op. The rule only exists when the world enables the **Minecart
-Improvements** feature — without it both lines simply do nothing. Called by
-`begin` (with `#MAXSPEED`), `speed_up` (`#OCEANSPEED`) and `speed_down`
-(`#MAXSPEED`).
+A single line, `$gamerule $(rule) $(v)` — sets the minecart max-speed gamerule
+named `rule` to value `v`, both read from storage `infinite_rail:speed`. **The
+gamerule name is a macro arg, not a literal, on purpose:** a macro line that
+expands to an *unknown* gamerule aborts the whole function (everything after it
+is skipped), so we can never afford to emit the wrong-version name. Instead the
+correct name is detected once at load (see `speed_name` / `speed_name_26`) and
+stored in `rule`, so this line only ever runs the name that is valid on the
+running version. The rule only exists when the world enables the **Minecart
+Improvements** feature — without it this errors harmlessly and the ride stays at
+vanilla speed. Called by `begin` (with `#MAXSPEED`), `speed_up` (`#OCEANSPEED`,
+every ocean chunk) and `speed_down` (`#MAXSPEED`).
+
+**`function/speed_name.mcfunction`** / **`function/speed_name_26.mcfunction`**
+Detect the version-correct gamerule name into storage `infinite_rail:speed rule`
+(`minecartMaxSpeed` for 1.21-era, `max_minecart_speed` for 26.x). Each has a
+never-true guard (`execute if score #C1000 ir matches 0 run gamerule <name> …`)
+whose sole job is to force a **load-time** validation of that gamerule name: on
+the wrong-era version the name is unknown, so the whole file fails to compile
+and is dropped (the same compile-drop mechanism as `setup_world` /
+`setup_world_26`), leaving the other twin to set the name. `load` seeds a default
+name first and calls both, so a world without the feature (both dropped) still
+has a `rule` string (its `set_speed` just no-ops).
 
 **`function/hide_hand.mcfunction`**
 Bedrock-only: `hud @s hide hand` hides the rider's held item / arm. `/hud` is a
@@ -432,17 +447,21 @@ chunk, samples the biome **under the rider**
 (`execute at ir_seat if biome ~ ~ ~ #minecraft:is_ocean` → `#isOcean`) — not the
 pace cart, which trails `#CAMAHEAD` blocks behind — and updates the run counters:
 an ocean chunk grows `#oceanRun` (and zeroes `#landRun`), a non-ocean chunk grows
-`#landRun` (and zeroes `#oceanRun`). Crossing `#OCEANCHUNKS` ocean chunks while
-not fast (and `#OCEANSPEED > 0`) calls `speed_up`; crossing `#LANDCHUNKS`
-non-ocean chunks while fast calls `speed_down`. When `#DEBUGMODE == 1` it prints
-each chunk's biome, the running counter, and the pace cart's real speed
-(`#dbgmx`).
+`#landRun` (and zeroes `#oceanRun`). While `#oceanRun ≥ #OCEANCHUNKS` (and
+`#OCEANSPEED > 0`) it calls `speed_up` **each ocean chunk** (re-asserting the
+ocean speed); crossing `#LANDCHUNKS` non-ocean chunks while fast calls
+`speed_down` once. When `#DEBUGMODE == 1` it prints each chunk's biome, the
+running counter and the pace cart's real speed (`#dbgmx`) — but only while the
+counter is still climbing to its threshold, then it goes quiet.
 
 **`function/speed_up.mcfunction`** / **`function/speed_down.mcfunction`**
-The two transition helpers: `speed_up` sets `#fast = 1` and pushes `#OCEANSPEED`
-through `set_speed`; `speed_down` sets `#fast = 0` and pushes `#MAXSPEED`. Both
-are one-shots, run only on a threshold crossing, so the gamerule is written a
-handful of times per ocean rather than every tick.
+The two speed setters. `speed_up` pushes `#OCEANSPEED` through `set_speed` and is
+called on **every** ocean chunk past the threshold, so the configured speed is
+continuously re-asserted and always wins over a stray `/gamerule` or a desynced
+state; its debug line and the `#fast = 1` flip only fire on the first call (while
+`#fast` is still 0), so there's no spam while cruising. `speed_down` pushes
+`#MAXSPEED` and is called **once**, on the transition back to land, then leaves
+the gamerule alone so it can still be hand-tweaked on land.
 
 ### 6.4 The build loop
 
@@ -766,18 +785,19 @@ samples the biome directly under the rider with `execute at ir_seat if biome
 ocean, plus the deep/warm/lukewarm/cold/frozen variants). Two run counters
 follow the crossing: `#oceanRun` counts consecutive ocean chunks (any land
 chunk zeroes it), `#landRun` counts consecutive non-ocean chunks (any ocean
-chunk zeroes it). When `#oceanRun` reaches `#OCEANCHUNKS` the ride raises the
-minecart max-speed gamerule to `#OCEANSPEED` (`speed_up`); once back on land,
-when `#landRun` reaches `#LANDCHUNKS` it drops back to `#MAXSPEED`
-(`speed_down`). The hysteresis (`#LANDCHUNKS` of land needed before reverting)
-keeps small islands or gaps from flip-flopping the speed. The gamerule is only
-written on those two threshold crossings, not every tick, so the rider can
-still override it with `/gamerule` between crossings. Because it drives the
-*same* gamerule the pace cart already obeys, the smooth camera (§7g) inherits
-the new speed with zero extra work. `#OCEANSPEED 0` disables the whole feature.
-Like all minecart-speed control, this needs the world's **Minecart
-Improvements** feature enabled; without it the speed writes are no-ops and the
-ride cruises at vanilla pace throughout.
+chunk zeroes it). Once `#oceanRun` reaches `#OCEANCHUNKS` the ride sets the
+minecart max-speed gamerule to `#OCEANSPEED` (`speed_up`) and keeps re-asserting
+it every ocean chunk, so the configured ocean speed always wins — even over a
+manual `/gamerule` change; once back on land, when `#landRun` reaches
+`#LANDCHUNKS` it drops back to `#MAXSPEED` (`speed_down`) a single time and then
+leaves the gamerule alone (so the land default stays hand-tweakable). The
+hysteresis (`#LANDCHUNKS` of land before reverting) keeps small islands or gaps
+from flip-flopping the speed. Because it drives the *same* gamerule the pace cart
+already obeys, the smooth camera (§7g) inherits the new speed with zero extra
+work. `#OCEANSPEED 0` disables the whole feature. Like all minecart-speed
+control, this needs the world's **Minecart Improvements** feature enabled;
+without it the speed writes are no-ops and the ride cruises at vanilla pace
+throughout.
 
 ---
 
@@ -855,7 +875,10 @@ corners entirely, so frequent small elevation changes are now visually free.
   `#DEBUGMODE 1` to watch: it prints the speed being set and the pace cart's real
   `Motion[0]×100` each chunk; if that number never climbs after a speed change,
   the feature isn't enabled. The rule is `minecartMaxSpeed` on 1.21-era versions
-  and `max_minecart_speed` on 26.x (renamed in 25w44a); `set_speed` writes both.
+  and `max_minecart_speed` on 26.x (renamed in 25w44a); `load` detects which one
+  the running version uses and `set_speed` only ever runs that name (a macro line
+  that expands to an unknown gamerule would abort the function, so the wrong name
+  is never emitted).
 - **Hide-hand is Bedrock-only.** `hide_hand` uses `/hud`, which exists only on
   Bedrock Edition; on Java it's a dropped-file no-op. It's included for a
   Bedrock port of the pack and does nothing on Java (where the rider's hand is
@@ -866,7 +889,8 @@ corners entirely, so frequent small elevation changes are now visually free.
 ## 10. Quick map (function → what calls it)
 
 ```
-#minecraft:load ─ load ─ config   (then load derives #TUNNELUP)
+#minecraft:load ─ load ─┬─ config   (then load derives #TUNNELUP)
+                        └─ speed_name / speed_name_26 (detect gamerule name; one compiles per version)
 #minecraft:tick ─ tick ─┬─ main ─┬─ build_loop ⇄ build_step ─ advance ─┬─ sample_window
                         │        │                                     ├─ decide ─ consider_start ─ start_event
                         │        │                                     │                 └─ (decide also calls) end_event
