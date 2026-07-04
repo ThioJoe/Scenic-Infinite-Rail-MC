@@ -20,7 +20,7 @@
 # Cruising altitude: how many blocks of clearance the rail keeps above the
 # average terrain surface. Higher = a more sweeping, birds-eye view.
 # Note: Currently should be at least 2, or else water may destroy the redstone torches
-scoreboard players set #HOVER ir 2
+scoreboard players set #HOVER ir 3
 
 
 # --- Slope shaping (the "event" model) -------------------------------------
@@ -30,17 +30,17 @@ scoreboard players set #HOVER ir 2
 
 # Minimum height difference (in blocks) before a new climb/descent is started.
 # Also acts as hysteresis, so small terrain noise never nudges the rail.
-scoreboard players set #DEADBAND ir 3
+scoreboard players set #DEADBAND ir 2
 
 # Minimum flat blocks between two changes in the SAME direction.
 # Higher = fewer, longer swoops. Terrain that rises faster than this allows
 # gets tunneled through instead of climbed.
-scoreboard players set #SAMEGAP ir 50
+scoreboard players set #SAMEGAP ir 75
 
 # Minimum flat blocks required before the rail may REVERSE direction.
 # Higher = no quick up-then-down bobbing; small bumps get tunneled through and
 # small dips get bridged across.
-scoreboard players set #TURNGAP ir 50
+scoreboard players set #TURNGAP ir 150
 
 
 # --- Terrain-smoothing sensitivity -----------------------------------------
@@ -49,11 +49,11 @@ scoreboard players set #TURNGAP ir 50
 
 # Larger = approaching mountains raise the target sooner (earlier, gentler
 # "one swoop" climbs).
-scoreboard players set #UPCLAMP ir 100
+scoreboard players set #UPCLAMP ir 150
 
 # Smaller = ravines, holes and canyons are ignored and bridged dead level
 # instead of dipped into.
-scoreboard players set #DOWNCLAMP ir 100
+scoreboard players set #DOWNCLAMP ir 150
 
 
 # --- Performance / world generation ----------------------------------------
@@ -72,4 +72,4 @@ scoreboard players set #GENAHEAD ir 192
 
 # Maximum track columns built per game tick. Higher = better catch-up if the
 # server hitches, at the cost of more work per tick.
-scoreboard players set #MAXTICK ir 30
+scoreboard players set #MAXTICK ir 15
