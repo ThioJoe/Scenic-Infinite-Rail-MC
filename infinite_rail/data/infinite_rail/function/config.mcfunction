@@ -118,11 +118,11 @@ scoreboard players set #TURNGAP ir 40
 
 # Larger = approaching mountains raise the target sooner (earlier, gentler
 # "one swoop" climbs).
-scoreboard players set #UPCLAMP ir 75
+scoreboard players set #UPCLAMP ir 150
 
 # Smaller = ravines, holes and canyons are ignored and bridged dead level
 # instead of dipped into.
-scoreboard players set #DOWNCLAMP ir 25
+scoreboard players set #DOWNCLAMP ir 50
 
 
 # --- Performance / world generation ----------------------------------------
