@@ -19,7 +19,8 @@
 
 # Cruising altitude: how many blocks of clearance the rail keeps above the
 # average terrain surface. Higher = a more sweeping, birds-eye view.
-scoreboard players set #HOVER ir 4
+# Note: Currently should be at least 2, or else water may destroy the redstone torches
+scoreboard players set #HOVER ir 2
 
 
 # --- Slope shaping (the "event" model) -------------------------------------
@@ -34,7 +35,7 @@ scoreboard players set #DEADBAND ir 3
 # Minimum flat blocks between two changes in the SAME direction.
 # Higher = fewer, longer swoops. Terrain that rises faster than this allows
 # gets tunneled through instead of climbed.
-scoreboard players set #SAMEGAP ir 30
+scoreboard players set #SAMEGAP ir 50
 
 # Minimum flat blocks required before the rail may REVERSE direction.
 # Higher = no quick up-then-down bobbing; small bumps get tunneled through and
@@ -48,11 +49,11 @@ scoreboard players set #TURNGAP ir 30
 
 # Larger = approaching mountains raise the target sooner (earlier, gentler
 # "one swoop" climbs).
-scoreboard players set #UPCLAMP ir 16
+scoreboard players set #UPCLAMP ir 64
 
 # Smaller = ravines, holes and canyons are ignored and bridged dead level
 # instead of dipped into.
-scoreboard players set #DOWNCLAMP ir 16
+scoreboard players set #DOWNCLAMP ir 64
 
 
 # --- Performance / world generation ----------------------------------------
