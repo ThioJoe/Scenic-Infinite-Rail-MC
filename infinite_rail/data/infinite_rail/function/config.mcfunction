@@ -23,7 +23,7 @@
 # average terrain surface. Higher = a more sweeping, birds-eye view.
 # Keep it at least 2: the redstone power block under the rail is immune to
 # water, but the rail itself is not, so the track must stay above sea level.
-scoreboard players set #HOVER ir 3
+scoreboard players set #HOVER ir 2
 
 
 # --- Smooth camera ----------------------------------------------------------
@@ -38,7 +38,7 @@ scoreboard players set #HOVER ir 3
 # Camera seat height above the cart, in TENTHS of a block (15 = 1.5 blocks).
 # The rider's eyes sit roughly 1.3 blocks above the seat. Keep it modest
 # (below ~25) so the view stays inside the carved tunnel bore.
-scoreboard players set #CAMHEIGHT ir 15
+scoreboard players set #CAMHEIGHT ir 5
 
 # Vertical smoothing strength: each tick the seat closes 1/N of the remaining
 # gap to its target height. Higher = softer, longer swoops that "cut the
@@ -46,7 +46,7 @@ scoreboard players set #CAMHEIGHT ir 15
 # climbs and floats above it on long descents); lower = tighter tracking;
 # 1 = no smoothing. 4-10 is the sweet spot -- very large values make the
 # camera lag several blocks behind on sustained slopes.
-scoreboard players set #CAMSMOOTH ir 6
+scoreboard players set #CAMSMOOTH ir 4
 
 
 # --- Auto-start -------------------------------------------------------------
@@ -68,12 +68,12 @@ scoreboard players set #AUTOSTART ir 1
 
 # Minimum height difference (in blocks) before a new climb/descent is started.
 # Also acts as hysteresis, so small terrain noise never nudges the rail.
-scoreboard players set #DEADBAND ir 3
+scoreboard players set #DEADBAND ir 2
 
 # Minimum flat blocks between two changes in the SAME direction.
 # Higher = fewer, longer swoops. Terrain that rises faster than this allows
 # gets tunneled through instead of climbed.
-scoreboard players set #SAMEGAP ir 30
+scoreboard players set #SAMEGAP ir 5
 
 # Minimum flat blocks required before the rail may REVERSE direction.
 # Higher = no quick up-then-down bobbing; small bumps get tunneled through and
@@ -87,11 +87,11 @@ scoreboard players set #TURNGAP ir 40
 
 # Larger = approaching mountains raise the target sooner (earlier, gentler
 # "one swoop" climbs).
-scoreboard players set #UPCLAMP ir 20
+scoreboard players set #UPCLAMP ir 75
 
 # Smaller = ravines, holes and canyons are ignored and bridged dead level
 # instead of dipped into.
-scoreboard players set #DOWNCLAMP ir 20
+scoreboard players set #DOWNCLAMP ir 25
 
 
 # --- Performance / world generation ----------------------------------------
