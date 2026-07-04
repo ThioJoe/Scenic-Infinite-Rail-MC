@@ -25,6 +25,12 @@
 # water, but the rail itself is not, so the track must stay above sea level.
 scoreboard players set #HOVER ir 2
 
+# How high (in blocks above the rail) each column's clearance bore is carved --
+# i.e. the tunnel/headroom height. Slope columns automatically carve one block
+# taller. Keep it at least 3 (the tunnel light sits at rail+3). Bigger = airier
+# tunnels and cuttings at the cost of more blocks changed per column.
+scoreboard players set #TUNNEL ir 4
+
 
 # --- Smooth camera (the ride rig) --------------------------------------------
 # The rider sits -- mounted once, never remounted -- in a real minecart that
@@ -87,6 +93,32 @@ scoreboard players set #CAMAHEAD ir 64
 # stopping with /function infinite_rail:stop stays stopped across rejoins.
 # 0 = classic manual start via /function infinite_rail:start.
 scoreboard players set #AUTOSTART ir 1
+
+
+# --- Minecart speed (the max_minecart_speed gamerule) -----------------------
+# These control the vanilla minecart max-speed gamerule (named minecartMaxSpeed
+# on 1.21-era versions, max_minecart_speed on 26.x). It only has any effect when
+# the world has the "Minecart Improvements" feature enabled -- without it these
+# are harmless no-ops and the ride runs at vanilla speed.
+#
+# The default speed is applied ONCE when a ride starts; it is NOT continuously
+# enforced, so you can still change /gamerule yourself mid-ride if you like.
+
+# Default max minecart speed (blocks/second) set at ride start. Vanilla default
+# is 8; raise it for a brisker journey (valid up to 1000).
+scoreboard players set #MAXSPEED ir 8
+
+# Speed used while crossing open ocean (see below). 0 disables the whole
+# ocean speed-up feature and the speed stays at #MAXSPEED everywhere.
+scoreboard players set #OCEANSPEED ir 32
+
+# How many consecutive ocean-biome chunks the ride must cross before it speeds
+# up to #OCEANSPEED (a chunk is 16 blocks; the biome is sampled at the cart).
+scoreboard players set #OCEANCHUNKS ir 6
+
+# How many consecutive non-ocean chunks after a speed-up before it reverts to
+# #MAXSPEED (so brief islands/gaps don't keep flipping the speed).
+scoreboard players set #LANDCHUNKS ir 4
 
 
 # --- Slope shaping (the "event" model) -------------------------------------

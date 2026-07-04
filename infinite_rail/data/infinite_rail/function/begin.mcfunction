@@ -20,6 +20,12 @@ ride @s dismount
 function infinite_rail:setup_world
 function infinite_rail:setup_world_26
 
+# Apply the configured default minecart max-speed gamerule once, at the start.
+# (Not enforced afterwards -- change /gamerule yourself mid-ride if you want.)
+scoreboard players set #fast ir 0
+execute store result storage infinite_rail:speed v int 1 run scoreboard players get #MAXSPEED ir
+function infinite_rail:set_speed with storage infinite_rail:speed
+
 # --- Anchor the line at the player's position ---
 summon minecraft:marker ~0.5 0.0 ~0.5 {Tags:["ir_head"]}
 summon minecraft:marker ~0.5 0.0 ~0.5 {Tags:["ir_probe"]}
@@ -60,6 +66,11 @@ ride @e[type=item_display,tag=ir_plug,limit=1] mount @e[type=minecart,tag=ir_car
 
 # --- Pre-build past the rig position so the viewer starts on ready track ---
 execute store result score #cartX ir run data get entity @e[type=minecart,tag=ir_cart,limit=1] Pos[0] 1
+# Seed the ocean speed-up state: current chunk, empty ocean/land run counters.
+scoreboard players operation #lastChunk ir = #cartX ir
+scoreboard players operation #lastChunk ir /= #C16 ir
+scoreboard players set #oceanRun ir 0
+scoreboard players set #landRun ir 0
 scoreboard players operation #budget ir = #CAMAHEAD ir
 scoreboard players add #budget ir 32
 function infinite_rail:build_loop
@@ -82,6 +93,8 @@ effect give @s minecraft:saturation infinite 0 true
 # The rider is visible again (they sit in a real cart) -- clear any leftover
 # invisibility from rides started on older pack versions.
 effect clear @s minecraft:invisibility
+# Bedrock only: hide the rider's hand/held item (no-op on Java -- see hide_hand).
+function infinite_rail:hide_hand
 
 # --- Snap the rig to its cruising position and hand off to the ticker ---
 # The S-curve (c1) is stateless; only the descent chaser (#s2) needs seeding.

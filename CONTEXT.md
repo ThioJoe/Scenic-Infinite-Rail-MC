@@ -112,6 +112,11 @@ fake players. Grouped by role:
 | Score        | Meaning |
 | ------------ | ------- |
 | `#HOVER`     | Preferred rail clearance (blocks) above the average terrain surface. |
+| `#TUNNEL`    | Clearance bore height (blocks above the rail) carved per column; the tunnel/headroom height. Slope columns carve `#TUNNELUP` (= `#TUNNEL+1`). Keep ≥ 3 (the light sits at rail+3). |
+| `#MAXSPEED`  | Default value pushed into the minecart max-speed gamerule at ride start (blocks/s). Applied once, not enforced. Needs the Minecart Improvements feature to have any effect. |
+| `#OCEANSPEED`| Minecart max-speed used while crossing open ocean. `0` disables the ocean speed-up entirely. |
+| `#OCEANCHUNKS`| Consecutive ocean-biome chunks the ride must cross before speeding up to `#OCEANSPEED`. |
+| `#LANDCHUNKS`| Consecutive non-ocean chunks after a speed-up before reverting to `#MAXSPEED`. |
 | `#CAMHEIGHT` | **Extra** rig height above the rail line, in **tenths of a block** (0 = the ride cart rests on the smoothed line like a cart on a rail). |
 | `#CAMBLEND`  | S-curve blend length in blocks (even): the camera transitions level⇄parallel over exactly this distance at every slope change. |
 | `#CAMSMOOTH` | Descent glide divisor: the camera closes `1/#CAMSMOOTH` of a **downward** gap per tick (climbs use the constructed S-curve instead; 1 = off). |
@@ -133,8 +138,10 @@ fake players. Grouped by role:
 | ------- | ------- |
 | `#C12`  | Number of heightmap samples per column (**12**) — the divisor for the average. Fixed by `sample_window.mcfunction`; changing one without the other breaks the average. |
 | `#C2`,`#C10` | Small divisors for the camera scan geometry (`#CAMBLEND/2`, `#CAMLIFT` tenths→blocks). |
+| `#C16`  | Blocks per chunk (**16**) — the divisor for the ocean-biome chunk counter. |
 | `#C100` | Fixed-point multiplier **100**: converts `#CAMHEIGHT`/`#CAMLIFT` (tenths of a block) to milliblocks. |
 | `#C1000`| Fixed-point multiplier **1000**: converts whole blocks to milliblocks / extracts the cart's sub-block X fraction. |
+| `#TUNNELUP` | Derived in `load` after `config`: `#TUNNEL + 1`, the carve height for slope columns (extra headroom). Recomputed on every `/reload`. |
 
 **Runtime state:**
 
@@ -162,6 +169,12 @@ fake players. Grouped by role:
 | `#flat`     | Flat columns counted since the last event ended (compared against `#need`). |
 | `#lastDir`  | Direction of the last event (`1`/`-1`), used to pick `#SAMEGAP` vs `#TURNGAP`. |
 | `#mx`       | The cart's `Motion[0]` × 100 (its eastward speed, for the stall check). |
+| `#chunkNow` | The pace cart's current chunk index (`#cartX / 16`), recomputed each tick by `ocean_check`. |
+| `#lastChunk`| The chunk index the ocean check last processed; the biome is sampled only when `#chunkNow` differs. |
+| `#oceanRun` | Consecutive ocean-biome chunks crossed so far (reset by any non-ocean chunk). |
+| `#landRun`  | Consecutive non-ocean chunks crossed since the last ocean chunk (reset by any ocean chunk). |
+| `#isOcean`  | `1`/`0`: was the biome under the cart this chunk an ocean? (temp, per chunk). |
+| `#fast`     | `1` while the ride is in ocean cruising speed (`#OCEANSPEED`), `0` at the default. |
 | `#autodone` | `1` once a ride has ever been started in this world; blocks the auto-starter forever after (persists in the world save). |
 | `#trackBase`| World X of index 0 of the track-history list (storage `infinite_rail:track y`). |
 | `#sy`       | The rig's smoothed rail-line height this tick, in **milliblocks**: `max(#c1, #s2, #linem)`. |
@@ -195,6 +208,8 @@ fake players. Grouped by role:
 | `infinite_rail:cam`  | `dx`(int), `y`(double) | Macro arguments for `cam_tp`: the eastward offset from the pace cart (`#CAMAHEAD`) and the rig's absolute height (`(#sy + 62 + #CAMHEIGHT×100) × 0.001`). X/Z stay relative to the execution position (the pace cart), so they never pass through a scoreboard. |
 | `infinite_rail:track`| `y`(list of int) | The **track history**: one rail-Y per built column, appended by `advance` (and once by `begin`); index = world X − `#trackBase`. The camera's entire knowledge of the path. Grows ~4 bytes/column for the life of a ride; reset by `begin`. |
 | `infinite_rail:cami` | `i`(int) | Macro argument for `cam_get` (the history index to read). |
+| `infinite_rail:speed`| `v`(int) | Macro argument for `set_speed` (the minecart max-speed gamerule value to apply). |
+| `infinite_rail:carve`| `h`(int) | Macro argument for `carve` (the clearance-bore height above the rail). |
 
 ---
 
@@ -214,16 +229,17 @@ Player runs /function infinite_rail:start
         ▼
 start ─► (as nearest player, block-aligned) begin
             ├─ reset any previous run, kill old entities, clear forceloads; #autodone=1
-            ├─ setup_world (gamerules)
+            ├─ setup_world (gamerules); apply #MAXSPEED via set_speed; #fast=0
             ├─ summon ir_head + ir_probe markers; initial forceload (via GENAHEAD macro)
             ├─ read terrain here, set #railY = surface + #HOVER, move head to it
             ├─ init counters (#slope=0, #flat=99, #lastDir=0, seed #avg, #nextLoad…)
             ├─ reset the track-history list; #trackBase = #headX; record column 0
             ├─ place the first column; summon ir_cart (pace cart) + ir_plug; plug in cart
+            ├─ seed the ocean state (#lastChunk = cart chunk, #oceanRun/#landRun = 0)
             ├─ pre-build #CAMAHEAD+32 columns synchronously
             ├─ summon ir_seat + ir_ride at the head; ride cart onto seat;
             │    mount player INTO THE RIDE CART (the only mount of the ride);
-            │    set adventure + Resistance/Saturation
+            │    set adventure + Resistance/Saturation; hide_hand (Bedrock no-op on Java)
             └─ seed #sy, snap the rig into place (cam_follow), set #started = 1
 
 Every game tick (while #started == 1)
@@ -231,6 +247,7 @@ Every game tick (while #started == 1)
         ▼
 #minecraft:tick ─► tick ─► main
                             ├─ sample #cartX (pace cart)
+                            ├─ ocean_check: per-chunk biome sample → raise/lower minecart speed
                             ├─ keeper: eject anything but the plug from the pace cart,
                             │    anything but players from the ride cart
                             ├─ keeper: re-mount a dismounted rider into the ride cart
@@ -280,19 +297,21 @@ Vanilla tag `#minecraft:tick`; lists `infinite_rail:tick`. Makes the game run
 
 **`function/load.mcfunction`**
 Runs on load/reload. `scoreboard objectives add ir dummy` (idempotent) creates
-the objective; sets the internal constants `#C12 = 12`, `#C100 = 100`,
-`#C1000 = 1000`; calls `infinite_rail:config` to apply all tunables; prints a
-"Loaded" message. Does **not** touch ride state (including `#autodone`), so a
-`/reload` mid-ride refreshes the knobs without stopping it, and a stopped world
-stays stopped.
+the objective; sets the internal constants `#C12 = 12`, `#C16 = 16`,
+`#C100 = 100`, `#C1000 = 1000`; calls `infinite_rail:config` to apply all
+tunables; then derives `#TUNNELUP = #TUNNEL + 1`; prints a "Loaded" message.
+Does **not** touch ride state (including `#autodone`), so a `/reload` mid-ride
+refreshes the knobs without stopping it, and a stopped world stays stopped.
 
 **`function/config.mcfunction`**
-The single file a user edits. Sets every tunable score (`#HOVER`, `#CAMHEIGHT`,
-`#CAMSMOOTH`, `#AUTOSTART`, `#DEADBAND`, `#SAMEGAP`, `#TURNGAP`, `#UPCLAMP`,
+The single file a user edits. Sets every tunable score (`#HOVER`, `#TUNNEL`,
+`#CAMHEIGHT`, `#CAMSMOOTH`, `#AUTOSTART`, `#MAXSPEED`, `#OCEANSPEED`,
+`#OCEANCHUNKS`, `#LANDCHUNKS`, `#DEADBAND`, `#SAMEGAP`, `#TURNGAP`, `#UPCLAMP`,
 `#DOWNCLAMP`, `#AHEAD`, `#GENAHEAD`, `#MAXTICK`) with heavily-commented
-explanations. Called by `load`. Its header documents how to apply edits
-(`/reload`) and that running `config` by itself only re-runs the in-memory copy
-(so it's only good for resetting live `/scoreboard` tweaks).
+explanations. Called by `load` (which then derives `#TUNNELUP`). Its header
+documents how to apply edits (`/reload`) and that running `config` by itself
+only re-runs the in-memory copy (so it's only good for resetting live
+`/scoreboard` tweaks).
 
 ### 6.3 Lifecycle / control
 
@@ -307,7 +326,9 @@ Sets up and launches a ride (see the flow in §5). Notable steps:
   world — the auto-starter must never fire again), kill any
   `ir_head`/`ir_probe`/`ir_cart`/`ir_seat`, `forceload remove all`, dismount
   the player — so `start` is safely re-runnable.
-- **World tuning:** calls `setup_world`.
+- **World tuning:** calls `setup_world`; applies the default minecart max-speed
+  (`#MAXSPEED` via the `set_speed` macro) and clears the ocean fast state
+  (`#fast = 0`).
 - **Anchor:** summons the two markers at the player (`~0.5 … ~0.5` = block
   center); force-loads a small area behind + the `#GENAHEAD` corridor ahead
   (via the `forceload` macro).
@@ -319,7 +340,9 @@ Sets up and launches a ride (see the flow in §5). Notable steps:
 - **Track history:** empties storage `infinite_rail:track y`, sets
   `#trackBase = #headX` and records the first column's rail Y (index 0).
 - **Pace cart:** places the first column (`place_flat`), summons `ir_cart`
-  (invuln, small eastward motion) and `ir_plug`, and plugs the cart.
+  (invuln, small eastward motion) and `ir_plug`, and plugs the cart. Seeds the
+  ocean-check state: `#lastChunk` = the cart's current chunk, `#oceanRun` and
+  `#landRun` = 0.
 - **Pre-build:** sets `#budget = #CAMAHEAD + 32` and runs `build_loop` once
   synchronously — the head ends up past the rig's starting position, so the
   viewer starts on ready track.
@@ -330,7 +353,8 @@ Sets up and launches a ride (see the flow in §5). Notable steps:
   they must never repeat). Adventure mode + **infinite Resistance 255 +
   Saturation** (can't break track, get hurt, or starve); any leftover
   invisibility from older pack versions is cleared — the rider is meant to be
-  visible in their cart.
+  visible in their cart. Finally calls `hide_hand` (a Bedrock-only `/hud` command
+  that hides the held item; the file is dropped on Java, so it's a no-op there).
 - **Handoff:** seeds `#sy = #railY×1000`, runs `cam_follow` once to snap the
   rig to its cruising position, then `#started=1`.
 
@@ -347,6 +371,24 @@ silently dropped from the pack, so on any given version exactly one of the two
 variants exists in memory. `begin` calls both; the missing one is a harmless
 runtime no-op. Keep them in sync when changing a rule.
 
+**`function/set_speed.mcfunction`** *(a function macro)*
+Sets the vanilla minecart max-speed gamerule to the value in storage
+`infinite_rail:speed v` (gamerule values can't be scoreboard refs, so it arrives
+as the macro arg `$(v)`). Emits **both** `gamerule minecartMaxSpeed $(v)`
+(1.21-era) and `gamerule max_minecart_speed $(v)` (26.x-era, renamed in 25w44a):
+on any version one name is valid and takes effect and the other is an
+unknown-rule no-op. The rule only exists when the world enables the **Minecart
+Improvements** feature — without it both lines simply do nothing. Called by
+`begin` (with `#MAXSPEED`), `speed_up` (`#OCEANSPEED`) and `speed_down`
+(`#MAXSPEED`).
+
+**`function/hide_hand.mcfunction`**
+Bedrock-only: `hud @s hide hand` hides the rider's held item / arm. `/hud` is a
+Bedrock command; on Java Edition it's unknown, so this whole file fails to
+compile and is silently dropped (calling it is a no-op) — the same
+compile-drop mechanism as the `setup_world` split. Called once from `begin` as
+the rider, so a Bedrock port starts with the hand hidden and Java is unaffected.
+
 **`function/stop.mcfunction`**
 Ends the ride: `#started=0`, clears effects from and dismounts adventure
 players, kills `ir_cart`, `ir_ride`, `ir_seat`, `ir_plug` and both markers,
@@ -361,6 +403,8 @@ while `#AUTOSTART == 1`, `#started == 0` and `#autodone ≠ 1`, it waits for a p
 **`function/main.mcfunction`**
 Per-tick driver while riding:
 1. Sample the pace cart's X into `#cartX`.
+1a. **Ocean speed-up:** run `ocean_check` (samples the biome once per chunk the
+   cart enters and raises/lowers the minecart max-speed gamerule).
 2. **Purity keepers:** `execute on passengers` ejects anything riding the pace
    cart that isn't the plug (scooped-up mobs), and anything riding the ride
    cart that isn't a player.
@@ -375,6 +419,24 @@ Per-tick driver while riding:
    < 0.1, i.e. stalled) `data merge` the pace cart's motion back to `0.5` east.
 6. **Camera:** if the pace cart exists, run `cam_follow` (§7g).
 7. Set `#budget = #MAXTICK` and run `build_loop` to extend the track.
+
+**`function/ocean_check.mcfunction`**
+The ocean speed-up driver, called each tick from `main` (§7h). Computes the pace
+cart's chunk `#chunkNow = #cartX / #C16`; if it equals `#lastChunk` it
+`return`s immediately (act only when the cart crosses a chunk boundary).
+Otherwise it records the new chunk, samples the biome under the cart
+(`execute at ir_cart if biome ~ ~ ~ #minecraft:is_ocean` → `#isOcean`), and
+updates the run counters: an ocean chunk grows `#oceanRun` (and zeroes
+`#landRun`), a non-ocean chunk grows `#landRun` (and zeroes `#oceanRun`).
+Crossing `#OCEANCHUNKS` ocean chunks while not fast (and `#OCEANSPEED > 0`)
+calls `speed_up`; crossing `#LANDCHUNKS` non-ocean chunks while fast calls
+`speed_down`.
+
+**`function/speed_up.mcfunction`** / **`function/speed_down.mcfunction`**
+The two transition helpers: `speed_up` sets `#fast = 1` and pushes `#OCEANSPEED`
+through `set_speed`; `speed_down` sets `#fast = 0` and pushes `#MAXSPEED`. Both
+are one-shots, run only on a threshold crossing, so the gamerule is written a
+handful of times per ocean rather than every tick.
 
 ### 6.4 The build loop
 
@@ -451,21 +513,30 @@ All three run positioned at the head; the head is already at this column's
 `(X, railY, Z)`. **Order matters:** the carve happens first, then `support`
 (which lays the redstone block *under* the rail), then the rail, then the light —
 because the track hovers above the ground, so the cell under the rail is air and
-the rail would pop off if placed before its support existed.
+the rail would pop off if placed before its support existed. The carve height is
+configurable (`#TUNNEL`), so all three delegate the `fill` to the `carve` macro.
 
 **`function/place_flat.mcfunction`**
-`fill ~ ~ ~-1 ~ ~4 ~1 air` (carve 3 wide × 5 tall); `support`; `powered_rail
-[shape=east_west,powered=true]` at `~`; `light[level=11]` at `~3`.
+Stores `#TUNNEL` into `infinite_rail:carve h` and runs `carve` (3 wide ×
+`#TUNNEL+1` cells tall — the rail cell plus `#TUNNEL` above); `support`;
+`powered_rail[shape=east_west,powered=true]` at `~`; `light[level=11]` at `~3`.
 
 **`function/place_up.mcfunction`**
-Climbing column. Same as flat but carves one taller (`~5`, extra headroom as the
-cart rises) and places `powered_rail[shape=ascending_east,powered=true]`.
+Climbing column. Same as flat but carves with `#TUNNELUP` (= `#TUNNEL+1`, one
+block of extra headroom as the cart rises) and places
+`powered_rail[shape=ascending_east,powered=true]`.
 
 **`function/place_down.mcfunction`**
-Descending column. Carves `~5` tall; places
+Descending column. Carves with `#TUNNELUP`; places
 `powered_rail[shape=ascending_west,powered=true]`. (Because a descent moves the
 head down first, the rail sits one lower and slopes up toward the west behind it,
 which is the same physical staircase as a climb viewed the other way.)
+
+**`function/carve.mcfunction`** *(a function macro)*
+`$fill ~ ~ ~-1 ~ ~$(h) ~1 minecraft:air` — carves the 3-wide clearance bore up
+to `$(h)` blocks above the rail. `fill` needs literal coordinates, so the
+configurable height arrives as a macro arg (storage `infinite_rail:carve h`, set
+by the caller to `#TUNNEL` for flat columns or `#TUNNELUP` for slopes).
 
 **`function/support.mcfunction`**
 Lays the power+disguise under the rail (shared by all three place functions):
@@ -666,15 +737,39 @@ The design has three pillars:
 3. **A hidden cart sets the pace.** The rig rides `#CAMAHEAD` blocks east of
    the pace cart (`ir_cart`), which rolls along the physical rails behind the
    viewer, out of forward view. Whatever speed the rails push it — including
-   a changed `max_minecart_speed` gamerule under the `minecart_improvements`
-   experiment — the rig inherits automatically; there is no hard-coded
-   velocity anywhere.
+   a changed minecart max-speed gamerule under the `minecart_improvements`
+   feature — the rig inherits automatically; there is no hard-coded velocity
+   anywhere. The pack sets that gamerule to `#MAXSPEED` at start and to
+   `#OCEANSPEED` over long ocean stretches (§7h), and the rig simply follows.
 
 Because riding only carries *position* (never view), the player keeps full
 free-look — better than Bedrock's `/camera`, which locks the view. The rider
 is visible, sitting in their gliding cart like on any minecart ride. (The
 ride cart, being off-rail, doesn't pitch on slopes — it glides level through
 the smoothed climbs, which reads naturally with the eased motion.)
+
+### 7h. The ocean speed-up
+A long ocean crossing is the one stretch with nothing to look at, so the ride
+quietly picks up speed over open water. Each tick `ocean_check` maps the pace
+cart's X to a chunk index (`#cartX / 16`) and acts only when that index
+changes — i.e. once per chunk the cart enters. On each new chunk it samples the
+biome directly under the cart with `execute at ir_cart if biome ~ ~ ~
+#minecraft:is_ocean` (the vanilla tag that covers every ocean-named biome:
+ocean, plus the deep/warm/lukewarm/cold/frozen variants). Two run counters
+follow the crossing: `#oceanRun` counts consecutive ocean chunks (any land
+chunk zeroes it), `#landRun` counts consecutive non-ocean chunks (any ocean
+chunk zeroes it). When `#oceanRun` reaches `#OCEANCHUNKS` the ride raises the
+minecart max-speed gamerule to `#OCEANSPEED` (`speed_up`); once back on land,
+when `#landRun` reaches `#LANDCHUNKS` it drops back to `#MAXSPEED`
+(`speed_down`). The hysteresis (`#LANDCHUNKS` of land needed before reverting)
+keeps small islands or gaps from flip-flopping the speed. The gamerule is only
+written on those two threshold crossings, not every tick, so the rider can
+still override it with `/gamerule` between crossings. Because it drives the
+*same* gamerule the pace cart already obeys, the smooth camera (§7g) inherits
+the new speed with zero extra work. `#OCEANSPEED 0` disables the whole feature.
+Like all minecart-speed control, this needs the world's **Minecart
+Improvements** feature enabled; without it the speed writes are no-ops and the
+ride cruises at vanilla pace throughout.
 
 ---
 
@@ -688,10 +783,11 @@ ir 8` (takes effect on the next column; wiped on the next `/reload`/rejoin).
 Running `/function infinite_rail:config` by itself does **not** pick up file
 edits — it re-runs the copy already in memory.
 
-Current defaults in `config.mcfunction`: `#HOVER 2`, `#CAMHEIGHT 0`,
-`#CAMBLEND 6`, `#CAMSMOOTH 8`, `#CAMLIFT 24`, `#CAMAHEAD 64`, `#AUTOSTART 1`,
-`#DEADBAND 2`, `#SAMEGAP 25`, `#TURNGAP 40`, `#UPCLAMP 75`, `#DOWNCLAMP 25`,
-`#AHEAD 224`, `#GENAHEAD 192`, `#MAXTICK 15`. (These are tuned to taste and change often;
+Current defaults in `config.mcfunction`: `#HOVER 2`, `#TUNNEL 4`,
+`#CAMHEIGHT 0`, `#CAMBLEND 6`, `#CAMSMOOTH 6`, `#CAMLIFT 20`, `#CAMAHEAD 64`,
+`#AUTOSTART 1`, `#MAXSPEED 8`, `#OCEANSPEED 32`, `#OCEANCHUNKS 6`,
+`#LANDCHUNKS 4`, `#DEADBAND 3`, `#SAMEGAP 25`, `#TURNGAP 40`, `#UPCLAMP 150`,
+`#DOWNCLAMP 50`, `#AHEAD 224`, `#GENAHEAD 192`, `#MAXTICK 15`. (These are tuned to taste and change often;
 the algorithm works across a wide range. The gaps and deadband are far lower
 than the pre-camera 50/50/4 because the profile-driven camera erases slope
 corners entirely, so frequent small elevation changes are now visually free.
@@ -742,29 +838,43 @@ corners entirely, so frequent small elevation changes are now visually free.
   Run `stop` once, or set `#AUTOSTART 0`, if that's unwanted.
 - **File edits need `/reload`.** See §8 — the single most common point of
   confusion.
+- **Minecart speed needs the experiment.** `#MAXSPEED` and the ocean speed-up
+  (§7h) drive the minecart max-speed gamerule, which only exists when the world
+  has the **Minecart Improvements** feature enabled (a data-driven feature/
+  experiment toggle). Without it the speed writes are harmless no-ops and the
+  ride runs at vanilla pace. The rule is `minecartMaxSpeed` on 1.21-era versions
+  and `max_minecart_speed` on 26.x (renamed in 25w44a); `set_speed` writes both.
+- **Hide-hand is Bedrock-only.** `hide_hand` uses `/hud`, which exists only on
+  Bedrock Edition; on Java it's a dropped-file no-op. It's included for a
+  Bedrock port of the pack and does nothing on Java (where the rider's hand is
+  empty anyway, since the inventory is cleared each tick).
 
 ---
 
 ## 10. Quick map (function → what calls it)
 
 ```
-#minecraft:load ─ load ─ config
-#minecraft:tick ─ tick ─┬─ main ─ build_loop ⇄ build_step ─ advance ─┬─ sample_window
-                        │         │                                  ├─ decide ─ consider_start ─ start_event
-                        │         │                                  │                 └─ (decide also calls) end_event
-                        │         ├─ (keepers, inline)               ├─ place_flat / place_up / place_down ─ support
-                        │         ├─ #cartX read                     ├─ (track-history append)
-                        │         │                                  └─ roll_chunks ─ forceload (macro)
-                        │         └─ cam_follow ─┬─ cam_blend ⇄ cam_scan ⇄ cam_sample ─ cam_get (macro)
-                        │                        └─ cam_move ─ cam_tp (macro)
+#minecraft:load ─ load ─ config   (then load derives #TUNNELUP)
+#minecraft:tick ─ tick ─┬─ main ─┬─ build_loop ⇄ build_step ─ advance ─┬─ sample_window
+                        │        │                                     ├─ decide ─ consider_start ─ start_event
+                        │        │                                     │                 └─ (decide also calls) end_event
+                        │        │                                     ├─ place_flat / place_up / place_down ─┬─ carve (macro)
+                        │        │                                     │                                      └─ support
+                        │        ├─ #cartX read                        ├─ (track-history append)
+                        │        ├─ ocean_check ─ speed_up / speed_down ─ set_speed (macro)
+                        │        ├─ (keepers, inline)                  └─ roll_chunks ─ forceload (macro)
+                        │        └─ cam_follow ─┬─ cam_blend ⇄ cam_scan ⇄ cam_sample ─ cam_get (macro)
+                        │                       └─ cam_move ─ cam_tp (macro)
                         └─ (auto-start, once per world) start
 
 /function infinite_rail:start ─ start ─ begin ─┬─ setup_world / setup_world_26 (one compiles per version)
+                                               ├─ set_speed (macro, apply #MAXSPEED)
                                                ├─ forceload (macro)
                                                ├─ (track-history reset)
                                                ├─ place_flat (first column) ─ summon ir_cart + ir_plug
                                                ├─ build_loop … (pre-build past the rig position)
                                                ├─ summon ir_seat + ir_ride, mount the stack
+                                               ├─ hide_hand (Bedrock no-op on Java)
                                                └─ cam_follow (snap the rig into place)
 /function infinite_rail:stop  ─ stop
 ```

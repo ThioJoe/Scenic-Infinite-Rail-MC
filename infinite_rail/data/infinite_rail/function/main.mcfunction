@@ -3,6 +3,10 @@
 # Track the pace cart's X position for the build-ahead gap calculation.
 execute store result score #cartX ir run data get entity @e[type=minecart,tag=ir_cart,limit=1] Pos[0] 1
 
+# Ocean speed-up: sample the biome once per chunk crossed and raise/lower the
+# minecart max-speed gamerule over long ocean stretches.
+function infinite_rail:ocean_check
+
 # Keepers: enforce who sits where. Only the plug may ride the pace cart (an
 # empty cart scoops up passing mobs and can be entered by right-click), and
 # only players may ride the ride cart. Ejections first; the mounts below

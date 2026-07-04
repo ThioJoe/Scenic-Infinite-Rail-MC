@@ -15,8 +15,16 @@ scoreboard players set #C2 ir 2
 scoreboard players set #C10 ir 10
 scoreboard players set #C100 ir 100
 scoreboard players set #C1000 ir 1000
+# Blocks per chunk -- the divisor for the ocean-biome chunk counter.
+scoreboard players set #C16 ir 16
 
 # Apply all tunable settings.
 function infinite_rail:config
+
+# Derived from the tunables above: slope columns carve one block taller than
+# flat ones for extra headroom as the cart rises/falls. Recomputed here so it
+# tracks #TUNNEL on every /reload.
+scoreboard players operation #TUNNELUP ir = #TUNNEL ir
+scoreboard players add #TUNNELUP ir 1
 
 tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Loaded. A fresh world starts the ride automatically; run ","color":"gray"},{"text":"/function infinite_rail:start","color":"aqua"},{"text":" to (re)start it here.","color":"gray"}]

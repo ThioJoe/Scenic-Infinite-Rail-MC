@@ -92,7 +92,7 @@ want to move around afterward.)
   player to appear, after a 5-second countdown to ensure chunks are loaded. It only auto-starts once per world: stopping with
   `/function infinite_rail:stop` stays stopped, even across rejoins. Set
   `#AUTOSTART` to `0` for classic manual starting.
-- **Terrain smoothing** — an invisible track head runs up to `#AHEAD` (160)
+- **Terrain smoothing** — an invisible track head runs up to `#AHEAD` (224)
   blocks ahead of the cart. For every column it samples the vanilla terrain
   heightmap at 12 points across the next 48 blocks and maintains a rolling
   average, steering the rail toward *average terrain + `#HOVER` blocks*. Approaching mountains raise the
@@ -114,12 +114,20 @@ want to move around afterward.)
   are deliberately ignored by the smoother (each sample can only pull the
   average down 2 blocks per column) and, if a descent is forbidden by
   `#TURNGAP`/`#SAMEGAP`, the rail holds level and bridges straight across.
-- **Tunnels** — every column also carves a 3-wide clearance bore above the
-  rail. When a mountain rises faster than the spacing constants allow the rail
-  to climb, the line naturally continues straight into the rock as a clean
-  tunnel until it breaks out the other side ("punch through instead of going
-  over it"). An invisible vanilla light block is embedded above the rail in
-  every column, so tunnels are gently lit and nothing can spawn on the track.
+- **Tunnels** — every column also carves a clearance bore above the rail, 3
+  wide and `#TUNNEL` (4) blocks tall by default. When a mountain rises faster
+  than the spacing constants allow the rail to climb, the line naturally
+  continues straight into the rock as a clean tunnel until it breaks out the
+  other side ("punch through instead of going over it"). An invisible vanilla
+  light block is embedded above the rail in every column, so tunnels are gently
+  lit and nothing can spawn on the track.
+- **Speeds up over open ocean** — a long sea crossing is the one stretch with
+  nothing to look at, so the ride quietly accelerates over open water. Once the
+  hidden cart has crossed `#OCEANCHUNKS` (6) chunks in a row of ocean biome, the
+  vanilla minecart max-speed gamerule is raised to `#OCEANSPEED` (32); after
+  `#LANDCHUNKS` (4) consecutive non-ocean chunks it eases back to the default.
+  (This needs the **Minecart Improvements** feature enabled in the world; set
+  `#OCEANSPEED` to 0 to turn it off.)
 - **Forced generation ahead, aggressive unloading behind** — the pack
   `forceload`s terrain `#GENAHEAD` blocks ahead of the track head so the scanner
   always has real heightmap data, and removes forceloads a few hundred blocks
@@ -133,7 +141,9 @@ want to move around afterward.)
   Resistance and Saturation, so you can look around freely but can't break the
   track, get hurt, or starve, with true invulnerability from damage gamerules.
   Tile drops, mob griefing and fire tick are disabled so the scenery can't
-  blow up the line.
+  blow up the line. On **Bedrock Edition** the held-item hand is also
+  auto-hidden for an unobstructed view (this is a no-op on Java, where your
+  inventory is kept empty anyway).
 
 ## Tuning
 
@@ -161,23 +171,28 @@ Live scoreboard edits take effect on the very next track column (change
 temporary — a reload or rejoin resets everything to the values in
 `config.mcfunction`, which are therefore your permanent defaults.
 
-| Constant     | Default | Meaning                                                             |
-| ------------ | ------- | ------------------------------------------------------------------- |
-| `#HOVER`     | 2       | Cruising altitude above the average terrain surface                 |
-| `#CAMHEIGHT` | 0       | **Extra** rig height above the rail line, in tenths of a block      |
-| `#CAMBLEND`  | 6       | S-curve blend length (blocks, even) at every slope change           |
-| `#CAMSMOOTH` | 8       | Descent glide: camera closes 1/N of a downward gap per tick         |
-| `#CAMLIFT`   | 24      | Climb float (tenths): height above the rail while climbing          |
-| `#CAMAHEAD`  | 64      | How far the viewer rides ahead of the hidden pace cart              |
-| `#AUTOSTART` | 1       | 1 = ride starts itself in a fresh world; 0 = manual start           |
-| `#DEADBAND`  | 2       | Min. height difference before a climb/descent is triggered          |
-| `#SAMEGAP`   | 25      | Min. flat blocks before sloping again in the **same** direction     |
-| `#TURNGAP`   | 40      | Min. flat blocks before **reversing** direction                     |
-| `#AHEAD`     | 224     | How far ahead of the pace cart the **rails** are built (< ~250)     |
-| `#GENAHEAD`  | 192     | How far ahead of the rail head the **world is generated** (≥ ~64)   |
-| `#MAXTICK`   | 15      | Max track columns built per game tick                               |
-| `#UPCLAMP`   | 75      | How hard approaching mountains may pull the average up              |
-| `#DOWNCLAMP` | 25      | How hard dips pull the average down (small = level bridges)         |
+| Constant       | Default | Meaning                                                             |
+| -------------- | ------- | ------------------------------------------------------------------- |
+| `#HOVER`       | 2       | Cruising altitude above the average terrain surface                 |
+| `#TUNNEL`      | 4       | Tunnel / clearance-bore height carved above the rail (≥ 3)          |
+| `#CAMHEIGHT`   | 0       | **Extra** rig height above the rail line, in tenths of a block      |
+| `#CAMBLEND`    | 6       | S-curve blend length (blocks, even) at every slope change           |
+| `#CAMSMOOTH`   | 6       | Descent glide: camera closes 1/N of a downward gap per tick         |
+| `#CAMLIFT`     | 20      | Climb float (tenths): height above the rail while climbing          |
+| `#CAMAHEAD`    | 64      | How far the viewer rides ahead of the hidden pace cart              |
+| `#AUTOSTART`   | 1       | 1 = ride starts itself in a fresh world; 0 = manual start           |
+| `#MAXSPEED`    | 8       | Default minecart max-speed gamerule, set once at ride start         |
+| `#OCEANSPEED`  | 32      | Minecart max-speed over open ocean (0 = disable the ocean speed-up) |
+| `#OCEANCHUNKS` | 6       | Consecutive ocean chunks before speeding up to `#OCEANSPEED`        |
+| `#LANDCHUNKS`  | 4       | Consecutive non-ocean chunks before reverting to `#MAXSPEED`        |
+| `#DEADBAND`    | 3       | Min. height difference before a climb/descent is triggered          |
+| `#SAMEGAP`     | 25      | Min. flat blocks before sloping again in the **same** direction     |
+| `#TURNGAP`     | 40      | Min. flat blocks before **reversing** direction                     |
+| `#AHEAD`       | 224     | How far ahead of the pace cart the **rails** are built (< ~250)     |
+| `#GENAHEAD`    | 192     | How far ahead of the rail head the **world is generated** (≥ ~64)   |
+| `#MAXTICK`     | 15      | Max track columns built per game tick                               |
+| `#UPCLAMP`     | 150     | How hard approaching mountains may pull the average up              |
+| `#DOWNCLAMP`   | 50      | How hard dips pull the average down (small = level bridges)         |
 
 `#SAMEGAP` and `#TURNGAP` are the two knobs from the design: raise them for
 longer flats and bigger, rarer 45° swoops (with more terrain punched through as
@@ -199,6 +214,18 @@ floatier climbs). The smooth value is the reactive glide used only on the way
 line — 0 rests your cart on the line exactly like a real cart on a rail.
 `#CAMAHEAD` is where the hidden pace cart trails behind you; raise it to push
 that cart further out of sight when looking backward.
+
+`#MAXSPEED` is the vanilla minecart max-speed gamerule
+(`minecartMaxSpeed` / `max_minecart_speed`), applied **once** at ride start — it
+isn't re-enforced, so you're free to `/gamerule` a different speed mid-ride. The
+default is 8 (vanilla). Over long ocean crossings the ride bumps that up to
+`#OCEANSPEED` after `#OCEANCHUNKS` chunks of ocean biome, then eases back down
+after `#LANDCHUNKS` chunks of anything else (set `#OCEANSPEED` to 0 to disable).
+All of this only takes effect when the world has the **Minecart Improvements**
+feature enabled (it's what adds the gamerule); without it the ride simply
+cruises at vanilla speed. `#TUNNEL` sets how tall each column's carved bore is —
+raise it for airier tunnels and cuttings, keep it at least 3 so the tunnel light
+still fits.
 
 ## Vanilla limitations
 
