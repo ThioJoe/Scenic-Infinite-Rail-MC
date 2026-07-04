@@ -44,25 +44,30 @@ scoreboard players set #HOVER ir 2
 # tunnel roofs.
 scoreboard players set #CAMHEIGHT ir 0
 
-# How far AHEAD (in blocks) the camera scouts the recorded track profile.
-# Climbs begin easing in about this many blocks before the slope. Bigger =
-# earlier, softer lift-off into hills; smaller = tighter, later reactions.
-scoreboard players set #CAMWINDOW ir 8
+# Length (in blocks, EVEN numbers) of the S-curve blend at every slope
+# change. The camera transitions between "level" and "moving parallel with
+# the 45-degree track" over exactly this distance -- lifting off shortly
+# before a climb so it is already parallel when the slope arrives, and
+# leveling off so it lands flat exactly at the summit height. Between blends
+# it just rides parallel, however long the slope: the blend does NOT stretch
+# across the whole climb, so it never accumulates into tunnel-roof
+# collisions. Bigger = longer, lazier arcs; smaller = snappier.
+scoreboard players set #CAMBLEND ir 6
 
-# Glide strength: each tick the camera closes 1/N of the remaining gap to its
-# target height, in BOTH directions. Climbs ease toward a target that rises
-# ahead of the hill and flattens at the summit early, so the camera
-# decelerates and lands level on hilltops (a descent played in reverse);
-# descents ease down after the line drops away. Higher = softer and floatier,
-# lower = tighter; 1 = off.
+# Glide strength for DESCENTS (and settling into valleys): each tick the
+# camera closes 1/N of the remaining gap when the track drops away below it.
+# Climbs don't use this -- they follow the constructed S-curve above with no
+# lag. Higher = softer, floatier drops; lower = tighter; 1 = off.
 scoreboard players set #CAMSMOOTH ir 8
 
-# How high (in TENTHS of a block) the camera may ride above the rail line
-# while approaching and climbing hills. This is the crest-smoothing budget:
-# the camera reaches the summit level about this many blocks early and glides
-# level over the top. Bigger = smoother hilltops but floatier climbs (the
-# cart visibly rides above the rails on the way up); smaller = hugs the
-# climb tighter but lands harder on crests. Keep <= ~25 for tunnel headroom.
+# How high (in TENTHS of a block) the camera rides above the rail line while
+# climbing. This is the crest-smoothing budget: the camera reaches the summit
+# level about this many blocks early and glides level over the top. It also
+# sets how early lift-off begins (roughly #CAMBLEND/2 + this + 2 blocks
+# before the slope). Bigger = smoother hilltops but the cart visibly floats
+# higher above the rails on the way up; smaller = hugs the climb tighter but
+# lands harder on crests. Keep it <= ~25 for tunnel headroom; going below
+# half of #CAMBLEND (in blocks) makes summit landings progressively harder.
 scoreboard players set #CAMLIFT ir 24
 
 # How many blocks the viewer rides AHEAD of the hidden pace cart. Bigger

@@ -163,13 +163,13 @@ temporary — a reload or rejoin resets everything to the values in
 | ------------ | ------- | ------------------------------------------------------------------- |
 | `#HOVER`     | 2       | Cruising altitude above the average terrain surface                 |
 | `#CAMHEIGHT` | 0       | **Extra** rig height above the rail line, in tenths of a block      |
-| `#CAMWINDOW` | 8       | How far ahead the camera scouts the profile (climbs ease in early)  |
-| `#CAMSMOOTH` | 4       | Glide: camera closes 1/N of the gap to its target per tick          |
-| `#CAMLIFT`   | 20      | Crest budget (tenths): max float above the rail while climbing      |
+| `#CAMBLEND`  | 6       | S-curve blend length (blocks, even) at every slope change           |
+| `#CAMSMOOTH` | 8       | Descent glide: camera closes 1/N of a downward gap per tick         |
+| `#CAMLIFT`   | 24      | Climb float (tenths): height above the rail while climbing          |
 | `#CAMAHEAD`  | 64      | How far the viewer rides ahead of the hidden pace cart              |
 | `#AUTOSTART` | 1       | 1 = ride starts itself in a fresh world; 0 = manual start           |
 | `#DEADBAND`  | 2       | Min. height difference before a climb/descent is triggered          |
-| `#SAMEGAP`   | 5       | Min. flat blocks before sloping again in the **same** direction     |
+| `#SAMEGAP`   | 25      | Min. flat blocks before sloping again in the **same** direction     |
 | `#TURNGAP`   | 40      | Min. flat blocks before **reversing** direction                     |
 | `#AHEAD`     | 224     | How far ahead of the pace cart the **rails** are built (< ~250)     |
 | `#GENAHEAD`  | 192     | How far ahead of the rail head the **world is generated** (≥ ~64)   |
@@ -185,17 +185,18 @@ the ride never micro-stutters regardless of how they're set — and since the
 camera glide erases the flat→slope corners entirely, the defaults now lean
 toward more frequent, smaller changes than they used to.
 
-`#CAMWINDOW`, `#CAMSMOOTH` and `#CAMLIFT` are the feel of the ride: the
-window is how far ahead the camera scouts the recorded track profile (climbs
-begin easing in that early), the smooth value is the exponential glide toward
-the target in both directions (higher = softer and floatier), and the lift is
-the crest-smoothing budget — how high the camera may ride above the rail
-while approaching and climbing a hill so it can decelerate and land level on
-the summit (bigger = smoother hilltops, floatier climbs; smaller = tighter
-climbs, harder crest landings). `#CAMHEIGHT` is extra rig height above the
-rail line — 0 rests your cart on the line exactly like a real cart on a
-rail. `#CAMAHEAD` is where the hidden pace cart trails behind you; raise it
-to push that cart further out of sight when looking backward.
+`#CAMBLEND`, `#CAMLIFT` and `#CAMSMOOTH` are the feel of the ride. The blend
+is the S-curve length: at every slope change the camera transitions between
+level and parallel-with-the-track over exactly that many blocks — it does
+*not* stretch across whole slopes; between blends the camera just rides
+parallel. The lift is how high the camera floats above the rails while
+climbing, which doubles as the crest budget: it reaches the summit level that
+many blocks early and glides level over the top (bigger = smoother hilltops,
+floatier climbs). The smooth value is the reactive glide used only on the way
+*down* (drops into valleys). `#CAMHEIGHT` is extra rig height above the rail
+line — 0 rests your cart on the line exactly like a real cart on a rail.
+`#CAMAHEAD` is where the hidden pace cart trails behind you; raise it to push
+that cart further out of sight when looking backward.
 
 ## Vanilla limitations
 

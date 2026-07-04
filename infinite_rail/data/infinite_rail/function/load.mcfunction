@@ -10,7 +10,9 @@ scoreboard players set #C12 ir 12
 
 # Internal constants for the camera math: fixed-point multipliers
 # (#CAMHEIGHT/#CAMLIFT are configured in tenths of a block; heights are
-# tracked in milliblocks).
+# tracked in milliblocks) and small divisors for the scan geometry.
+scoreboard players set #C2 ir 2
+scoreboard players set #C10 ir 10
 scoreboard players set #C100 ir 100
 scoreboard players set #C1000 ir 1000
 

@@ -84,12 +84,9 @@ effect give @s minecraft:saturation infinite 0 true
 effect clear @s minecraft:invisibility
 
 # --- Snap the rig to its cruising position and hand off to the ticker ---
-scoreboard players operation #sy ir = #railY ir
-scoreboard players operation #sy ir *= #C1000 ir
+# The S-curve (c1) is stateless; only the descent chaser (#s2) needs seeding.
+scoreboard players operation #s2 ir = #railY ir
+scoreboard players operation #s2 ir *= #C1000 ir
 function infinite_rail:cam_follow
-# The first pass computed the true target; snap the glide fully onto it so
-# the ride starts settled instead of easing into place.
-scoreboard players operation #sy ir = #ty ir
-function infinite_rail:cam_move
 scoreboard players set #started ir 1
 tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Enjoy the ride.","color":"gray"}]

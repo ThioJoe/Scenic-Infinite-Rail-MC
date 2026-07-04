@@ -1,26 +1,28 @@
 # Per-tick camera driver (see CONTEXT.md 7g). The rider sits -- permanently,
-# mounted exactly once per ride -- in a real minecart (ir_ride) that is a
-# passenger of the invisible camera seat (ir_seat), so cart, rider and camera
-# move as one rigid unit and there are never any mount transitions. This
-# function flies that rig along a pre-smoothed path #CAMAHEAD blocks ahead of
-# the hidden pace cart (ir_cart), which rides the physical rails behind the
-# viewer and sets the pace:
+# mounted exactly once per ride -- in a real minecart (ir_ride) glued to the
+# invisible camera seat (ir_seat), and this function flies that rig along a
+# CONSTRUCTED S-curve #CAMAHEAD blocks ahead of the hidden pace cart, built
+# from the track's recorded profile:
 #
-#   ty = min( max of railY over [rigX .. rigX+W],  railY + #CAMLIFT )
-#   sy += (ty - sy) / #CAMSMOOTH        (the same ease in BOTH directions)
-#   sy = max(sy, railY)                 (never below the rail line)
+#   lifted(x) = min( max of railY over [x .. x+#CAMLIFT+2],  railY(x)+#CAMLIFT )
+#   c1(x)     = average of lifted() over [x-#CAMBLEND/2 .. x+#CAMBLEND/2]
+#   c2       += (railY - c2) / #CAMSMOOTH          (reactive descent chaser)
+#   height    = max(c1, c2, railY)
 #
-# The forward-max target is what makes climbs feel like descents played in
-# reverse: a descent is an exponential ease toward a line that drops away
-# ahead; a climb becomes an exponential ease toward a target that RISES ahead
-# of the corner (the max sees the hill #CAMWINDOW blocks early). The camera
-# lifts off before the slope, floats at most #CAMLIFT above the rail while
-# climbing, and -- because the target reaches the summit level #CAMLIFT
-# blocks before the rail does -- decelerates and lands level on the hilltop
-# instead of being pinned to the full 45-degree line and kinking over the
-# crest. On flats the target equals the line exactly (parked); on descents
-# the max of what's ahead IS the current line, so the reactive drop-glide is
-# unchanged.
+# Why this shape: lifted() is the rail line raised by #CAMLIFT wherever the
+# track climbs (the small forward max makes it start rising just before a
+# climb corner and flatten at the summit level #CAMLIFT early). Averaging it
+# over a +/-#CAMBLEND/2 window reproduces straight stretches EXACTLY -- level
+# on flats, truly parallel at 45 degrees mid-climb, no lag, no exponential
+# tail -- while every corner becomes a parabolic blend exactly #CAMBLEND
+# blocks long. So the camera lifts off shortly before a climb, is moving
+# parallel with the track as the slope arrives, rides it precisely, then
+# decelerates and lands LEVEL exactly at the summit height -- never pinned to
+# the 45 and kinked over the crest, and never sunk below the rails. Descents
+# are left to c2, the same reactive exponential glide as always (on the way
+# down the forward max IS the current line, so c1 hugs it and c2 wins the
+# max). The blend length does NOT scale with slope size: between blends the
+# camera simply rides parallel, however long the climb.
 #
 # All heights are in milliblocks. Column heights come from the history list
 # appended by advance (storage infinite_rail:track y, index = X - #trackBase),
@@ -49,20 +51,39 @@ scoreboard players operation #cmaxi ir -= #trackBase ir
 execute if score #ci ir matches ..-1 run scoreboard players set #ci ir 0
 execute if score #ci ir > #cmaxi ir run scoreboard players operation #ci ir = #cmaxi ir
 
-# --- Scan the profile from the rig to +#CAMWINDOW ahead (step 2): fills
-# #fmx (the forward maximum) and #linem (the rail line right at the rig) ---
-scoreboard players set #fmx ir -2000000000
-scoreboard players set #k ir 0
-function infinite_rail:cam_scan
+# --- Precompute: #lift in milliblocks; #wmax = how far each lifted() sample
+# scans ahead (further is pointless -- the +#CAMLIFT cap clips it anyway) ---
+scoreboard players operation #lift ir = #CAMLIFT ir
+scoreboard players operation #lift ir *= #C100 ir
+scoreboard players operation #wmax ir = #CAMLIFT ir
+scoreboard players operation #wmax ir /= #C10 ir
+scoreboard players add #wmax ir 2
 
-# --- Target height: the forward max, capped #CAMLIFT above the rail line.
-# The k=0 sample is included in the max, so #fmx (and thus #ty) can never be
-# below the line. ---
-scoreboard players operation #ty ir = #CAMLIFT ir
-scoreboard players operation #ty ir *= #C100 ir
-scoreboard players operation #ty ir += #linem ir
-execute if score #fmx ir < #ty ir run scoreboard players operation #ty ir = #fmx ir
+# --- The rail line right at the rig (floor + descent-chaser target) ---
+scoreboard players operation #si ir = #ci ir
+function infinite_rail:cam_sample
+scoreboard players operation #linem ir = #sm ir
 
-# --- Glide #sy toward #ty, then move the rig there ---
-function infinite_rail:cam_glide
+# --- c1: the S-curve -- average lifted() over the +/-#CAMBLEND/2 window ---
+scoreboard players set #tsum ir 0
+scoreboard players set #tn ir 0
+scoreboard players operation #half ir = #CAMBLEND ir
+scoreboard players operation #half ir /= #C2 ir
+scoreboard players set #j ir 0
+scoreboard players operation #j ir -= #half ir
+function infinite_rail:cam_blend
+scoreboard players operation #c1 ir = #tsum ir
+scoreboard players operation #c1 ir /= #tn ir
+
+# --- c2: the reactive descent chaser (eases toward the line; floats above it
+# while the line drops away, converges and holds on flats) ---
+scoreboard players operation #dy ir = #linem ir
+scoreboard players operation #dy ir -= #s2 ir
+scoreboard players operation #dy ir /= #CAMSMOOTH ir
+scoreboard players operation #s2 ir += #dy ir
+
+# --- Final height: the higher of the two curves, never below the rail line ---
+scoreboard players operation #sy ir = #c1 ir
+execute if score #s2 ir > #sy ir run scoreboard players operation #sy ir = #s2 ir
+execute if score #sy ir < #linem ir run scoreboard players operation #sy ir = #linem ir
 function infinite_rail:cam_move
