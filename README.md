@@ -11,8 +11,20 @@ packs.
 
 ## Requirements
 
-- Minecraft: Java Edition **1.21 / 1.21.1** (`pack_format` 48)
+- Minecraft: Java Edition **1.21 / 1.21.1** through **26.2**. The manifest
+  declares the full span, so the in-game GUI accepts it on all of these without
+  the "made for a different version" warning.
 - Cheats enabled (you need to run one command to start the ride)
+
+> **Note on version numbers:** these are all *data pack* format numbers, which
+> are a **separate series** from *resource pack* format numbers — the same
+> release has different numbers for each (for 26.1, data format 101 vs resource
+> format 84). Since this is a data pack, only the data numbers apply: 1.21.1 =
+> 48, 26.2 = **107**. `pack.mcmeta` declares `pack_format: 48` for old clients
+> (1.21/1.21.1) plus `min_format: 82` / `max_format: 107` for the current scheme
+> (introduced in 25w31a), which covers everything up to 26.2. To extend support
+> to a newer release, just raise `max_format` to that version's data-pack
+> number.
 
 ## Installation
 
@@ -86,8 +98,24 @@ want to move around afterward.)
 
 ## Tuning
 
-Constants live in `data/infinite_rail/function/load.mcfunction` and can also be
-changed live in-game, e.g. `/scoreboard players set #HOVER ir 8`:
+Every knob lives in one file: **`data/infinite_rail/function/config.mcfunction`**.
+Edit a value there and apply it in either of two ways:
+
+- **Reload or rejoin the world** — the file runs automatically, or
+- Run **`/function infinite_rail:config`** in chat to apply instantly, even
+  mid-ride.
+
+To experiment with a single value *without* editing the file, set its
+scoreboard directly in chat:
+
+```
+/scoreboard players set #HOVER ir 8
+```
+
+Live scoreboard edits take effect on the very next track column (change
+`#HOVER` mid-ride and the rail smoothly migrates to the new altitude). They're
+temporary — a reload or rejoin resets everything to the values in
+`config.mcfunction`, which are therefore your permanent defaults.
 
 | Constant     | Default | Meaning                                                             |
 | ------------ | ------- | ------------------------------------------------------------------- |
