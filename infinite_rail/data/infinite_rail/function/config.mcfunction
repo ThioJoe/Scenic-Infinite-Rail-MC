@@ -32,17 +32,17 @@ scoreboard players set #HOVER ir 3
 
 # Minimum height difference (in blocks) before a new climb/descent is started.
 # Also acts as hysteresis, so small terrain noise never nudges the rail.
-scoreboard players set #DEADBAND ir 2
+scoreboard players set #DEADBAND ir 4
 
 # Minimum flat blocks between two changes in the SAME direction.
 # Higher = fewer, longer swoops. Terrain that rises faster than this allows
 # gets tunneled through instead of climbed.
-scoreboard players set #SAMEGAP ir 75
+scoreboard players set #SAMEGAP ir 50
 
 # Minimum flat blocks required before the rail may REVERSE direction.
 # Higher = no quick up-then-down bobbing; small bumps get tunneled through and
 # small dips get bridged across.
-scoreboard players set #TURNGAP ir 150
+scoreboard players set #TURNGAP ir 50
 
 
 # --- Terrain-smoothing sensitivity -----------------------------------------
@@ -51,11 +51,11 @@ scoreboard players set #TURNGAP ir 150
 
 # Larger = approaching mountains raise the target sooner (earlier, gentler
 # "one swoop" climbs).
-scoreboard players set #UPCLAMP ir 150
+scoreboard players set #UPCLAMP ir 20
 
 # Smaller = ravines, holes and canyons are ignored and bridged dead level
 # instead of dipped into.
-scoreboard players set #DOWNCLAMP ir 150
+scoreboard players set #DOWNCLAMP ir 20
 
 
 # --- Performance / world generation ----------------------------------------
