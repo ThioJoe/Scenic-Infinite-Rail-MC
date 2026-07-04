@@ -25,6 +25,7 @@ function infinite_rail:setup_world_26
 scoreboard players set #fast ir 0
 execute store result storage infinite_rail:speed v int 1 run scoreboard players get #MAXSPEED ir
 function infinite_rail:set_speed with storage infinite_rail:speed
+execute if score #DEBUGMODE ir matches 1 run tellraw @a [{"text":"[IR debug] ","color":"dark_aqua"},{"text":"default minecart speed set to ","color":"gray"},{"score":{"name":"#MAXSPEED","objective":"ir"},"color":"white"},{"text":" (needs Minecart Improvements enabled to take effect)","color":"dark_gray"}]
 
 # --- Anchor the line at the player's position ---
 summon minecraft:marker ~0.5 0.0 ~0.5 {Tags:["ir_head"]}
@@ -66,8 +67,11 @@ ride @e[type=item_display,tag=ir_plug,limit=1] mount @e[type=minecart,tag=ir_car
 
 # --- Pre-build past the rig position so the viewer starts on ready track ---
 execute store result score #cartX ir run data get entity @e[type=minecart,tag=ir_cart,limit=1] Pos[0] 1
-# Seed the ocean speed-up state: current chunk, empty ocean/land run counters.
+# Seed the ocean speed-up state: the rider starts #CAMAHEAD blocks ahead of the
+# pace cart, so seed #lastChunk from that chunk (matches where ocean_check
+# samples). Empty ocean/land run counters.
 scoreboard players operation #lastChunk ir = #cartX ir
+scoreboard players operation #lastChunk ir += #CAMAHEAD ir
 scoreboard players operation #lastChunk ir /= #C16 ir
 scoreboard players set #oceanRun ir 0
 scoreboard players set #landRun ir 0

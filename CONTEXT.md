@@ -117,6 +117,7 @@ fake players. Grouped by role:
 | `#OCEANSPEED`| Minecart max-speed used while crossing open ocean. `0` disables the ocean speed-up entirely. |
 | `#OCEANCHUNKS`| Consecutive ocean-biome chunks the ride must cross before speeding up to `#OCEANSPEED`. |
 | `#LANDCHUNKS`| Consecutive non-ocean chunks after a speed-up before reverting to `#MAXSPEED`. |
+| `#DEBUGMODE` | `1` = print chat messages about the speed system (default applied, each ocean/land chunk with counters + the cart's real speed, every speed change); `0` = silent. |
 | `#CAMHEIGHT` | **Extra** rig height above the rail line, in **tenths of a block** (0 = the ride cart rests on the smoothed line like a cart on a rail). |
 | `#CAMBLEND`  | S-curve blend length in blocks (even): the camera transitions level⇄parallel over exactly this distance at every slope change. |
 | `#CAMSMOOTH` | Descent glide divisor: the camera closes `1/#CAMSMOOTH` of a **downward** gap per tick (climbs use the constructed S-curve instead; 1 = off). |
@@ -169,12 +170,14 @@ fake players. Grouped by role:
 | `#flat`     | Flat columns counted since the last event ended (compared against `#need`). |
 | `#lastDir`  | Direction of the last event (`1`/`-1`), used to pick `#SAMEGAP` vs `#TURNGAP`. |
 | `#mx`       | The cart's `Motion[0]` × 100 (its eastward speed, for the stall check). |
-| `#chunkNow` | The pace cart's current chunk index (`#cartX / 16`), recomputed each tick by `ocean_check`. |
+| `#rigX`     | The rider/seat's X (`ir_seat` Pos[0], integer), read each tick by `ocean_check` for the chunk math. |
+| `#chunkNow` | The rider's current chunk index (`#rigX / 16`), recomputed each tick by `ocean_check`. |
 | `#lastChunk`| The chunk index the ocean check last processed; the biome is sampled only when `#chunkNow` differs. |
 | `#oceanRun` | Consecutive ocean-biome chunks crossed so far (reset by any non-ocean chunk). |
 | `#landRun`  | Consecutive non-ocean chunks crossed since the last ocean chunk (reset by any ocean chunk). |
-| `#isOcean`  | `1`/`0`: was the biome under the cart this chunk an ocean? (temp, per chunk). |
+| `#isOcean`  | `1`/`0`: was the biome under the rider this chunk an ocean? (temp, per chunk). |
 | `#fast`     | `1` while the ride is in ocean cruising speed (`#OCEANSPEED`), `0` at the default. |
+| `#dbgmx`    | Debug only: the pace cart's `Motion[0]` × 100, printed in the per-chunk debug line so you can see the cart's real speed. |
 | `#autodone` | `1` once a ride has ever been started in this world; blocks the auto-starter forever after (persists in the world save). |
 | `#trackBase`| World X of index 0 of the track-history list (storage `infinite_rail:track y`). |
 | `#sy`       | The rig's smoothed rail-line height this tick, in **milliblocks**: `max(#c1, #s2, #linem)`. |
@@ -341,8 +344,8 @@ Sets up and launches a ride (see the flow in §5). Notable steps:
   `#trackBase = #headX` and records the first column's rail Y (index 0).
 - **Pace cart:** places the first column (`place_flat`), summons `ir_cart`
   (invuln, small eastward motion) and `ir_plug`, and plugs the cart. Seeds the
-  ocean-check state: `#lastChunk` = the cart's current chunk, `#oceanRun` and
-  `#landRun` = 0.
+  ocean-check state: `#lastChunk` = the rider's starting chunk (pace cart chunk
+  + `#CAMAHEAD`), `#oceanRun` and `#landRun` = 0.
 - **Pre-build:** sets `#budget = #CAMAHEAD + 32` and runs `build_loop` once
   synchronously — the head ends up past the rig's starting position, so the
   viewer starts on ready track.
@@ -404,7 +407,7 @@ while `#AUTOSTART == 1`, `#started == 0` and `#autodone ≠ 1`, it waits for a p
 Per-tick driver while riding:
 1. Sample the pace cart's X into `#cartX`.
 1a. **Ocean speed-up:** run `ocean_check` (samples the biome once per chunk the
-   cart enters and raises/lowers the minecart max-speed gamerule).
+   rider enters and raises/lowers the minecart max-speed gamerule).
 2. **Purity keepers:** `execute on passengers` ejects anything riding the pace
    cart that isn't the plug (scooped-up mobs), and anything riding the ride
    cart that isn't a player.
@@ -421,16 +424,19 @@ Per-tick driver while riding:
 7. Set `#budget = #MAXTICK` and run `build_loop` to extend the track.
 
 **`function/ocean_check.mcfunction`**
-The ocean speed-up driver, called each tick from `main` (§7h). Computes the pace
-cart's chunk `#chunkNow = #cartX / #C16`; if it equals `#lastChunk` it
-`return`s immediately (act only when the cart crosses a chunk boundary).
-Otherwise it records the new chunk, samples the biome under the cart
-(`execute at ir_cart if biome ~ ~ ~ #minecraft:is_ocean` → `#isOcean`), and
-updates the run counters: an ocean chunk grows `#oceanRun` (and zeroes
-`#landRun`), a non-ocean chunk grows `#landRun` (and zeroes `#oceanRun`).
-Crossing `#OCEANCHUNKS` ocean chunks while not fast (and `#OCEANSPEED > 0`)
-calls `speed_up`; crossing `#LANDCHUNKS` non-ocean chunks while fast calls
-`speed_down`.
+The ocean speed-up driver, called each tick from `main` (§7h). Reads the rider's
+X from the seat (`#rigX = ir_seat` Pos[0]) and computes its chunk
+`#chunkNow = #rigX / #C16`; if it equals `#lastChunk` it `return`s immediately
+(act only when the rider crosses a chunk boundary). Otherwise it records the new
+chunk, samples the biome **under the rider**
+(`execute at ir_seat if biome ~ ~ ~ #minecraft:is_ocean` → `#isOcean`) — not the
+pace cart, which trails `#CAMAHEAD` blocks behind — and updates the run counters:
+an ocean chunk grows `#oceanRun` (and zeroes `#landRun`), a non-ocean chunk grows
+`#landRun` (and zeroes `#oceanRun`). Crossing `#OCEANCHUNKS` ocean chunks while
+not fast (and `#OCEANSPEED > 0`) calls `speed_up`; crossing `#LANDCHUNKS`
+non-ocean chunks while fast calls `speed_down`. When `#DEBUGMODE == 1` it prints
+each chunk's biome, the running counter, and the pace cart's real speed
+(`#dbgmx`).
 
 **`function/speed_up.mcfunction`** / **`function/speed_down.mcfunction`**
 The two transition helpers: `speed_up` sets `#fast = 1` and pushes `#OCEANSPEED`
@@ -750,11 +756,13 @@ the smoothed climbs, which reads naturally with the eased motion.)
 
 ### 7h. The ocean speed-up
 A long ocean crossing is the one stretch with nothing to look at, so the ride
-quietly picks up speed over open water. Each tick `ocean_check` maps the pace
-cart's X to a chunk index (`#cartX / 16`) and acts only when that index
-changes — i.e. once per chunk the cart enters. On each new chunk it samples the
-biome directly under the cart with `execute at ir_cart if biome ~ ~ ~
-#minecraft:is_ocean` (the vanilla tag that covers every ocean-named biome:
+quietly picks up speed over open water. Each tick `ocean_check` maps the
+**rider's** X (the seat, `#CAMAHEAD` ahead of the pace cart) to a chunk index
+(`#rigX / 16`) and acts only when that index changes — i.e. once per chunk the
+rider enters. Sampling at the rider, not the far-behind pace cart, is what makes
+the speed reflect the water the viewer is actually over. On each new chunk it
+samples the biome directly under the rider with `execute at ir_seat if biome
+~ ~ ~ #minecraft:is_ocean` (the vanilla tag that covers every ocean-named biome:
 ocean, plus the deep/warm/lukewarm/cold/frozen variants). Two run counters
 follow the crossing: `#oceanRun` counts consecutive ocean chunks (any land
 chunk zeroes it), `#landRun` counts consecutive non-ocean chunks (any ocean
@@ -787,7 +795,7 @@ Current defaults in `config.mcfunction`: `#HOVER 2`, `#TUNNEL 4`,
 `#CAMHEIGHT 0`, `#CAMBLEND 6`, `#CAMSMOOTH 6`, `#CAMLIFT 20`, `#CAMAHEAD 64`,
 `#AUTOSTART 1`, `#MAXSPEED 8`, `#OCEANSPEED 32`, `#OCEANCHUNKS 6`,
 `#LANDCHUNKS 4`, `#DEADBAND 3`, `#SAMEGAP 25`, `#TURNGAP 40`, `#UPCLAMP 150`,
-`#DOWNCLAMP 50`, `#AHEAD 224`, `#GENAHEAD 192`, `#MAXTICK 15`. (These are tuned to taste and change often;
+`#DOWNCLAMP 50`, `#AHEAD 224`, `#GENAHEAD 192`, `#MAXTICK 15`, `#DEBUGMODE 0`. (These are tuned to taste and change often;
 the algorithm works across a wide range. The gaps and deadband are far lower
 than the pre-camera 50/50/4 because the profile-driven camera erases slope
 corners entirely, so frequent small elevation changes are now visually free.
@@ -841,8 +849,12 @@ corners entirely, so frequent small elevation changes are now visually free.
 - **Minecart speed needs the experiment.** `#MAXSPEED` and the ocean speed-up
   (§7h) drive the minecart max-speed gamerule, which only exists when the world
   has the **Minecart Improvements** feature enabled (a data-driven feature/
-  experiment toggle). Without it the speed writes are harmless no-ops and the
-  ride runs at vanilla pace. The rule is `minecartMaxSpeed` on 1.21-era versions
+  experiment toggle, chosen at world creation). Without it the speed writes are
+  harmless no-ops and the ride runs at vanilla pace — this is the usual reason a
+  changed `#MAXSPEED` "does nothing" or the ocean never speeds up. Set
+  `#DEBUGMODE 1` to watch: it prints the speed being set and the pace cart's real
+  `Motion[0]×100` each chunk; if that number never climbs after a speed change,
+  the feature isn't enabled. The rule is `minecartMaxSpeed` on 1.21-era versions
   and `max_minecart_speed` on 26.x (renamed in 25w44a); `set_speed` writes both.
 - **Hide-hand is Bedrock-only.** `hide_hand` uses `/hud`, which exists only on
   Bedrock Edition; on Java it's a dropped-file no-op. It's included for a

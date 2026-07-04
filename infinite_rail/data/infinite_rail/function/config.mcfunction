@@ -178,3 +178,18 @@ scoreboard players set #GENAHEAD ir 192
 # Maximum track columns built per game tick. Higher = better catch-up if the
 # server hitches, at the cost of more work per tick.
 scoreboard players set #MAXTICK ir 15
+
+
+# --- Debugging --------------------------------------------------------------
+
+# 1 = print chat messages about the minecart-speed system: the default speed
+# applied at start, each ocean-biome / land chunk crossed (with the running
+# counters), and every speed change. Use this to see whether ocean detection is
+# firing. 0 = silent (normal play).
+#
+# NOTE: the speed only actually changes the ride if the world has the vanilla
+# "Minecart Improvements" feature enabled (that's what adds the
+# minecartMaxSpeed / max_minecart_speed gamerule). If debug shows the speed
+# being set but the cart never gets faster, recreate the world with that
+# experiment/feature turned on.
+scoreboard players set #DEBUGMODE ir 0

@@ -122,12 +122,13 @@ want to move around afterward.)
   light block is embedded above the rail in every column, so tunnels are gently
   lit and nothing can spawn on the track.
 - **Speeds up over open ocean** — a long sea crossing is the one stretch with
-  nothing to look at, so the ride quietly accelerates over open water. Once the
-  hidden cart has crossed `#OCEANCHUNKS` (6) chunks in a row of ocean biome, the
-  vanilla minecart max-speed gamerule is raised to `#OCEANSPEED` (32); after
-  `#LANDCHUNKS` (4) consecutive non-ocean chunks it eases back to the default.
-  (This needs the **Minecart Improvements** feature enabled in the world; set
-  `#OCEANSPEED` to 0 to turn it off.)
+  nothing to look at, so the ride quietly accelerates over open water. Once
+  you've crossed `#OCEANCHUNKS` (6) chunks in a row of ocean biome (sampled at
+  your own position), the vanilla minecart max-speed gamerule is raised to
+  `#OCEANSPEED` (32); after `#LANDCHUNKS` (4) consecutive non-ocean chunks it
+  eases back to the default. (This needs the **Minecart Improvements** feature
+  enabled in the world — see the note under Tuning; set `#OCEANSPEED` to 0 to
+  turn it off.)
 - **Forced generation ahead, aggressive unloading behind** — the pack
   `forceload`s terrain `#GENAHEAD` blocks ahead of the track head so the scanner
   always has real heightmap data, and removes forceloads a few hundred blocks
@@ -193,6 +194,7 @@ temporary — a reload or rejoin resets everything to the values in
 | `#MAXTICK`     | 15      | Max track columns built per game tick                               |
 | `#UPCLAMP`     | 150     | How hard approaching mountains may pull the average up              |
 | `#DOWNCLAMP`   | 50      | How hard dips pull the average down (small = level bridges)         |
+| `#DEBUGMODE`   | 0       | 1 = print chat messages about the minecart-speed / ocean system     |
 
 `#SAMEGAP` and `#TURNGAP` are the two knobs from the design: raise them for
 longer flats and bigger, rarer 45° swoops (with more terrain punched through as
@@ -222,10 +224,16 @@ default is 8 (vanilla). Over long ocean crossings the ride bumps that up to
 `#OCEANSPEED` after `#OCEANCHUNKS` chunks of ocean biome, then eases back down
 after `#LANDCHUNKS` chunks of anything else (set `#OCEANSPEED` to 0 to disable).
 All of this only takes effect when the world has the **Minecart Improvements**
-feature enabled (it's what adds the gamerule); without it the ride simply
-cruises at vanilla speed. `#TUNNEL` sets how tall each column's carved bore is —
-raise it for airier tunnels and cuttings, keep it at least 3 so the tunnel light
-still fits.
+feature enabled (it's what adds the gamerule) — turn it on in the
+*Experiments* / feature-toggle list when creating the world. Without it the
+gamerule doesn't exist, so `#MAXSPEED` and the ocean speed-up silently do
+nothing and the ride cruises at the vanilla 8 m/s. If speed changes aren't
+working, set **`#DEBUGMODE` to 1**: the ride will print the speed it's setting,
+every ocean/land chunk it crosses (with the running counters), and the pace
+cart's *actual* speed each chunk — if that number never rises after a speed
+change, the feature isn't enabled. `#TUNNEL` sets how tall each column's carved
+bore is — raise it for airier tunnels and cuttings, keep it at least 3 so the
+tunnel light still fits.
 
 ## Vanilla limitations
 
