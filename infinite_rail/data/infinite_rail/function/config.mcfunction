@@ -3,15 +3,17 @@
 #
 #  This is the only file you need to edit to change the ride's defaults.
 #
-#  To apply changes you have two options:
-#    * Reload or rejoin the world  (this file runs automatically), OR
-#    * Run  /function infinite_rail:config  in chat to apply instantly,
-#      even mid-ride.
+#  To apply your edits, run  /reload  in chat (or quit and rejoin the world).
+#  Minecraft only re-reads .mcfunction files from disk on /reload; it then runs
+#  this file automatically, updating a ride already in progress. IMPORTANT:
+#  running  /function infinite_rail:config  by itself will NOT pick up file
+#  edits -- it just re-runs the copy already loaded in memory. Its only real use
+#  is to reset live tweaks (below) back to the values in this file.
 #
 #  To experiment with ONE value without editing this file, set its score
 #  directly in chat, e.g.:   /scoreboard players set #HOVER ir 8
 #  Live scoreboard edits take effect on the very next track column, and are
-#  reset back to the values below whenever the world reloads.
+#  reset back to the values below on the next /reload or rejoin.
 # =============================================================================
 
 

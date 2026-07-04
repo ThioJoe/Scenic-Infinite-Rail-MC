@@ -106,11 +106,16 @@ want to move around afterward.)
 ## Tuning
 
 Every knob lives in one file: **`data/infinite_rail/function/config.mcfunction`**.
-Edit a value there and apply it in either of two ways:
+Edit a value there, then run **`/reload`** in chat (or quit and rejoin the
+world) to apply it. Minecraft only re-reads `.mcfunction` files from disk on
+`/reload`; it then runs `config` automatically, updating a ride already in
+progress without stopping it.
 
-- **Reload or rejoin the world** — the file runs automatically, or
-- Run **`/function infinite_rail:config`** in chat to apply instantly, even
-  mid-ride.
+> ⚠️ `/function infinite_rail:config` on its own does **not** pick up file
+> edits — the game runs the copy already loaded in memory, so you'll just re-run
+> the old values. Always use `/reload` after editing the file. (Running `config`
+> directly is only useful to reset the live tweaks below back to the file's
+> values.)
 
 To experiment with a single value *without* editing the file, set its
 scoreboard directly in chat:
