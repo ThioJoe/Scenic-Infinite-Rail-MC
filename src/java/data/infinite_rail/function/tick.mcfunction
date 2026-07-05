@@ -1,4 +1,6 @@
 # Runs every game tick via #minecraft:tick.
+# The Settings book's click dispatcher (the /trigger relay -- see menu_tick).
+function infinite_rail:menu_tick
 execute if score #started ir matches 1 run function infinite_rail:main
 
 # Auto-start: in a fresh world, begin the ride for the first player to appear

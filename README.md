@@ -324,9 +324,11 @@ book named **Settings** in the last hotbar slot; select it and use it
 
 - **Java** opens it as a written book with clickable **[On] / [Off]** links
   for each mode, plus a **[Current modes]** line that prints the live states
-  to chat. Book clicks run the commands *as you*, with your permission
-  level — so they need cheats (operator) to work, exactly like typing the
-  mode commands yourself.
+  to chat. The links go through the vanilla `/trigger` command (the pack
+  relays it to the real mode functions each tick), which every player may
+  run — so the menu needs no cheats and no operator, and never shows the
+  1.21.6+ *"command requires elevated permissions"* confirmation screen
+  that direct `/function` links would pop on every click.
 - **Bedrock** opens a native pop-up form with a toggle switch per mode
   (pre-set to the current states) and an **Apply** button. The script drives
   it, so no permissions are involved.

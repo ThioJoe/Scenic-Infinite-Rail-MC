@@ -41,7 +41,9 @@ Key design facts to keep in mind while reading:
 - **All shared state lives in one scoreboard objective, `ir`.** Values are held
   on fake players whose names start with `#` (a convention for "not a real
   player / internal variable"). There are no data structures beyond that and a
-  little command storage.
+  little command storage. (One Java-only exception: `ir_menu`, a
+  `trigger`-criteria objective that exists purely as the Settings book's
+  permission-free click channel — §6.9.)
 
 ---
 
@@ -377,7 +379,8 @@ Vanilla tag `#minecraft:tick`; lists `infinite_rail:tick`. Makes the game run
 
 **`function/load.mcfunction`**
 Runs on load/reload. `scoreboard objectives add ir dummy` (idempotent) creates
-the objective; sets the internal constants `#C12 = 12`, `#C16 = 16`,
+the objective (plus `ir_menu`, the Settings book's `trigger`-criteria click
+channel — §6.9); sets the internal constants `#C12 = 12`, `#C16 = 16`,
 `#C100 = 100`, `#C1000 = 1000`; calls `infinite_rail:config` to apply all
 tunables; seeds the mode toggles via the shared `modes_init` (add-0, so an
 enabled mode survives the reload — §6.9); derives `#TUNNELUP = #TUNNEL + 1`;
@@ -510,7 +513,9 @@ clears all forceloads.
 track (blocks + `ir_disp` displays) is intentionally left in the world.**
 
 **`function/tick.mcfunction`**
-The heartbeat. If `#started == 1`, run `main`. Below that, the **auto-starter**:
+The heartbeat. Runs `menu_tick` (the Settings book's `/trigger` dispatcher,
+§6.9) every tick, ride or no ride, so a click can never sit stale. Then, if
+`#started == 1`, run `main`. Below that, the **auto-starter**:
 while `#AUTOSTART == 1`, `#started == 0` and `#autodone ≠ 1`, it waits for a player to exist, then runs a 100-tick countdown before running start, at which point `begin` sets `#autodone = 1` and it never fires again (the score persists in the world save).
 
 **`function/main.mcfunction`**
@@ -883,16 +888,29 @@ Status printout: one `tellraw` line with all four toggle scores.
 Pins a written book titled **"Settings"** into the rider's last hotbar slot
 (`item replace … hotbar.8`). Its one page is a 1.21.5+-format SNBT text
 component: `[On]`/`[Off]` links per mode plus a `[Current modes]` line, each
-a `click_event:{action:"run_command",command:"function infinite_rail:…"}`
+a `click_event:{action:"run_command",command:"trigger ir_menu set <n>"}`
 (no leading slash; the page root is an empty `{text:""}` so its style can't
 inherit into the children). `main` calls it for every adventure player
 **right after the per-tick inventory clear** — the clear wipes the book,
 `give_menu` re-pins it, so at every tick boundary the book exists and
-nothing else ever accumulates; `stop` takes it back. Book clicks run the
-command **as the clicking player with their permission level**, so the menu
-needs cheats (operator) to actually work — the same requirement as typing
-the mode commands. (Bedrock's menu is a native `@minecraft/server-ui` form
-driven by the script instead — §11a/§11e — with no permission concern.)
+nothing else ever accumulates; `stop` takes it back.
+**Why the clicks go through `/trigger` and not `/function`:** book clicks
+run the command as the clicking player, and since 1.21.6 any click-event
+command that needs elevated permissions pops a *"command requires elevated
+permissions"* confirmation screen on every single click — even for
+operators. `/trigger` runs at permission level 0, so the links never
+confirm and never need operator; `menu_tick` turns the triggered number
+into the real mode call at function permission level. (Bedrock's menu is a
+native `@minecraft/server-ui` form driven by the script — §11a/§11e.)
+
+**`function/menu_tick.mcfunction`**
+The click dispatcher, run from `tick` every tick (ride or no ride, so a
+click can never go stale): maps `ir_menu` values 1–8 to the four
+`mode_*_on`/`_off` functions and 9 to `modes`, executed `as` the triggering
+player, then `reset`s and re-`enable`s the objective for everyone (a
+trigger objective disables itself per player after each use, and reset
+drops the enabled flag with the score — so both lines run, in that order).
+The `ir_menu` objective itself is created by `load`.
 
 *(Bedrock: rain/night are the same commands with Bedrock's stable lowercase
 gamerule names; sky/torches only flip the score and `scripts/main.js` does the
@@ -1202,6 +1220,7 @@ corners entirely, so frequent small elevation changes are now visually free.
                         │        ├─ (keepers + give_menu, inline)      └─ roll_chunks ─ forceload_here ─ forceload (macro)
                         │        └─ cam_follow ─┬─ cam_blend ⇄ cam_scan ⇄ cam_sample ─ cam_get (macro)
                         │                       └─ cam_move ─ cam_tp (macro)
+                        ├─ menu_tick   (the Settings book's /trigger relay: ir_menu → mode_* / modes)
                         └─ (auto-start, once per world) start
 
 /function infinite_rail:start ─ start ─ begin ─┬─ setup_world (version-selected by overlay)
@@ -1287,7 +1306,7 @@ counterparts all live in `src/bedrock/scripts/main.js` (stable
 | Ride modes: rain / night (§6.9) | `set_rule` macro + version-picked names from `names.mcfunction` | plain lowercase gamerule literals in the `mode_*` function files (Bedrock's names are stable) — no script involvement |
 | Ride modes: sky speed & ocean pause | `sky_speed` at toggle/begin + an early `return` in `ocean_check` | `tickPace()` asserts `.SKYSPEED` every tick while `.SKYMODE` is on (and resets the ocean state on the toggle-off transition); `oceanCheck()` returns early — both read the score through the same bridge as the brain flags, so cmd-bridge worlds keep working |
 | Ride modes: torch scatter | `place_torch`/`torch_at`/`torch_try` (`/random` rolls + a macro'd Z offset + `positioned over` heightmap + `setblock … keep`), with `forceload_here` widening the corridor to `#TORCHRANGE` | `maybeTorch()` (Math.random + the surface probe + per-cell air/solid checks), called from `advance()` — the scout bubble already covers ±96 blocks, so no corridor change |
-| Ride modes: the Settings menu | a **written book** pinned by `give_menu` after each per-tick inventory clear — clickable `[On]`/`[Off]` `click_event`s that run the mode functions as the clicking player (needs operator) | a plain named book pinned by the inventory keeper (slot-locked); using it fires `itemUse` and the script shows a native `@minecraft/server-ui` **ModalForm** of toggles pre-set from the live scores, applying only actual changes by running the same `mode_*` files |
+| Ride modes: the Settings menu | a **written book** pinned by `give_menu` after each per-tick inventory clear — clickable `[On]`/`[Off]` `click_event`s that `/trigger` the `ir_menu` objective, dispatched to the mode functions by `menu_tick` (permission-free: no operator, no 1.21.6+ confirmation screen) | a plain named book pinned by the inventory keeper (slot-locked); using it fires `itemUse` and the script shows a native `@minecraft/server-ui` **ModalForm** of toggles pre-set from the live scores, applying only actual changes by running the same `mode_*` files |
 | World tuning | `setup_world` (camelCase) + overlay (snake_case) | `setup_world` (Bedrock's lowercase gamerule names) — a third small file, same rules |
 
 ### 11b. The Bedrock rig and camera

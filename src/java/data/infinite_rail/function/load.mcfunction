@@ -2,6 +2,12 @@
 # applies the tunable settings from config.mcfunction (edit THAT file to change
 # defaults). Nothing user-facing lives here.
 scoreboard objectives add ir dummy
+# The Settings book's click channel: a trigger-criteria objective that
+# players may set with /trigger at permission level 0 -- which is what lets
+# the book's links work without operator AND without 1.21.6+'s "elevated
+# permissions" confirmation screen popping on every click. menu_tick
+# dispatches the values (see give_menu / menu_tick).
+scoreboard objectives add ir_menu trigger
 
 # Internal constant: number of heightmap samples averaged per column. This is
 # fixed by the sample count in sample_window.mcfunction -- do not change it
