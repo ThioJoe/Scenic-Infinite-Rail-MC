@@ -2,8 +2,8 @@
 
 A complete technical reference for the project: the architecture, the shared
 state, every file, and the algorithms. Written for a developer (or an AI) who
-needs to understand or modify the pack. For player-facing usage see `README.md`;
-for the repository layout and build workflow see `BUILDING.md`.
+needs to understand or modify the pack. For the repository layout and build
+workflow see `BUILDING.md`.
 
 Sections 1–10 document the **Java Edition** data pack (the original and richest
 implementation); **section 11** documents the **Bedrock Edition** port and how
@@ -14,9 +14,12 @@ the two editions share one codebase.
 ## 1. What it is
 
 A **100% vanilla Minecraft: Java Edition data pack** (no mods, no resource pack)
-that turns the game into an endless, relaxing "Slow TV" minecart ride. (A
-Bedrock behavior-pack port built from the same sources is covered in §11.) The ride
-starts by itself in a fresh world (or via one command): the player is placed on
+that turns the game into an endless, relaxing "Slow TV" minecart ride. Inspired
+by "Slow TV" train journey videos, the player glides over plains, bridges ravines
+and oceans, and tunnels through mountains, forever. (A Bedrock behavior-pack
+port built from the same sources is covered in §11.)
+
+The ride starts by itself in a fresh world (or via one command): the player is placed on
 a self-building, permanently-powered rail line heading **due east forever**,
 while an algorithm lays smooth track over the procedurally generated terrain —
 bridging valleys and oceans, tunneling through mountains, and hovering a few
@@ -99,7 +102,7 @@ calls, or by the player running `/function infinite_rail:start` / `:stop`.
 > **Important behavior:** the game loads every `.mcfunction` into memory at
 > load/`/reload` time. Editing a file on disk does **not** change the running
 > game until `/reload` (or a world rejoin). This is why `config` is applied via
-> `/reload`, not by re-running the `config` function (see §6 and README).
+> `/reload`, not by re-running the `config` function (see §6).
 
 ---
 
@@ -156,12 +159,12 @@ fake players. Grouped by role:
 | `#OCEANSPEED`| Minecart max-speed used while crossing open ocean. `0` disables the ocean speed-up entirely. |
 | `#OCEANCHUNKS`| Consecutive ocean-biome chunks the ride must cross before speeding up to `#OCEANSPEED`. |
 | `#LANDCHUNKS`| Consecutive non-ocean chunks after a speed-up before reverting to `#MAXSPEED`. |
-| `#SKYY`      | Sky mode's fixed cruising altitude: while `#SKYMODE` is 1 the shared `decide` steers the rail to exactly this Y (§6.9). |
+| `#SKYY`      | Sky mode's fixed cruising altitude: while `#SKYMODE` is 1 the shared `decide` steers the rail to exactly this Y (§6.9). Raise it toward ~260 to clear even the tallest jagged peaks. |
 | `#SKYSPEED`  | Sky mode's cruising speed (blocks/s), applied while the mode owns the speed system. |
-| `#TORCHODDS` | Torch mode: percent chance (0-100) per new column of planting a torch beside the line. |
+| `#TORCHODDS` | Torch mode: percent chance (0-100) per new column of planting a torch beside the line (e.g. 10 = on average about one torch per 10 blocks of line). |
 | `#TORCHRANGE`| Torch mode: the farthest a torch may land from the centerline — each torch rolls uniform 2..this (clamped 2-48). Above 8, `forceload_here` widens the Java corridor so the whole band stays loaded. |
 | `#DEBUGMODE` | `1` = print chat messages about the speed system (default applied, each ocean/land chunk with counters + the cart's real speed, every speed change); `0` = silent. |
-| `#CAMHEIGHT` | **Extra** rig height above the rail line, in **tenths of a block** (0 = the ride cart rests on the smoothed line like a cart on a rail). |
+| `#CAMHEIGHT` | **Extra** rig height above the rail line, in **tenths of a block** (0 = the ride cart rests on the smoothed line like a cart on a rail). Keep it small (<= ~5) so climb corners can't lift your head into tunnel roofs. |
 | `#CAMBLEND`  | S-curve blend length in blocks (even): the camera transitions level⇄parallel over exactly this distance at every slope change. |
 | `#CAMSMOOTH` | Descent glide divisor: the camera closes `1/#CAMSMOOTH` of a **downward** gap per tick (climbs use the constructed S-curve instead; 1 = off). |
 | `#CAMLIFT`   | Climb float / crest budget, in **tenths of a block**: how high the camera rides above the rail line while climbing, and how early it reaches the summit level. |
@@ -173,11 +176,11 @@ fake players. Grouped by role:
 | `#DEADBAND`  | Minimum `|target − railY|` before a slope change is even considered (hysteresis vs. terrain noise). |
 | `#SAMEGAP`   | Minimum flat columns between two elevation changes **in the same direction**. |
 | `#TURNGAP`   | Minimum flat columns before the rail may **reverse** direction. |
-| `#SLOPECLEAR`| How many columns just **before and after** every slope get their full-height center clear even through vegetation (§7i) — the camera floats above the rail line around slopes. Vertical only; the cells left/right of the track always spare plants. Keep ≥ the camera's lift-off run (~`#CAMBLEND/2 + #CAMLIFT/10 + 2`) and ≤ `#SAMEGAP`. |
-| `#UPCLAMP`   | Max a single heightmap sample may pull the rolling average **up** per column. |
-| `#DOWNCLAMP` | Max a single heightmap sample may pull the rolling average **down** per column. |
-| `#AHEAD`     | How far (blocks) ahead of the **cart** the rails are kept built. |
-| `#GENAHEAD`  | How far (blocks) ahead of the **rail head** terrain is force-generated. |
+| `#SLOPECLEAR`| How many columns just **before and after** every slope get their full-height center clear even through vegetation (§7i) — the camera floats above the rail line around slopes. Vertical only; the cells left/right of the track always spare plants. Keep ≥ the camera's lift-off run (~`#CAMBLEND/2 + #CAMLIFT/10 + 2`) and ≤ `#SAMEGAP`. 0 = only the slope columns themselves. |
+| `#UPCLAMP`   | Max a single heightmap sample may pull the rolling average **up** per column. Larger values make approaching mountains raise the target sooner (earlier, gentler climbs). |
+| `#DOWNCLAMP` | Max a single heightmap sample may pull the rolling average **down** per column. Smaller values mean ravines and canyons are ignored and bridged dead level instead of dipped into. |
+| `#AHEAD`     | How far (blocks) ahead of the **cart** the rails are kept built (Java: keep < ~250; Bedrock: useful up to ~270, the single-scout ceiling). |
+| `#GENAHEAD`  | **Java only**; how far (blocks) ahead of the **rail head** terrain is force-generated (keep >= ~64). |
 | `#MAXTICK`   | Max columns built per game tick (catch-up budget). |
 
 **Mode toggles** (state, not config: flipped by the `mode_*` functions — §6.9 —
@@ -582,10 +585,8 @@ per-tick `#budget` is exhausted. (Recursion depth is capped by `#MAXTICK`.)
 Builds **one** column (see §7 for the algorithms it drives):
 1. Zero `#sum`, run `sample_window` at the head, compute `#avg = #sum / #C12`.
 2. `#target = #avg + #HOVER`.
-3. `decide` → sets `#dir` (−1/0/1) and `#veg` (this column's carve mode, §7i).
-3b. If `#retro` is 1 (the shared `start_event` raised it: a slope starts on
-   this column), run `retro_clear` at the head — the full-height center
-   clear of the last `#SLOPECLEAR` columns — then reset `#retro` to 0.
+3. `decide` → sets `#dir` (-1/0/1) and `#veg` (this column's carve mode, §7i).
+3b. If `#retro` (a slope just started): retro_clear the center bore behind the head
 4. Move the head and place the column, per `#dir`:
    - `#dir 0`: `tp head ~1 ~ ~`; `place_flat`.
    - `#dir -1`: `tp head ~1 ~-1 ~`; `place_down`; `#railY −= 1`.
@@ -1009,8 +1010,7 @@ The design has three pillars:
      and flattening at the summit level `#CAMLIFT` early — then **average it
      over a symmetric ±`#CAMBLEND/2` window**. The average reproduces
      straight stretches *exactly* (level on flats, truly parallel at 45°
-     mid-climb — no lag, no exponential tail) and turns every corner into a
-     parabolic blend exactly `#CAMBLEND` blocks long. Result: the camera
+     mid-climb — no lag, no exponential tail) and turns every corner of `lifted()` into a parabolic blend `#CAMBLEND` long. Result: the camera
      lifts off ~`#CAMBLEND/2 + #CAMLIFT + 2` blocks before a climb, is
      already moving parallel when the slope arrives, rides it precisely, then
      decelerates and lands **level, exactly at the summit height** — no
@@ -1367,8 +1367,8 @@ re-seated; the rig is re-summoned if it ever goes missing; the rider's
 inventory is cleared every tick (so nothing is ever held); and while
 `#HIDEHAND` is on, an invisibility effect on the rider is re-asserted once a
 second — Bedrock's `/hud` has no `hand` element, and invisibility is the
-one vanilla mechanism that removes the first-person arm (the trade-off: the
-rider's body is hidden in third-person/F5 too).
+one vanilla mechanism that reaches the first-person arm — at the cost of the
+rider's body also being hidden in third-person/F5 too).
 **The rider re-mount decision is positional, never API-queried**: a seated
 player is pinned to the seat while the rig glides east at cruising speed,
 so a genuine dismount shows up as distance from the seat that keeps growing
