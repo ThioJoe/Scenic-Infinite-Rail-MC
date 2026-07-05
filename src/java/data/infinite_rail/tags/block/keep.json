@@ -1,0 +1,228 @@
+{
+    "values": [
+        {
+            "id": "#minecraft:logs",
+            "required": false
+        },
+        {
+            "id": "#minecraft:bamboo_blocks",
+            "required": false
+        },
+        {
+            "id": "#minecraft:leaves",
+            "required": false
+        },
+        {
+            "id": "#minecraft:saplings",
+            "required": false
+        },
+        {
+            "id": "#minecraft:flowers",
+            "required": false
+        },
+        {
+            "id": "#minecraft:crops",
+            "required": false
+        },
+        {
+            "id": "#minecraft:corals",
+            "required": false
+        },
+        {
+            "id": "#minecraft:coral_blocks",
+            "required": false
+        },
+        {
+            "id": "#minecraft:wall_corals",
+            "required": false
+        },
+        {
+            "id": "minecraft:mangrove_roots",
+            "required": false
+        },
+        {
+            "id": "minecraft:muddy_mangrove_roots",
+            "required": false
+        },
+        {
+            "id": "minecraft:mushroom_stem",
+            "required": false
+        },
+        {
+            "id": "minecraft:leaf_litter",
+            "required": false
+        },
+        {
+            "id": "minecraft:brown_mushroom",
+            "required": false
+        },
+        {
+            "id": "minecraft:red_mushroom",
+            "required": false
+        },
+        {
+            "id": "minecraft:brown_mushroom_block",
+            "required": false
+        },
+        {
+            "id": "minecraft:red_mushroom_block",
+            "required": false
+        },
+        {
+            "id": "minecraft:bamboo",
+            "required": false
+        },
+        {
+            "id": "minecraft:bamboo_sapling",
+            "required": false
+        },
+        {
+            "id": "minecraft:sugar_cane",
+            "required": false
+        },
+        {
+            "id": "minecraft:cactus",
+            "required": false
+        },
+        {
+            "id": "minecraft:cactus_flower",
+            "required": false
+        },
+        {
+            "id": "minecraft:short_grass",
+            "required": false
+        },
+        {
+            "id": "minecraft:tall_grass",
+            "required": false
+        },
+        {
+            "id": "minecraft:fern",
+            "required": false
+        },
+        {
+            "id": "minecraft:large_fern",
+            "required": false
+        },
+        {
+            "id": "minecraft:dead_bush",
+            "required": false
+        },
+        {
+            "id": "minecraft:bush",
+            "required": false
+        },
+        {
+            "id": "minecraft:firefly_bush",
+            "required": false
+        },
+        {
+            "id": "minecraft:short_dry_grass",
+            "required": false
+        },
+        {
+            "id": "minecraft:tall_dry_grass",
+            "required": false
+        },
+        {
+            "id": "minecraft:sweet_berry_bush",
+            "required": false
+        },
+        {
+            "id": "minecraft:spore_blossom",
+            "required": false
+        },
+        {
+            "id": "minecraft:vine",
+            "required": false
+        },
+        {
+            "id": "minecraft:glow_lichen",
+            "required": false
+        },
+        {
+            "id": "minecraft:hanging_roots",
+            "required": false
+        },
+        {
+            "id": "minecraft:cave_vines",
+            "required": false
+        },
+        {
+            "id": "minecraft:cave_vines_plant",
+            "required": false
+        },
+        {
+            "id": "minecraft:weeping_vines",
+            "required": false
+        },
+        {
+            "id": "minecraft:weeping_vines_plant",
+            "required": false
+        },
+        {
+            "id": "minecraft:twisting_vines",
+            "required": false
+        },
+        {
+            "id": "minecraft:twisting_vines_plant",
+            "required": false
+        },
+        {
+            "id": "minecraft:pale_hanging_moss",
+            "required": false
+        },
+        {
+            "id": "minecraft:moss_carpet",
+            "required": false
+        },
+        {
+            "id": "minecraft:pale_moss_carpet",
+            "required": false
+        },
+        {
+            "id": "minecraft:pumpkin",
+            "required": false
+        },
+        {
+            "id": "minecraft:melon",
+            "required": false
+        },
+        {
+            "id": "minecraft:cocoa",
+            "required": false
+        },
+        {
+            "id": "minecraft:attached_pumpkin_stem",
+            "required": false
+        },
+        {
+            "id": "minecraft:attached_melon_stem",
+            "required": false
+        },
+        {
+            "id": "minecraft:kelp",
+            "required": false
+        },
+        {
+            "id": "minecraft:kelp_plant",
+            "required": false
+        },
+        {
+            "id": "minecraft:seagrass",
+            "required": false
+        },
+        {
+            "id": "minecraft:tall_seagrass",
+            "required": false
+        },
+        {
+            "id": "minecraft:lily_pad",
+            "required": false
+        },
+        {
+            "id": "minecraft:sea_pickle",
+            "required": false
+        }
+    ]
+}
