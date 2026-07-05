@@ -74,9 +74,10 @@ this is the *entire* per-edition delta of the shared code:
 2. `#NAME` → `.NAME` score holders. The `#` fake-player prefix is a Java
    convention; Bedrock's command parser is only *documented* to accept
    `.`-prefixed fake players, so the Bedrock copies use `.` while Java keeps
-   its idiomatic `#`. (Same variables, same objective `ir` — only the prefix
-   differs. If you're live-tweaking from chat: `#HOVER` on Java, `.HOVER`
-   on Bedrock.)
+   its idiomatic `#`. The rewrite is applied to comment text too (the comment
+   marker itself is preserved), so the shipped Bedrock files document Bedrock
+   syntax. (Same variables, same objective `ir` — only the prefix differs. If
+   you're live-tweaking from chat: `#HOVER` on Java, `.HOVER` on Bedrock.)
 
 `tools/simulate.mjs` guards the whole arrangement: it interprets the
 **emitted** Java and Bedrock copies over six synthetic terrains and fails if

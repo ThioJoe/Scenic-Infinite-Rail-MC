@@ -10,13 +10,18 @@
 //
 //    - the two edition copies make IDENTICAL decisions column for column
 //    - every elevation change is one contiguous 45-degree event
-//    - events only start when |target - railY| >= #DEADBAND
-//    - flat gaps between events respect #SAMEGAP / #TURNGAP
-//    - the rail converges onto terrain + #HOVER
+//    - events only start when |target - railY| >= #DEADBAND (checked exactly)
+//    - flat gaps between events respect #SAMEGAP / #TURNGAP (exact counting)
+//    - on terrain that settles, the rail converges onto terrain + #HOVER
 //
-//  It also checks the smooth-camera construction (the float port used by the
-//  Bedrock script) for its core guarantees: never below the rail line, exact
-//  on settled flats, parallel mid-climb, level landing at the summit.
+//  All knobs come from the emitted config.mcfunction itself (run through the
+//  interpreter), never from constants duplicated here -- retuning the config
+//  cannot silently weaken or spuriously fail these checks.
+//
+//  It also checks the SHIPPED smooth-camera construction (imported from
+//  src/bedrock/scripts/cam_math.js, the module the Bedrock pack runs) for its
+//  core guarantees: never below the rail line, exact on settled flats,
+//  parallel mid-climb.
 //
 //  Run after tools/build.mjs:  node tools/simulate.mjs
 // =============================================================================
@@ -24,6 +29,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { camHeight } from '../src/bedrock/scripts/cam_math.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const JAVA_FN = join(ROOT, 'dist', 'java', 'infinite_rail', 'data', 'infinite_rail', 'function');
@@ -40,8 +46,12 @@ if (!existsSync(JAVA_FN) || !existsSync(BEDROCK_FN)) {
 
 // ---------------------------------------------------------------------------
 // A minimal interpreter for the shared dual-dialect command subset (the build
-// lint guarantees shared files contain nothing else).
+// lint guarantees shared files contain nothing else). Any line it cannot
+// parse EXACTLY is an error -- silently skipping a condition or command would
+// let a regression hide behind the interpreter's own blind spot.
 // ---------------------------------------------------------------------------
+const CONDS_RE = /^(?:(?:if|unless) score \S+ ir (?:matches \S+|(?:<=|>=|=|<|>) \S+ ir) )+$/;
+
 class Sim {
   constructor(fnDir, prefix) {
     this.fnDir = fnDir;
@@ -93,7 +103,7 @@ class Sim {
       return;
     }
     if (cmd.startsWith('execute ')) {
-      m = cmd.match(/^execute (.+?) run (.+)$/);
+      m = cmd.match(/^execute (.+? )run (.+)$/);
       if (!m) throw new Error(`unparseable execute: ${cmd}`);
       if (this.conds(m[1])) this.exec(m[2]);
       return;
@@ -102,10 +112,12 @@ class Sim {
   }
 
   conds(str) {
+    // Strict: the whole condition string must be well-formed if/unless-score
+    // clauses; an unrecognized clause is an error, never a silent pass.
+    if (!CONDS_RE.test(str)) throw new Error(`unparseable execute conditions: "${str}"`);
     const re = /(if|unless) score (\S+) ir (?:matches (\S+)|(<=|>=|=|<|>) (\S+) ir)/g;
-    let m, matched = 0;
+    let m;
     while ((m = re.exec(str))) {
-      matched += 1;
       const [, kind, who, range, cmp, other] = m;
       const v = this.scores.get(who) ?? 0;
       let pass;
@@ -117,7 +129,6 @@ class Sim {
       if (kind === 'unless') pass = !pass;
       if (!pass) return false;
     }
-    if (matched === 0) throw new Error(`no score conditions parsed from: ${str}`);
     return true;
   }
 }
@@ -134,23 +145,14 @@ function inRange(v, range) {
 // ---------------------------------------------------------------------------
 // The per-column pipeline, exactly as both engines drive it: sample the next
 // 48 blocks, hand target+railY to the shared decide, act on the returned dir.
+// Every knob is read from the emitted config.mcfunction via the interpreter.
 // ---------------------------------------------------------------------------
-const CFG = {
-  HOVER: 2, TUNNEL: 6, DEADBAND: 3, SAMEGAP: 25, TURNGAP: 40,
-  UPCLAMP: 150, DOWNCLAMP: 50,
-};
+const CFG_KEYS = ['HOVER', 'DEADBAND', 'SAMEGAP', 'TURNGAP', 'UPCLAMP', 'DOWNCLAMP',
+  'CAMBLEND', 'CAMLIFT', 'CAMSMOOTH', 'CAMAHEAD'];
 
-function newRide(sim, startX, startY) {
-  sim.call('config');
-  sim.set('slope', 0);
-  sim.set('flat', 99);
-  sim.set('lastDir', 0);
-  return { headX: startX, railY: startY + CFG.HOVER, avg: startY, track: [startY + CFG.HOVER] };
-}
-
-function advance(sim, S, surface) {
-  const lo = S.avg - CFG.DOWNCLAMP;
-  const hi = S.avg + CFG.UPCLAMP;
+function advance(sim, S, surface, cfg) {
+  const lo = S.avg - cfg.DOWNCLAMP;
+  const hi = S.avg + cfg.UPCLAMP;
   let sum = 0;
   for (let off = 4; off <= 48; off += 4) {
     let s = surface(S.headX + off);
@@ -158,26 +160,33 @@ function advance(sim, S, surface) {
     sum += Math.min(Math.max(s, lo), hi);
   }
   S.avg = Math.floor(sum / 12);
-  const target = S.avg + CFG.HOVER;
+  const target = S.avg + cfg.HOVER;
 
   sim.set('target', target);
   sim.set('railY', S.railY);
   sim.call('decide');
   const dir = sim.get('dir');
 
+  const railYBefore = S.railY;
   if (dir === -1) S.railY -= 1;
   else if (dir === 1) S.railY += 1;
   S.headX += 1;
   S.track.push(S.railY);
-  return { dir, target };
+  return { dir, target, railYBefore };
 }
 
 function runRide(fnDir, prefix, surface, columns) {
   const sim = new Sim(fnDir, prefix);
-  const S = newRide(sim, 0, surface(0));
+  sim.call('config');
+  const cfg = Object.fromEntries(CFG_KEYS.map((k) => [k, sim.get(k)]));
+  sim.set('slope', 0);
+  sim.set('flat', 99);
+  sim.set('lastDir', 0);
+  const startRailY = surface(0) + cfg.HOVER;
+  const S = { headX: 0, railY: startRailY, avg: surface(0), track: [startRailY] };
   const log = [];
-  for (let i = 0; i < columns; i++) log.push(advance(sim, S, surface));
-  return { S, log };
+  for (let i = 0; i < columns; i++) log.push(advance(sim, S, surface, cfg));
+  return { S, log, cfg };
 }
 
 // ---------------------------------------------------------------------------
@@ -197,101 +206,80 @@ const TERRAINS = {
   mountain: { settles: false, f: (x) => 64 + Math.max(0, Math.round((x - 100) / 3) % 60) },
 };
 
-function checkInvariants(name, log, settles) {
-  // 1. Events are contiguous 45-degree runs: inside a nonzero run the
-  //    direction never flips without passing through flat.
-  // 2. An event only starts when |target - railY| >= DEADBAND.
-  // 3. Flat gaps between events respect SAMEGAP / TURNGAP.
-  let flats = 99, lastDir = 0, inEvent = 0, railY = null;
+function checkInvariants(name, ride, settles) {
+  const { log, cfg, S } = ride;
+  // Mirror the algorithm's own #flat accounting exactly: end_event zeroes the
+  // counter ON the event-ending flat column, and each subsequent flat column
+  // adds 1 -- so at an event-start column, `flats` equals the #flat the shared
+  // brain compared against #SAMEGAP/#TURNGAP.
+  let flats = 99, lastDir = 0, inEvent = 0;
   log.forEach((step, i) => {
     const { dir } = step;
     if (dir !== 0) {
       if (inEvent !== 0 && dir !== inEvent) fail(`${name}: direction flip inside an event at column ${i}`);
       if (inEvent === 0) {
-        // event start
-        const need = dir === lastDir ? CFG.SAMEGAP : CFG.TURNGAP;
+        // event start: check the deadband and the gap the brain just approved
+        const need = dir === lastDir ? cfg.SAMEGAP : cfg.TURNGAP;
         if (flats < need) fail(`${name}: event started after ${flats} flat columns (needed ${need}) at column ${i}`);
+        const diff = Math.abs(step.target - step.railYBefore);
+        if (diff < cfg.DEADBAND) fail(`${name}: event started with |target-railY|=${diff} < DEADBAND=${cfg.DEADBAND} at column ${i}`);
         inEvent = dir;
         lastDir = dir;
       }
       flats = 0;
     } else {
+      flats = inEvent !== 0 ? 0 : flats + 1; // ending column resets, like end_event
       inEvent = 0;
-      flats += 1;
     }
-    railY = step;
   });
 
-  // 4. On terrain that settles, the rail must have converged to within the
-  //    deadband of the sampled target by the end of the run.
+  // On terrain that settles, the rail must have converged to within the
+  // deadband of the sampled target by the end of the run.
   if (settles) {
     const last = log[log.length - 1];
-    const drift = Math.abs(last.target - railYOf(log));
-    if (drift >= CFG.DEADBAND + 1) fail(`${name}: rail ended ${drift} blocks from target`);
+    const drift = Math.abs(last.target - S.railY);
+    if (drift >= cfg.DEADBAND + 1) fail(`${name}: rail ended ${drift} blocks from target`);
   }
 }
 
-function railYOf(log) {
-  // reconstruct final railY from the dirs (start = surface(0) + HOVER)
-  return log.reduce((y, s) => y + s.dir, TERRAINS_START);
-}
-let TERRAINS_START = 0;
-
 // ---------------------------------------------------------------------------
-// The smooth-camera construction (float port used by the Bedrock script).
+// The smooth-camera guarantees, exercised on the SHIPPED cam_math module over
+// each ride's actual recorded profile, with the ride's own config knobs.
 // ---------------------------------------------------------------------------
-function camAt(trackY, paceX, camAhead, camBlend, camLift, camSmooth, s2) {
-  const maxi = trackY.length - 1;
-  const fx = paceX - Math.floor(paceX);
-  const lineAt = (i) => {
-    const a = trackY[Math.min(Math.max(i, 0), maxi)];
-    const b = trackY[Math.min(Math.max(i + 1, 0), maxi)];
-    return a * (1 - fx) + b * fx;
-  };
-  let ci = Math.floor(paceX) + camAhead;
-  ci = Math.min(Math.max(ci, 0), maxi);
-  const lift = camLift / 10;
-  const wmax = Math.floor(camLift / 10) + 2;
-  const half = Math.floor(camBlend / 2);
-  const lineHere = lineAt(ci);
-  let sum = 0, n = 0;
-  for (let j = -half; j <= half; j++) {
-    let fmx = -Infinity;
-    for (let k = 0; k <= wmax; k++) fmx = Math.max(fmx, lineAt(ci + j + k));
-    sum += Math.min(fmx, lineAt(ci + j) + lift);
-    n += 1;
-  }
-  const c1 = sum / n;
-  const s2n = s2 + (lineHere - s2) / Math.max(camSmooth, 1);
-  return { sy: Math.max(c1, s2n, lineHere), s2: s2n, line: lineHere };
-}
-
-function checkCamera(name, trackY) {
+function checkCamera(name, ride) {
+  const { cfg, S } = ride;
+  const trackY = S.track;
+  const lift = cfg.CAMLIFT / 10;
   let s2 = trackY[0];
   let flatRun = 0, climbRun = 0;
   for (let px = 0; px < trackY.length - 80; px += 0.4) {
-    const r = camAt(trackY, px, 64, 6, 20, 6, s2);
+    const maxi = trackY.length - 1;
+    const fx = px - Math.floor(px);
+    const index = Math.min(Math.max(Math.floor(px) + cfg.CAMAHEAD, 0), maxi);
+    const r = camHeight({
+      trackY, index, fx,
+      lift10: cfg.CAMLIFT, blend: cfg.CAMBLEND, smooth: cfg.CAMSMOOTH, s2,
+    });
     s2 = r.s2;
     if (Number.isNaN(r.sy)) return fail(`${name}: camera height NaN at pace ${px}`);
     if (r.sy < r.line - 1e-9) return fail(`${name}: camera sank below the rail line at pace ${px}`);
-    const ci = Math.floor(px) + 64;
-    const level = (i) => trackY[Math.min(Math.max(i, 0), trackY.length - 1)];
+    const level = (i) => trackY[Math.min(Math.max(i, 0), maxi)];
     const isFlat = (i, span) => {
       for (let d = -span; d <= span; d++) if (level(i + d) !== level(i)) return false;
       return true;
     };
     // On long-settled flats the construction must reproduce the line exactly.
-    if (isFlat(ci, 12)) { flatRun += 1; } else { flatRun = 0; }
+    if (isFlat(index, 12)) { flatRun += 1; } else { flatRun = 0; }
     if (flatRun > 200 && Math.abs(r.sy - r.line) > 0.05) {
       return fail(`${name}: camera not level on a settled flat at pace ${px} (off by ${(r.sy - r.line).toFixed(3)})`);
     }
-    // Mid-climb (45-degree both sides) it must ride parallel, lift above rail.
-    const climbing = level(ci + 6) - level(ci) === 6 && level(ci) - level(ci - 6) === 6;
+    // Mid-climb (45 degrees on both sides) it must ride parallel at +lift.
+    const climbing = level(index + 6) - level(index) === 6 && level(index) - level(index - 6) === 6;
     if (climbing) { climbRun += 1; } else { climbRun = 0; }
     if (climbRun > 40) {
       const above = r.sy - r.line;
-      if (above < 1.5 || above > 2.5) {
-        return fail(`${name}: mid-climb camera not parallel at +CAMLIFT (offset ${above.toFixed(3)}) at pace ${px}`);
+      if (above < lift - 0.5 || above > lift + 0.5) {
+        return fail(`${name}: mid-climb camera not parallel at +CAMLIFT (offset ${above.toFixed(3)}, lift ${lift}) at pace ${px}`);
       }
     }
   }
@@ -304,7 +292,6 @@ function checkCamera(name, trackY) {
 const COLUMNS = 600;
 console.log('Simulating the shared event-model brain (emitted Java copy vs emitted Bedrock copy):');
 for (const [name, { settles, f: surface }] of Object.entries(TERRAINS)) {
-  TERRAINS_START = surface(0) + CFG.HOVER;
   const java = runRide(JAVA_FN, '#', surface, COLUMNS);
   const bedrock = runRide(BEDROCK_FN, '.', surface, COLUMNS);
 
@@ -313,8 +300,8 @@ for (const [name, { settles, f: surface }] of Object.entries(TERRAINS)) {
   if (jDirs !== bDirs) fail(`${name}: Java and Bedrock copies diverged`);
   else ok(`${name}: Java and Bedrock decisions identical over ${COLUMNS} columns (${java.log.filter((s) => s.dir !== 0).length} sloped)`);
 
-  checkInvariants(name, java.log, settles);
-  checkCamera(name, java.S.track);
+  checkInvariants(name, java, settles);
+  checkCamera(name, java);
 }
 
 if (failures > 0) {

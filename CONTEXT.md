@@ -348,8 +348,8 @@ touch ride state (including `#autodone`), so a `/reload` mid-ride refreshes the
 knobs without stopping it, and a stopped world stays stopped.
 
 **`function/config.mcfunction`** *(shared source: `src/shared/functions/`)*
-The single file a user edits — and the same file, byte for byte, that the
-Bedrock port runs (§11). Sets every tunable score (`#HOVER`, `#TUNNEL`,
+The single file a user edits — and the same source file the Bedrock port runs,
+modulo the two mechanical dialect rewrites of §11a. Sets every tunable score (`#HOVER`, `#TUNNEL`,
 `#CAMHEIGHT`, `#CAMSMOOTH`, `#AUTOSTART`, `#MAXSPEED`, `#OCEANSPEED`,
 `#OCEANCHUNKS`, `#LANDCHUNKS`, `#DEADBAND`, `#SAMEGAP`, `#TURNGAP`, `#UPCLAMP`,
 `#DOWNCLAMP`, `#AHEAD`, `#GENAHEAD`, `#MAXTICK`) with heavily-commented
@@ -975,9 +975,10 @@ Two mechanical rewrites are applied to the Bedrock copies at build time (the
 entire dialect delta): `function infinite_rail:name` → `function
 infinite_rail/name` (Bedrock addresses functions by folder path), and `#NAME` →
 `.NAME` score holders (`#` is a Java fake-player convention; `.` is the prefix
-documented to parse on Bedrock). So a live tweak is `/scoreboard players set
-#HOVER ir 8` on Java and `/scoreboard players set .HOVER ir 8` on Bedrock —
-same variable, same objective.
+documented to parse on Bedrock). Both rewrites also apply to comment *text*,
+so the shipped Bedrock copies document Bedrock syntax. A live tweak is
+`/scoreboard players set #HOVER ir 8` on Java and `/scoreboard players set
+.HOVER ir 8` on Bedrock — same variable, same objective.
 
 **Native per edition (same job, different machinery):** everything that
 touches the engine. Java's implementations are described in §6–§7; Bedrock's
@@ -993,7 +994,7 @@ counterparts all live in `src/bedrock/scripts/main.js` (stable
 | Moving the rig | `ir_seat` item_display with `teleport_duration:1` + `cam_tp` macro (client-interpolated teleports) | per-tick **velocity drive** of the ride cart (`clearVelocity` + `applyImpulse`; Bedrock clients interpolate physics motion, not teleports), with a teleport fallback for drift |
 | The pace | hidden `ir_cart` on the physical rails + `ir_plug` + stall keeper + the minecart max-speed gamerule | a **virtual pace position** (`paceX`) advanced by scripted speed with smooth acceleration — no entity, no keepers, nothing visible behind the rider |
 | Ocean detection | `execute if biome ~ ~ ~ #minecraft:is_ocean` | `dimension.getBiome()` against an explicit ocean-id set (Bedrock has no biome tags) |
-| Chunk management | `forceload` macro corridor | two named `/tickingarea`s leapfrogging every 16 blocks (Bedrock caps: 10 areas × 100 chunks — the corridor uses 2 × ~39) |
+| Chunk management | `forceload` macro corridor | two named `/tickingarea`s leapfrogging every 16 blocks, spanning from behind the rig to `#GENAHEAD` past the head so the ride cart's chunk always ticks (Bedrock caps: 10 areas × 100 chunks — the corridor uses 2 × ~78 with defaults) |
 | Column placement | `place_flat/up/down` + `carve` macro + `support` | `fillBlocks` + `setBlockPermutation` (`golden_rail` `rail_direction` 1/2/3, `redstone_block`, `light_block_11`) |
 | Start/stop entry | `/function infinite_rail:start` | `/function infinite_rail/start` — a one-line function bridging into the script via `/scriptevent` |
 | World tuning | `setup_world` (camelCase) + overlay (snake_case) | `setup_world` (Bedrock's lowercase gamerule names) — a third small file, same rules |
@@ -1032,11 +1033,12 @@ obsolete.
 Bedrock has no minecart max-speed gamerule, so `#MAXSPEED`/`#OCEANSPEED`
 steer the **virtual pace speed** directly: `ocean_check`'s shared trigger
 logic (same per-chunk cadence, same `#OCEANCHUNKS`/`#LANDCHUNKS` hysteresis,
-sampled at the rider) sets a target speed in blocks/tick, and the pace eases
-toward it at ~0.4 blocks/s² — reproducing the gradual physics acceleration the
-Java cart gets from its rails. Consequently `.MAXSPEED` is *continuously*
-honored on Bedrock (tweak it live and the ride adjusts within seconds),
-whereas Java applies it once at start via the gamerule.
+sampled at the rider) sets a target speed in blocks/tick, and the pace gains
+or sheds 0.4 blocks/s of speed per tick (the default 8 → 32 ocean ramp takes
+~3 s) — reproducing the gradual physics acceleration the Java cart gets from
+its rails. Consequently `.MAXSPEED` is *continuously* honored on Bedrock
+(tweak it live and the ride adjusts within seconds), whereas Java applies it
+once at start via the gamerule.
 
 ### 11d. State & persistence
 

@@ -54,6 +54,7 @@
 // =============================================================================
 
 import { world, system, BlockPermutation, BlockVolume, EasingType, GameMode } from '@minecraft/server';
+import { camHeight } from './cam_math.js';
 
 // --- Constants ---------------------------------------------------------------
 
@@ -145,6 +146,10 @@ const S = {
 let dim = null;   // the overworld
 let inited = false;
 let saveCountdown = 0;
+// Bumped by every begin() and stop(): a begin() in its async chunk-wait phase
+// aborts if a newer begin/stop superseded it, so a stale poll can never
+// resurrect a canceled ride.
+let lifecycleGen = 0;
 
 // --- Small helpers -----------------------------------------------------------
 
@@ -342,21 +347,24 @@ function buildLoop() {
 
 // --- Chunk management ----------------------------------------------------------
 // roll_chunks/forceload: every 16 blocks of head travel, re-lay a ticking-area
-// corridor from just behind the head out to GENAHEAD ahead of it, and roll the
-// world spawn + respawn points forward with the ride. Bedrock allows 10 named
-// ticking areas of up to 100 chunks each; two alternating names leapfrog so
-// coverage never gaps while one is being moved (a 192-block x 3-chunk corridor
-// is ~39 chunks -- comfortably inside the cap).
+// corridor and roll the world spawn + respawn points forward with the ride.
+// The corridor reaches from behind the RIG (the rig trails the head by up to
+// #AHEAD - #CAMAHEAD blocks, and its chunk must stay ticked for the cart) out
+// to #GENAHEAD ahead of the head. Bedrock allows 10 named ticking areas of up
+// to 100 chunks each; two alternating names leapfrog so coverage never gaps
+// while one is being moved (with defaults the corridor is (192+192+32)/16 x 3
+// ~= 78 chunks -- inside the per-area cap).
 
 let areaFlip = false;
 
 function rollChunks() {
   const gen = cfg('GENAHEAD');
+  const back = Math.max(32, cfg('AHEAD') - cfg('CAMAHEAD') + 32);
   const x = S.headX, y = S.railY, z = S.centerZ;
   const name = areaFlip ? AREA_A : AREA_B;
   areaFlip = !areaFlip;
   runCmd(`tickingarea remove ${name}`);
-  runCmd(`tickingarea add ${x - 16} 0 ${z - 8} ${x + gen} 0 ${z + 8} ${name}`);
+  runCmd(`tickingarea add ${x - back} 0 ${z - 8} ${x + gen} 0 ${z + 8} ${name}`);
   runCmd(`setworldspawn ${x} ${y + 1} ${z}`);
   runCmd(`spawnpoint @a ${x} ${y + 1} ${z}`);
   S.nextLoad += 16;
@@ -427,20 +435,10 @@ function tickPace() {
 }
 
 // --- The smooth camera ---------------------------------------------------------
-// A floating-point port of cam_follow/cam_blend/cam_scan/cam_sample (CONTEXT.md
-// section 7g), minus the milliblock fixed-point plumbing:
-//
-//   line(i)   = the recorded rail profile, interpolated by the pace fraction
-//   lifted(j) = min( max of line over [j .. j+wmax+1],  line(j) + lift )
-//   c1        = average of lifted() over the symmetric +/-CAMBLEND/2 window
-//   s2       += (line(rig) - s2) / CAMSMOOTH      (reactive descent chaser)
-//   height    = max(c1, s2, line(rig))            (never below the rail line)
-
-function lineAt(i, fx, maxi) {
-  const a = S.trackY[Math.min(Math.max(i, 0), maxi)];
-  const b = S.trackY[Math.min(Math.max(i + 1, 0), maxi)];
-  return a * (1 - fx) + b * fx;
-}
+// The height construction itself lives in cam_math.js (shared with the
+// tools/simulate.mjs regression test, so the shipped math is what gets
+// tested); this wrapper derives the rig's column index and fraction from the
+// pace position, exactly like cam_follow.mcfunction does from the pace cart.
 
 function camFollow() {
   if (S.trackY.length === 0) return undefined;
@@ -449,28 +447,13 @@ function camFollow() {
   let ci = Math.floor(S.paceX) - S.trackBase + cfg('CAMAHEAD');
   ci = Math.min(Math.max(ci, 0), maxi);
 
-  const lift = cfg('CAMLIFT') / 10;
-  const wmax = Math.floor(cfg('CAMLIFT') / 10) + 2;
-  const half = Math.floor(cfg('CAMBLEND') / 2);
-
-  const lineHere = lineAt(ci, fx, maxi);
-
-  let sum = 0, n = 0;
-  for (let j = -half; j <= half; j++) {
-    const cb = ci + j;
-    let fmx = -Infinity;
-    for (let k = 0; k <= wmax; k++) {
-      const v = lineAt(cb + k, fx, maxi);
-      if (v > fmx) fmx = v;
-    }
-    sum += Math.min(fmx, lineAt(cb, fx, maxi) + lift);
-    n += 1;
-  }
-  const c1 = sum / n;
-
-  S.s2 += (lineHere - S.s2) / Math.max(cfg('CAMSMOOTH'), 1);
-
-  return Math.max(c1, S.s2, lineHere);
+  const r = camHeight({
+    trackY: S.trackY, index: ci, fx,
+    lift10: cfg('CAMLIFT'), blend: cfg('CAMBLEND'), smooth: cfg('CAMSMOOTH'),
+    s2: S.s2,
+  });
+  S.s2 = r.s2;
+  return r.sy;
 }
 
 // cam_move: fly the rig (the ride cart, and with it the seated rider) to
@@ -539,9 +522,19 @@ function keepers(cart) {
 
   // Re-mount a dismounted rider (sneak-dismounts, rejoins). Like Java, only
   // adventure-mode players are recaptured -- switching to creative is the
-  // sanctioned way to leave the ride and wander off.
+  // sanctioned way to leave the ride and wander off. A rider who ended up far
+  // from the cart (e.g. respawned at the rolled spawnpoint after a rejoin) is
+  // brought back to it first; players may be teleported freely while not
+  // riding, and a normal sneak-dismount lands well inside the threshold.
   if (rider.getGameMode() === GameMode.Adventure && !rider.getComponent('minecraft:riding')) {
-    try { rideable.addRider(rider); } catch { /* different dimension etc. */ }
+    try {
+      const c = cart.location;
+      const p = rider.location;
+      if (Math.abs(p.x - c.x) + Math.abs(p.y - c.y) + Math.abs(p.z - c.z) > 8) {
+        rider.teleport({ x: c.x, y: c.y + 1, z: c.z });
+      }
+      rideable.addRider(rider);
+    } catch { /* different dimension etc. */ }
   }
 
   // Keep the rider's inventory empty: hides the held item/arm (Bedrock has no
@@ -559,7 +552,14 @@ function keepers(cart) {
 // tolerates air reads) -- so this seeds the state, then a short poller waits
 // for the starting chunks before laying track and seating the rider.
 function begin(player) {
+  // The algorithm reads Overworld surface heightmaps; refuse elsewhere (the
+  // Java pack documents the same Overworld-only limitation).
+  if (player.dimension.id !== 'minecraft:overworld') {
+    say('§cThe ride can only start in the Overworld.');
+    return;
+  }
   stop(true); // reset any previous run (silently)
+  const gen = ++lifecycleGen;
 
   S.autodone = true;
   S.riderName = player.name;
@@ -579,19 +579,36 @@ function begin(player) {
   S.fast = false;
   dbg(`default ride speed set to §f${cfg('MAXSPEED')}§7 blocks/s`);
 
-  // Wait (up to ~10 s) for the starting chunk to load, then finish the launch.
+  // Wait (up to ~50 s) for the ticking area to load/generate both the start
+  // column and the rig position (startX + #CAMAHEAD, where the ride cart
+  // spawns), then finish the launch. Ticking-area generation is asynchronous
+  // with no guaranteed latency, so this polls rather than assuming a delay.
   let waited = 0;
   const poll = system.runInterval(() => {
+    if (lifecycleGen !== gen) { system.clearRun(poll); return; } // superseded
     waited += 1;
-    if (!chunkLoaded(startX, S.centerZ) && waited < 200) return;
+    const ready = chunkLoaded(startX, S.centerZ)
+      && chunkLoaded(startX + cfg('CAMAHEAD'), S.centerZ);
+    if (!ready && waited < 200) return;
     system.clearRun(poll);
     beginPhase2(startX);
   }, 5);
 }
 
+// A launch that cannot finish must clean up after itself: remove the ticking
+// areas it created and persist the state it already mutated (autodone stays
+// latched, started stays false), so nothing is leaked and a fresh start
+// command works. Java's begin() is synchronous and cannot abort half-way.
+function abortLaunch(reason) {
+  say(`§cRide start aborted: ${reason}`);
+  runCmd(`tickingarea remove ${AREA_A}`);
+  runCmd(`tickingarea remove ${AREA_B}`);
+  saveState();
+}
+
 function beginPhase2(startX) {
   const player = findRider();
-  if (!player) { say('§cRide start aborted: the starting player left.'); return; }
+  if (!player) { abortLaunch('the starting player left.'); return; }
 
   // Initial rail elevation = terrain surface here + hover altitude.
   const surf = surfaceY(startX, S.centerZ);
@@ -635,13 +652,20 @@ function beginPhase2(startX) {
   };
   let cart;
   try {
-    cart = dim.spawnEntity('minecraft:minecart', rigPos, { initialRotation: -90 });
+    try {
+      cart = dim.spawnEntity('minecraft:minecart', rigPos, { initialRotation: -90 });
+    } catch {
+      cart = dim.spawnEntity('minecraft:minecart', rigPos);
+    }
+    cart.addTag(TAG_RIDE);
+    S.cartId = cart.id;
+    cart.getComponent('minecraft:rideable')?.addRider(player);
   } catch {
-    cart = dim.spawnEntity('minecraft:minecart', rigPos);
+    // Rig chunk still not generated after the 50 s wait (or the player
+    // portaled away mid-launch): give up cleanly instead of dying half-done.
+    abortLaunch('the starting area is still generating -- run the start command again.');
+    return;
   }
-  cart.addTag(TAG_RIDE);
-  S.cartId = cart.id;
-  cart.getComponent('minecraft:rideable')?.addRider(player);
 
   // Spectator constraints: look freely, break nothing, feel nothing.
   try {
@@ -657,6 +681,7 @@ function beginPhase2(startX) {
 
 // stop.mcfunction: ends the ride and cleans up; the built track stays.
 function stop(silent) {
+  lifecycleGen += 1; // cancels any begin() still waiting on chunks
   S.started = false;
   const rider = findRider();
   if (rider) {
@@ -752,6 +777,12 @@ system.runInterval(() => {
   if (!ensureInit()) return;
 
   if (!S.started) { autoStart(); return; }
+
+  // Rider offline: freeze the whole ride until they return. (Java pauses the
+  // same way in practice -- its pace cart stops being simulated when its
+  // chunks unload -- but the virtual pace here would happily roll on and
+  // build track through terrain nobody is watching.)
+  if (!findRider()) return;
 
   // Per-tick driver, mirroring main.mcfunction's order:
   tickPace();                       // 1.  pace cart X (virtual)

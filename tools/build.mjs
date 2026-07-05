@@ -93,7 +93,9 @@ function checkCommand(file, lineNo, cmd) {
   }
   if (head === 'execute') {
     if (/\bstore\b/.test(cmd)) fail(`${file}:${lineNo}: "execute store" is Java-only`);
-    const m = cmd.match(/^execute ((?:(?:if|unless) score \S+ \S+ (?:matches \S+|[<>=]=? \S+ \S+|[<>] \S+ \S+) )+)run (.+)$/);
+    // The comparator set is exactly the five both engines accept ('==' is
+    // valid on neither, so it must not slip through as [<>=]=? once did).
+    const m = cmd.match(/^execute ((?:(?:if|unless) score \S+ \S+ (?:matches \S+|(?:<=|>=|=|<|>) \S+ \S+) )+)run (.+)$/);
     if (!m) fail(`${file}:${lineNo}: shared execute lines must be only if/unless-score conditions + run`);
     checkCommand(file, lineNo, m[2]);
     return;
@@ -139,15 +141,21 @@ if (!CHECK_ONLY) {
 
   // Bedrock: copy the edition tree, then inject the shared functions with the
   // two mechanical dialect rewrites (namespace colon -> folder slash; '#'
-  // score-holder prefix -> '.', skipping comment lines).
+  // score-holder prefix -> '.'). Comment lines get the same score-holder
+  // rewrite on their TEXT (the leading comment marker is preserved), so the
+  // shipped Bedrock copies document Bedrock syntax -- a user reading the
+  // Bedrock config sees ".HOVER", not the Java-only "#HOVER".
   cpSync(SRC_BEDROCK, BEDROCK_OUT, { recursive: true });
   mkdirSync(join(BEDROCK_OUT, 'functions', 'infinite_rail'), { recursive: true });
+  const dotify = (s) => s.replaceAll(/(^|\s)#(?=[A-Za-z0-9_])/g, '$1.');
   for (const [f, content] of shared) {
     const rewritten = content
       .split('\n')
-      .map((line) => line.trimStart().startsWith('#')
-        ? line
-        : line.replaceAll(/(^|\s)#(?=[A-Za-z0-9_])/g, '$1.'))
+      .map((line) => {
+        const hash = line.trimStart().startsWith('#') ? line.indexOf('#') : -1;
+        if (hash >= 0) return line.slice(0, hash + 1) + dotify(line.slice(hash + 1));
+        return dotify(line);
+      })
       .join('\n')
       .replaceAll(/function infinite_rail:([a-z0-9_]+)/g, 'function infinite_rail/$1');
     writeFileSync(join(BEDROCK_OUT, 'functions', 'infinite_rail', f), rewritten);
@@ -155,7 +163,8 @@ if (!CHECK_ONLY) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Validate the assembled packs (or the sources in --check mode).
+// 3. Validate the assembled packs. (--check mode exits above, after the
+//    shared-dialect lint only -- it never reaches this.)
 // ---------------------------------------------------------------------------
 function* walk(dir) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
@@ -189,6 +198,20 @@ function validatePack(root, edition) {
 
   for (const file of walk(root)) {
     if (file.endsWith('.json') || file.endsWith('.mcmeta')) validateJson(file);
+    // Function references inside tag files (Java's load/tick hooks, Bedrock's
+    // tick.json) must resolve too -- a typo there breaks the pack silently.
+    const norm = file.split(sep).join('/');
+    if (norm.endsWith('.json') && (norm.includes('/tags/function/') || norm.endsWith('functions/tick.json'))) {
+      const tag = JSON.parse(readFileSync(file, 'utf8'));
+      for (const v of tag.values ?? []) {
+        const m = edition === 'java'
+          ? /^infinite_rail:([a-z0-9_/]+)$/.exec(v)
+          : /^([a-z0-9_/]+)$/.exec(v);
+        if (m && !existsFn(m[1])) {
+          fail(`${relative(ROOT, file)}: tag references missing function "${m[1]}"`);
+        }
+      }
+    }
     if (!file.endsWith('.mcfunction')) continue;
     const text = readFileSync(file, 'utf8');
     for (const line of text.split('\n')) {
@@ -203,7 +226,9 @@ function validatePack(root, edition) {
 }
 
 if (CHECK_ONLY) {
-  console.log(`shared dialect lint OK (${sharedFiles.length} shared functions)`);
+  // --check is the quick source lint only; pack assembly, JSON validation and
+  // function-reference resolution happen in a full (default) build.
+  console.log(`shared dialect lint OK (${sharedFiles.length} shared functions); run without --check for full validation`);
   process.exit(0);
 }
 
