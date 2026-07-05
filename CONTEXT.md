@@ -1306,7 +1306,7 @@ counterparts all live in `src/bedrock/scripts/main.js` (stable
 | Ride modes: rain / night (§6.9) | `set_rule` macro + version-picked names from `names.mcfunction` | plain lowercase gamerule literals in the `mode_*` function files (Bedrock's names are stable) — no script involvement |
 | Ride modes: sky speed & ocean pause | `sky_speed` at toggle/begin + an early `return` in `ocean_check` | `tickPace()` asserts `.SKYSPEED` every tick while `.SKYMODE` is on (and resets the ocean state on the toggle-off transition); `oceanCheck()` returns early — both read the score through the same bridge as the brain flags, so cmd-bridge worlds keep working |
 | Ride modes: torch scatter | `place_torch`/`torch_at`/`torch_try` (`/random` rolls + a macro'd Z offset + `positioned over` heightmap + `setblock … keep`), with `forceload_here` widening the corridor to `#TORCHRANGE` | `maybeTorch()` (Math.random + the surface probe + per-cell air/solid checks), called from `advance()` — the scout bubble already covers ±96 blocks, so no corridor change |
-| Ride modes: the Settings menu | a **written book** pinned by `give_menu` after each per-tick inventory clear — clickable `[On]`/`[Off]` `click_event`s that `/trigger` the `ir_menu` objective, dispatched to the mode functions by `menu_tick` (permission-free: no operator, no 1.21.6+ confirmation screen) | a plain named book pinned by the inventory keeper (slot-locked); using it fires `itemUse` and the script shows a native `@minecraft/server-ui` **ModalForm** of toggles pre-set from the live scores, applying only actual changes by running the same `mode_*` files |
+| Ride modes: the Settings menu | a **written book** pinned by `give_menu` after each per-tick inventory clear — clickable `[On]`/`[Off]` `click_event`s that `/trigger` the `ir_menu` objective, dispatched to the mode functions by `menu_tick` (permission-free: no operator, no 1.21.6+ confirmation screen) | a plain named book pinned by the inventory keeper; using it fires `itemUse` and the script shows a native `@minecraft/server-ui` **ModalForm** of toggles pre-set from the live scores, applying only actual changes by running the same `mode_*` files |
 | World tuning | `setup_world` (camelCase) + overlay (snake_case) | `setup_world` (Bedrock's lowercase gamerule names) — a third small file, same rules |
 
 ### 11b. The Bedrock rig and camera
@@ -1524,8 +1524,10 @@ which is unbounded by design.
   from `maybeTorch()` in the column builder. Rain/night use Bedrock's stable
   lowercase gamerule names directly in the function files.
 - **The Settings book opens a native form.** The inventory keeper pins a
-  plain book named "Settings" (slot-locked via `ItemLockMode.slot`) into the
-  last hotbar slot instead of clearing that slot; using it fires
+  plain book named "Settings" into the last hotbar slot instead of clearing
+  that slot (deliberately *not* slot-locked — `ItemLockMode` items get a
+  lock badge and a "Can't be moved/dropped/…" tooltip block, and the
+  per-tick keeper makes the lock redundant anyway); using it fires
   `world.afterEvents.itemUse`, matched by item type + name + rider, and the
   script shows a `@minecraft/server-ui` **ModalFormData** — one toggle per
   mode pre-set from the live scores, an Apply button, and only actual

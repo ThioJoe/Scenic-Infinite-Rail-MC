@@ -63,7 +63,7 @@
 //  section 7g for the algorithm itself.
 // =============================================================================
 
-import { world, system, BlockPermutation, BlockVolume, EasingType, GameMode, ItemStack, ItemLockMode } from '@minecraft/server';
+import { world, system, BlockPermutation, BlockVolume, EasingType, GameMode, ItemStack } from '@minecraft/server';
 // The native pop-up used by the Settings book's mode menu. Safe as a static
 // import: the manifest declares the @minecraft/server-ui 2.0.0 dependency
 // (stable well before this pack's 1.21.120 floor), so the module is always
@@ -153,9 +153,11 @@ function makeSettingsItem() {
   const item = new ItemStack(SETTINGS_ITEM, 1);
   item.nameTag = SETTINGS_NAME;
   item.setLore(['§7Use to open the', '§7ride mode menu']);
-  // Pinned in place: the slot lock stops it being moved, dropped or tossed
-  // (the keeper would restore it anyway, but this avoids the flicker).
-  item.lockMode = ItemLockMode.slot;
+  // Deliberately NOT slot-locked (ItemLockMode.slot): Bedrock decorates
+  // locked items with a lock badge and a "Can't be moved / dropped /
+  // removed / crafted with" tooltip block, which reads as clutter. The
+  // inventory keeper re-pins the book every tick, so a moved or dropped
+  // book heals itself within a tick anyway.
   return item;
 }
 

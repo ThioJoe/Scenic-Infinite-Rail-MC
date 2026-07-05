@@ -333,9 +333,8 @@ book named **Settings** in the last hotbar slot; select it and use it
   (pre-set to the current states) and an **Apply** button. The script drives
   it, so no permissions are involved.
 
-The book can't be lost — the inventory keeper pins it back every tick (and
-on Bedrock the slot is locked) — and `stop` takes it back when the ride
-ends.
+The book can't be lost — the inventory keeper pins it back every tick — and
+`stop` takes it back when the ride ends.
 
 Details worth knowing:
 
