@@ -126,10 +126,20 @@ Press **F1** (or Hide GUI) for the full ambient experience on either edition.
   generates terrain around players (`/tickingarea` can't do it), so the pack
   summons a tiny invisible entity carrying the vanilla `minecraft:tick_world`
   component — a mobile ticking area, the same mechanism the ender dragon
-  uses — that glides ~90 blocks ahead of you and keeps the build corridor
-  loaded for the track builder. **A higher video render distance directly
-  lengthens how far ahead the track can be built**, because render distance
-  is what makes the engine generate the terrain the scout then holds open.
+  uses — that glides ~120 blocks ahead of you and keeps the whole build
+  corridor (out to `#AHEAD`, ~224 blocks past the hidden pace position)
+  loaded for the track builder. Render distance is what makes the engine
+  *generate* that terrain in the first place, so it must comfortably cover
+  the corridor — but see the performance note below before turning it up.
+- **Performance settings that matter.** The ride adds a fixed load: the
+  scout ticks a 13×13-chunk area (roughly one extra player at simulation
+  distance 6). To keep things smooth, run **simulation distance at 4** — it
+  no longer affects how far the track builds (the scout handles that), and
+  every notch above 4 simulates hundreds of extra chunks for nothing. Set
+  **render distance to ~20–24 chunks**: that fully covers the default build
+  corridor, while very high values (say 32+) force the world generator to
+  churn permanently as you glide east — with no benefit, because the track
+  is never built further than `#AHEAD` anyway.
 - **The ride eases off if world generation still falls behind** and speeds
   back up once terrain ahead is ready — it never builds a column before the
   terrain under it exists, and never outruns the built track.
@@ -281,8 +291,8 @@ file, which are therefore your permanent defaults.
 | `#DEADBAND`    | 3       | Min. height difference before a climb/descent is triggered          |
 | `#SAMEGAP`     | 25      | Min. flat blocks before sloping again in the **same** direction     |
 | `#TURNGAP`     | 40      | Min. flat blocks before **reversing** direction                     |
-| `#AHEAD`       | 224     | How far ahead of the pace cart the **rails** are built (< ~250)     |
-| `#GENAHEAD`    | 192     | How far ahead of the rail head the **world is generated** (≥ ~64)   |
+| `#AHEAD`       | 224     | How far ahead of the pace cart the **rails** are built (Java: keep < ~250; Bedrock: useful up to ~270, the single-scout ceiling) |
+| `#GENAHEAD`    | 192     | **Java only**: how far ahead of the rail head the world is force-generated (≥ ~64). Bedrock ignores it — the chunk scout derives its post from `#AHEAD` |
 | `#MAXTICK`     | 15      | Max track columns built per game tick                               |
 | `#UPCLAMP`     | 150     | How hard approaching mountains may pull the average up              |
 | `#DOWNCLAMP`   | 50      | How hard dips pull the average down (small = level bridges)         |

@@ -994,7 +994,7 @@ counterparts all live in `src/bedrock/scripts/main.js` (stable
 | Moving the rig | `ir_seat` item_display with `teleport_duration:1` + `cam_tp` macro (client-interpolated teleports) | `ir_seat` **custom entity** (this pack's BP+RP: invisible, no gravity, no collision) that the ride cart rides as a passenger, moved by per-tick **velocity drive** (`clearVelocity` + `applyImpulse`; Bedrock clients interpolate physics motion, not teleports), with a teleport fallback for drift |
 | The pace | hidden `ir_cart` on the physical rails + `ir_plug` + stall keeper + the minecart max-speed gamerule | a **virtual pace position** (`paceX`) advanced by scripted speed with smooth acceleration — no entity, no keepers, nothing visible behind the rider |
 | Ocean detection | `execute if biome ~ ~ ~ #minecraft:is_ocean` | `dimension.getBiome()` against an explicit ocean-id set (Bedrock has no biome tags) |
-| Chunk management | `forceload` macro corridor | an invisible **chunk scout** entity carrying vanilla's `minecraft:tick_world` component (radius 6 chunks = a 96-block ticking bubble, `never_despawn` — the ender dragon's own chunk loader), gliding ~90 blocks ahead of the rig as a *mobile ticking area*. `/tickingarea` is unusable for this job: it neither generates new terrain nor pre-loads it (measured in-game — a 470-block corridor of areas contributed zero loaded chunks) |
+| Chunk management | `forceload` macro corridor | an invisible **chunk scout** entity carrying vanilla's `minecraft:tick_world` component (radius 6 chunks = a 96-block ticking bubble, `never_despawn` — the ender dragon's own chunk loader), gliding ahead of the rig as a *mobile ticking area*. Its post is derived from `#AHEAD` so the bubble covers a full-gap head's **entire 48-block sample window** (~120 blocks ahead of the rig at defaults), capped so the bubble always overlaps the rider's own simulation bubble (no coverage hole the head couldn't cross). `/tickingarea` is unusable for this job: it neither generates new terrain nor pre-loads it (measured in-game — a 470-block corridor of areas contributed zero loaded chunks) |
 | Column placement | `place_flat/up/down` + `carve` macro + `support` | `fillBlocks` + `setBlockPermutation` (`golden_rail` `rail_direction` 1/2/3, `redstone_block`, `light_block_11`) |
 | Start/stop entry | `/function infinite_rail:start` | `/function infinite_rail/start` — a one-line function bridging into the script via `/scriptevent` |
 | World tuning | `setup_world` (camelCase) + overlay (snake_case) | `setup_world` (Bedrock's lowercase gamerule names) — a third small file, same rules |
@@ -1093,8 +1093,23 @@ which is unbounded by design.
   bubble and the scout's, the corridor from the rig to ~`#AHEAD` blocks
   past the pace stays loaded and script-readable. How far terrain actually
   *generates* ahead is governed by the rider's **render distance** (the
-  scout can only hold open what the engine has generated), so a higher
-  render distance directly lengthens the ready track ahead of the viewer.
+  scout can only hold open what the engine has generated), which therefore
+  needs to comfortably cover the corridor — ~20–24 chunks at the default
+  `#AHEAD`; anything much higher just makes the generator churn forever
+  behind a ride that never builds past `#AHEAD` anyway.
+- **"Loaded" and "ticking" are different states at the bubble's edge.** In
+  the border ring around a ticking area, block lookups can succeed and hand
+  back a `Block` whose *property reads* then throw
+  `LocationInUnloadedChunkError`. The surface probe is therefore wrapped
+  whole: any throw anywhere inside it reads as "no data at this column yet"
+  and the sample falls back to the rolling average, instead of aborting the
+  column (which used to stall the head at full gap and spam build errors).
+- **The scout is a real simulation load**: its 13×13-chunk bubble ticks
+  like an extra player at simulation distance ~6 (mob spawning included).
+  This is the price of far-ahead building. The world's own simulation
+  distance can (and should) stay at 4 — it contributes nothing to the ride
+  anymore, and every notch above 4 ticks hundreds of additional chunks
+  around the rider for nothing.
 - **The builder tolerates a lagging frontier.** A column needs only its own
   chunk plus a one-chunk margin (`BUILD_MARGIN`, 17 blocks — at least 4 of
   the 12 window samples) loaded to build; missing far samples fall back to

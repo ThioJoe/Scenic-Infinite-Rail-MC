@@ -95,9 +95,18 @@ const TAG_SCOUT = 'ir_scout';
 const SCOUT_REACH = 96;  // tick_world radius 6 chunks, in blocks
 const SCOUT_STEP = 8;    // max blocks/tick the scout glides
 const SCOUT_Y = 180;     // cruising altitude (irrelevant to chunk ticking)
+// The scout's post can't sit further ahead of the rig than this: its bubble
+// (post - SCOUT_REACH) must always overlap the rider's own simulation bubble
+// (>= 4 chunks = 64 blocks) with a chunk to spare, or a coverage hole opens
+// between the two and the head can never walk across it.
+const SCOUT_LEAD_MAX = 144;
 // How far past the head buildReady() requires loaded chunks (the first third
 // of the 48-block sample window; the rest may lag and fall back per-sample).
 const BUILD_MARGIN = 17;
+// How far past the head sample_window actually reaches. The scout post aims
+// to keep this whole span inside its bubble -- samples beyond it don't break
+// anything (they fall back to the rolling average) but cost probe attempts.
+const SAMPLE_REACH = 48;
 // Ticking-area names from older versions of this pack, removed on cleanup.
 const LEGACY_AREAS = ['ir_area_a', 'ir_area_b', 'ir_t0', 'ir_t1', 'ir_t2', 'ir_t3'];
 const PREFIX = '§6[Infinite Rail]§r ';
@@ -384,6 +393,17 @@ function loadState() {
 const surfMemo = new Map();
 
 function surfaceY(x, z) {
+  // At the edge of the ticking set (the border ring of the scout's bubble)
+  // lookups can SUCCEED and hand back a Block whose property reads then
+  // throw LocationInUnloadedChunkError -- "loaded" and "ticking" are
+  // different states there. Any throw anywhere in the probe means exactly
+  // one thing: no usable data at this column yet. Report it like an
+  // unloaded read (the sample falls back to the rolling average) instead of
+  // letting it abort the whole column.
+  try { return probeSurface(x, z); } catch { return undefined; }
+}
+
+function probeSurface(x, z) {
   if (z === S.centerZ && surfMemo.has(x)) return surfMemo.get(x);
   let block;
   try { block = dim.getTopmostBlock({ x, z }); } catch { return undefined; }
@@ -537,6 +557,7 @@ function buildReady() {
 
 let stallTicks = 0;
 let stallWarned = false;
+let lastBuildErrAt = -1e9; // rate limit: a stuck column would otherwise spam every tick
 
 function buildLoop() {
   let budget = cfg('MAXTICK');
@@ -545,7 +566,15 @@ function buildLoop() {
   while (budget > 0 && S.headX - Math.floor(S.paceX) < ahead) {
     if (!buildReady()) break;
     budget -= 1;
-    try { advance(); } catch (e) { dbg(`build error at x=${S.headX + 1}: ${e}`); break; }
+    try {
+      advance();
+    } catch (e) {
+      if (tickN - lastBuildErrAt > 100) {
+        lastBuildErrAt = tickN;
+        dbg(`build error at x=${S.headX + 1}: ${e}`);
+      }
+      break;
+    }
     built = true;
   }
   // If the builder is starved for terrain while the track buffer is running
@@ -555,7 +584,7 @@ function buildLoop() {
     stallTicks += 1;
     if (stallTicks === 200 && !stallWarned) {
       stallWarned = true;
-      say('§eTerrain ahead is generating slowly; the ride will ease off until it catches up. A higher render distance generates terrain further ahead. Run §b/function infinite_rail/debug§e for chunk-loading status.');
+      say('§eTerrain ahead is generating slowly; the ride will ease off until it catches up. Make sure render distance is at least ~20 chunks. Run §b/function infinite_rail/debug§e for chunk-loading status.');
     }
   } else {
     stallTicks = 0;
@@ -582,12 +611,16 @@ function buildLoop() {
 // generates them), so between the rider's bubble and the scout's the whole
 // corridor from the rig to ~#AHEAD blocks ahead of the pace stays readable.
 
-// The scout's post: far enough ahead that its bubble covers the last chunk
-// the builder needs (head at paceX + #AHEAD, probed to +BUILD_MARGIN, +8
-// slack), but never behind the rig.
+// The scout's post: far enough ahead that its bubble covers the ENTIRE
+// sample window of a head at full gap (head at paceX + #AHEAD, sampling to
+// +SAMPLE_REACH, +8 slack) -- covering only the buildReady margin, as an
+// earlier version did, left the far samples poking past the bubble into
+// border chunks every column at full gap. Never behind the rig, and never
+// so far ahead that the bubble detaches from the rider's own (see
+// SCOUT_LEAD_MAX); past that ceiling the far samples degrade gracefully.
 function scoutTargetX() {
-  const lead = Math.max(16, cfg('AHEAD') - cfg('CAMAHEAD') + BUILD_MARGIN + 8 - SCOUT_REACH);
-  return S.paceX + cfg('CAMAHEAD') + lead;
+  const lead = cfg('AHEAD') - cfg('CAMAHEAD') + SAMPLE_REACH + 8 - SCOUT_REACH;
+  return S.paceX + cfg('CAMAHEAD') + Math.min(SCOUT_LEAD_MAX, Math.max(16, lead));
 }
 
 // Per-tick scout keeper + mover, same self-healing pattern as the rig: a
@@ -614,7 +647,8 @@ function tickScout() {
     S.scoutMissing = 0;
   }
 
-  const x = scout.location.x;
+  let x;
+  try { x = scout.location.x; } catch { return; } // handle went stale this tick
   let step = scoutTargetX() - x;
   if (step > SCOUT_STEP) step = SCOUT_STEP;
   else if (step < -SCOUT_STEP) step = -SCOUT_STEP;
@@ -656,7 +690,8 @@ function rollChunks() {
     let frontier = 0;
     while (frontier < 512 && chunkLoaded(x + frontier + 16, z)) frontier += 16;
     const scout = findScout();
-    const scoutAt = scout ? Math.round(scout.location.x - x) : null;
+    let scoutAt = null;
+    try { if (scout) scoutAt = Math.round(scout.location.x - x); } catch { /* stale handle */ }
     const scoutTxt = scoutAt === null ? '§cMISSING§7' : `§f${scoutAt >= 0 ? '+' : ''}${scoutAt}§7`;
     dbg(`x=${x}: loaded §f+${frontier}§7 scout=${scoutTxt} | badSamples=§f${S.lastBad}§7/12 avg=§f${S.avg}§7 railY=§f${S.railY}§7 bridge=${bridgeMode}`);
   }
