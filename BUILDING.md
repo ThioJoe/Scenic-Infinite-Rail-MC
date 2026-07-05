@@ -14,10 +14,11 @@ src/
                         into the Bedrock pack (scripts/vegetation.js) for
                         runtime isVegetation() checks
   java/                 the Java data pack, minus the shared files
-                        (pack.mcmeta, data/, overlay_snake/)
+                        (pack.mcmeta, data/, overlay_snake/ -- including the
+                        ir_* call bridges in data/minecraft/function/)
   bedrock/bp/           the Bedrock behavior pack, minus the shared files
-                        (manifest.json, functions/, scripts/, entities/,
-                        blocks/)
+                        (manifest.json, functions/ -- including the ir_* call
+                        bridges at its root -- scripts/, entities/, blocks/)
   bedrock/rp/           the Bedrock resource pack: the invisible client
                         definitions of the camera-seat and chunk-scout
                         entities, plus the texture/sound/name wiring for the
@@ -53,25 +54,26 @@ GitHub Actions runs the same two commands on every push and uploads three artifa
 
 The philosophy is **share the decisions, keep the data-work native**:
 
-- The *brain* — the event model that turns "the terrain wants elevation X" into "this column is flat / climbing / descending" — is pure scoreboard math. It lives once, in `src/shared/functions/`, and runs as `.mcfunction` on both engines. Each engine boils its world down to two integers (`#target`, `#railY`), calls `decide`, and reads back one integer (`#dir`) plus the carve-mode flags (`#veg`, `#retro` — which columns may spare vegetation, and when to retro-clear before a slope).
+- The *brain* — the event model that turns "the terrain wants elevation X" into "this column is flat / climbing / descending" — is pure scoreboard math. It lives once, in `src/shared/functions/`, and runs as `.mcfunction` on both engines. Each engine boils its world down to two integers (`.target`, `.railY`), calls `decide`, and reads back one integer (`.dir`) plus the carve-mode flags (`.veg`, `.retro` — which columns may spare vegetation, and when to retro-clear before a slope).
 - The *vegetation list* — what the carve spares — is also written once, in `src/shared/vegetation.js`. It can't be a shared *function file* (Java tests blocks with a block tag in commands; Bedrock commands have no block tags, so its checks run in script), so the build derives both editions' forms from the one source: Java's `#infinite_rail:keep` tag JSON, and a copy of the module inside the Bedrock pack for `isVegetation()`.
 - Everything that touches the engine — terrain sampling, block placement, chunk loading, entities, the camera — is implemented natively per edition: Java keeps its `.mcfunction` machinery (`sample_window`, `cam_*`, macros, storage), Bedrock does the same jobs in `scripts/main.js` with the Script API. Neither edition emulates the other's workarounds.
 
-Shared files must parse on **both** command engines, so `tools/build.mjs` lints them against a strict dual-dialect subset — comments, `scoreboard players set/add/remove/operation/reset`, `execute if|unless score ... run`, and plain `function infinite_rail:<name>` calls. No selectors, coordinates, NBT/storage, macros, or `execute store` (those all differ between engines and belong in `src/java` or `src/bedrock`). The build fails loudly if a shared file drifts outside the subset.
+Shared files must parse on **both** command engines — *byte-identical*, no build-time rewriting — so `tools/build.mjs` lints them against a strict dual-dialect subset — comments, `scoreboard players set/add/remove/operation/reset`, `execute if|unless score ... run`, and bare-name `function ir_<name>` bridge calls. No selectors, coordinates, NBT/storage, macros, `execute store`, namespaced ids (`:` or `/` in a command), or `#`-prefixed score holders (those all differ between engines and belong in `src/java` or `src/bedrock`). The build fails loudly if a shared file drifts outside the subset, and injects the files into both packs verbatim. Because the copies are identical, the files in `src/shared/functions/` can be **symlinked directly** into a dev world's pack for live editing.
 
-Two mechanical rewrites are applied to the Bedrock copies at build time — this is the *entire* per-edition delta of the shared code:
+Two conventions make the identical-copy guarantee possible — this replaces the old build-time dialect rewriting:
 
-1. `function infinite_rail:name` → `function infinite_rail/name` (Bedrock addresses functions by folder path, not namespace).
-2. `#NAME` → `.NAME` score holders. The `#` fake-player prefix is a Java convention; Bedrock's command parser is only *documented* to accept `.`-prefixed fake players, so the Bedrock copies use `.` while Java keeps its idiomatic `#`. The rewrite is applied to comment text too (the comment marker itself is preserved), so the shipped Bedrock files document Bedrock syntax. (Same variables, same objective `ir` — only the prefix differs. If you're live-tweaking from chat: `#HOVER` on Java, `.HOVER` on Bedrock.)
+1. **Score holders use the `.` prefix everywhere.** `#NAME` fake players are a Java-only convention (Bedrock's parser rejects `#`); `.`-prefixed fake players parse on both engines, so *both* editions now use `.HOVER`, `.slope`, `.dir`, … — same variables, same objective `ir`, same spelling. Live-tweaking from chat is identical on both editions: `/scoreboard players set .HOVER ir 8`.
+2. **Shared-to-shared function calls go through bare-name bridges.** Java spells a function path `infinite_rail:end_event`, Bedrock spells it `infinite_rail/end_event` — so shared files spell neither. They call the bare name `ir_end_event`, the one function-call form both engines accept: Java resolves it in the `minecraft` namespace, Bedrock from the `functions/` root, and each edition supplies a one-line trampoline there (`src/java/data/minecraft/function/ir_*.mcfunction`, `src/bedrock/bp/functions/ir_*.mcfunction`) that hops into the real shared file. Three calls are bridged this way: `ir_consider_start`, `ir_start_event`, `ir_end_event`. The assembled-pack validation checks every bridge resolves on both sides.
 
-`tools/simulate.mjs` guards the whole arrangement: it interprets the **emitted** Java and Bedrock copies over six synthetic terrains and fails if their decisions ever diverge or the algorithm breaks an invariant (contiguous 45° events, deadband, gap spacing, terrain convergence, the `#veg`/`#retro` carve-mode contract, camera floor/flats/parallel-climb guarantees).
+`tools/simulate.mjs` guards the whole arrangement: it interprets the **emitted** Java and Bedrock copies (each resolved through its own edition's bridges) over six synthetic terrains and fails if their decisions ever diverge or the algorithm breaks an invariant (contiguous 45° events, deadband, gap spacing, terrain convergence, the `.veg`/`.retro` carve-mode contract, camera floor/flats/parallel-climb guarantees).
 
 ## Adding or changing a function
 
 - **Changing the algorithm's rules** (when to slope, gaps, deadband): edit `src/shared/functions/` — both editions pick it up. Stay inside the dual-dialect subset; the lint will tell you if you don't.
 - **Changing which plants the carve spares**: edit `src/shared/vegetation.js` (each category carries the Java tags/ids and the Bedrock id matchers side by side) — the next build regenerates the Java tag and the Bedrock module.
 - **Changing how Java does something** (placement, camera, chunk plumbing): edit `src/java/data/infinite_rail/function/`.
-- **Changing how Bedrock does something**: edit `src/bedrock/bp/scripts/main.js` (almost everything lives there), `src/bedrock/bp/functions/` (gamerules and the start/stop command bridges), or the seat/scout entities' BP/RP definitions (`src/bedrock/bp/entities/*.json`, `src/bedrock/rp/`).
+- **Changing how Bedrock does something**: edit `src/bedrock/bp/scripts/main.js` (almost everything lives there), `src/bedrock/bp/functions/` (gamerules, the start/stop command bridges, and the ir_* call-bridge trampolines), or the seat/scout entities' BP/RP definitions (`src/bedrock/bp/entities/*.json`, `src/bedrock/rp/`).
+- **Adding a shared-to-shared function call**: call the bare name `ir_<target>` from the shared file, and add the two one-line trampolines — `src/java/data/minecraft/function/ir_<target>.mcfunction` (`function infinite_rail:<target>`) and `src/bedrock/bp/functions/ir_<target>.mcfunction` (`function infinite_rail/<target>`). The build fails if either is missing.
 - A file name must not exist in both `src/shared` and an edition folder — the build refuses to let one silently shadow the other.
 
 ## Version-support notes

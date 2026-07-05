@@ -52,10 +52,10 @@
 //    5. append railY to the track history (the camera's map of the path)
 //    6. every 16 blocks: rollChunks()
 //
-//  Scoreboard names: the shared functions use #NAME fake players on Java; the
-//  build rewrites them to .NAME for Bedrock ('.' is the proven-safe fake-player
-//  prefix on Bedrock's command parser), so this script addresses them as
-//  '.NAME' strings via the native scoreboard API.
+//  Scoreboard names: the shared functions use .NAME fake players on BOTH
+//  editions ('.' is the proven-safe fake-player prefix on Bedrock's command
+//  parser, and Java accepts it just as happily), so this script addresses
+//  them as '.NAME' strings via the native scoreboard API.
 //
 //  The camera math in camFollow()/lifted() is a floating-point port of
 //  cam_follow/cam_blend/cam_scan/cam_sample.mcfunction -- same construction,
@@ -80,7 +80,7 @@ import { isVegetation } from './vegetation.js';
 
 const NS = 'infinite_rail';
 const OBJ = 'ir';
-const P = '.'; // fake-player prefix ('#' on Java; '.' survives Bedrock's parser)
+const P = '.'; // fake-player prefix (both editions; '.' survives Bedrock's parser)
 const TAG_RIDE = 'ir_ride';
 const TAG_SEAT = 'ir_seat';
 // The invisible camera seat -- a custom entity from this pack's BP+RP pair
@@ -216,21 +216,21 @@ const LIGHT_BLOCK = 'minecraft:light_block_11';
 const S = {
   started: false,
   autodone: false,
-  headX: 0,        // #headX -- world X of the build front (last built column)
-  railY: 0,        // #railY -- current rail elevation
+  headX: 0,        // .headX -- world X of the build front (last built column)
+  railY: 0,        // .railY -- current rail elevation
   centerZ: 0,      // the track's fixed Z centerline (block coordinate)
-  avg: 0,          // #avg -- rolling average of the terrain surface
-  nextLoad: 0,     // #nextLoad -- headX at which rollChunks() next fires
-  trackBase: 0,    // #trackBase -- world X of trackY[0]
+  avg: 0,          // .avg -- rolling average of the terrain surface
+  nextLoad: 0,     // .nextLoad -- headX at which rollChunks() next fires
+  trackBase: 0,    // .trackBase -- world X of trackY[0]
   trackY: [],      // storage infinite_rail:track y -- one rail Y per column
   paceX: 0,        // the VIRTUAL pace cart's X (replaces ir_cart; double)
   paceSpeed: 0,    // its current speed in blocks/tick (double)
   targetSpeed: 0,  // blocks/tick it is easing toward
-  fast: false,     // #fast -- ocean cruising mode active
-  oceanRun: 0,     // #oceanRun -- consecutive ocean chunks
-  landRun: 0,      // #landRun -- consecutive non-ocean chunks
-  lastChunk: 0,    // #lastChunk -- last chunk index the ocean check processed
-  s2: 0,           // #s2 -- the reactive descent chaser (blocks; double)
+  fast: false,     // .fast -- ocean cruising mode active
+  oceanRun: 0,     // .oceanRun -- consecutive ocean chunks
+  landRun: 0,      // .landRun -- consecutive non-ocean chunks
+  lastChunk: 0,    // .lastChunk -- last chunk index the ocean check processed
+  s2: 0,           // .s2 -- the reactive descent chaser (blocks; double)
   lastBad: 0,      // how many of the last column's 12 samples were fallbacks
   riderName: '',   // the one player this ride belongs to
   startTimer: 0,   // auto-start countdown (ticks with a player present)
@@ -440,7 +440,7 @@ function brainGetDir() {
   return -1;
 }
 
-// Read one of the brain's 0/1 answers (the carve-mode flags #veg / #retro).
+// Read one of the brain's 0/1 answers (the carve-mode flags .veg / .retro).
 function brainGetFlag(name) {
   if (bridgeMode === 'api') return getScore(name, 0) === 1;
   return (runCmd(`execute if score ${P}${name} ir matches 1 run scoreboard players add ${P}probe ir 1`)?.successCount ?? 0) > 0;
@@ -549,7 +549,7 @@ function probeSurface(x, z) {
       // The comparisons are deliberately against literal true/false: if
       // isSolid / isLiquid are unavailable on this module version they read
       // undefined, and the block is ACCEPTED as surface -- a flower
-      // miscounted as ground costs a block of noise (well inside #DEADBAND),
+      // miscounted as ground costs a block of noise (well inside .DEADBAND),
       // whereas skipping everything would freeze the terrain average and
       // flatline the whole ride.
       // Step down with getBlock, NOT getTopmostBlock(pos, y-1) -- the latter
@@ -619,14 +619,14 @@ function clearSoft(x, y, z) {
 // rules exactly (the shared brain decides WHICH columns may spare -- veg):
 //   - center, rail cell + 1 above: ALWAYS cleared (cart + rider pass here)
 //   - center, >= 2 above the rail: one unconditional fill when veg is false
-//     (slope columns and the #SLOPECLEAR buffer around them -- the camera
+//     (slope columns and the .SLOPECLEAR buffer around them -- the camera
 //     floats above the rail line there), per-cell vegetation-sparing when
 //     veg is true
 //   - left and right: ALWAYS vegetation-sparing, at every height
 // Terrain (stone, dirt, ...) is never spared, so tunnels are unchanged.
 function placeColumn(x, y, dir, veg) {
   const z = S.centerZ;
-  const carveH = dir === 0 ? cfg('TUNNEL') : cfg('TUNNEL') + 1; // #TUNNELUP
+  const carveH = dir === 0 ? cfg('TUNNEL') : cfg('TUNNEL') + 1; // .TUNNELUP
   dim.fillBlocks(
     new BlockVolume({ x, y, z }, { x, y: y + 1, z }),
     AIR, { ignoreChunkBoundErrors: true },
@@ -678,8 +678,8 @@ function maybeTorch(x) {
   } catch { /* border chunk: skip this torch */ }
 }
 
-// A slope just started (the shared start_event raised #retro): retroactively
-// clear the FULL center bore over the last #SLOPECLEAR columns -- the camera
+// A slope just started (the shared start_event raised .retro): retroactively
+// clear the FULL center bore over the last .SLOPECLEAR columns -- the camera
 // lifts off the rail line before the slope arrives, so vegetation spared
 // over those (flat, same-elevation) columns must go after all. Vertical
 // only: the cells left and right of the track keep their plants. Java's
@@ -817,10 +817,10 @@ function buildLoop() {
 // ahead of the ride, stepping only onto ground whose chunk is already open
 // (its own bubble requests the next chunks; the rider's render distance
 // generates them), so between the rider's bubble and the scout's the whole
-// corridor from the rig to ~#AHEAD blocks ahead of the pace stays readable.
+// corridor from the rig to ~.AHEAD blocks ahead of the pace stays readable.
 
 // The scout's post: far enough ahead that its bubble covers the ENTIRE
-// sample window of a head at full gap (head at paceX + #AHEAD, sampling to
+// sample window of a head at full gap (head at paceX + .AHEAD, sampling to
 // +SAMPLE_REACH, +8 slack) -- covering only the buildReady margin, as an
 // earlier version did, left the far samples poking past the bubble into
 // border chunks every column at full gap. Never behind the rig, and never
@@ -1311,7 +1311,7 @@ function begin(player) {
   dbg(`default ride speed set to §f${cfg('MAXSPEED')}§7 blocks/s`);
 
   // Wait (up to ~50 s) for the ticking area to load/generate both the start
-  // column and the rig position (startX + #CAMAHEAD, where the ride cart
+  // column and the rig position (startX + .CAMAHEAD, where the ride cart
   // spawns), then finish the launch. Ticking-area generation is asynchronous
   // with no guaranteed latency, so this polls rather than assuming a delay.
   let waited = 0;
@@ -1371,7 +1371,7 @@ function beginPhase2(startX) {
   S.trackBase = startX;
 
   // First column + the virtual pace cart parked on it (full clear: no decide
-  // has run yet, matching Java's begin, where #veg starts at 0).
+  // has run yet, matching Java's begin, where .veg starts at 0).
   try { placeColumn(startX, S.railY, 0, false); } catch { /* still generating; loop heals it */ }
   S.paceX = startX + 0.5;
   S.lastChunk = Math.floor((S.paceX + cfg('CAMAHEAD')) / 16);

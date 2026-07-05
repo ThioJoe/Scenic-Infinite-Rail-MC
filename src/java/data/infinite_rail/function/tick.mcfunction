@@ -1,20 +1,20 @@
 # Runs every game tick via #minecraft:tick.
 # The Settings book's click dispatcher (the /trigger relay -- see menu_tick).
 function infinite_rail:menu_tick
-execute if score #started ir matches 1 run function infinite_rail:main
+execute if score .started ir matches 1 run function infinite_rail:main
 
 # Auto-start: in a fresh world, begin the ride for the first player to appear
 # -- no command needed.
-#autodone is set the first time a ride starts and is
+# .autodone is set the first time a ride starts and is
 # saved with the world, so /function infinite_rail:stop stays stopped (across
 # rejoins too).
-# Set #AUTOSTART to 0 in config.mcfunction to disable.
+# Set .AUTOSTART to 0 in config.mcfunction to disable.
 
 # Wait until a player actually exists in the world, then count up 100 ticks (5 seconds) to let chunks load.
-execute if score #AUTOSTART ir matches 1 unless score #autodone ir matches 1 if entity @a run scoreboard players add #start_timer ir 1
-execute if score #start_timer ir matches 1 unless score #autodone ir matches 1 run tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Starting in 5...","color":"yellow"}]
-execute if score #start_timer ir matches 20 unless score #autodone ir matches 1 run tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Starting in 4...","color":"yellow"}]
-execute if score #start_timer ir matches 40 unless score #autodone ir matches 1 run tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Starting in 3...","color":"yellow"}]
-execute if score #start_timer ir matches 60 unless score #autodone ir matches 1 run tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Starting in 2...","color":"yellow"}]
-execute if score #start_timer ir matches 80 unless score #autodone ir matches 1 run tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Starting in 1...","color":"yellow"}]
-execute if score #start_timer ir matches 100 unless score #autodone ir matches 1 run function infinite_rail:start
+execute if score .AUTOSTART ir matches 1 unless score .autodone ir matches 1 if entity @a run scoreboard players add .start_timer ir 1
+execute if score .start_timer ir matches 1 unless score .autodone ir matches 1 run tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Starting in 5...","color":"yellow"}]
+execute if score .start_timer ir matches 20 unless score .autodone ir matches 1 run tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Starting in 4...","color":"yellow"}]
+execute if score .start_timer ir matches 40 unless score .autodone ir matches 1 run tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Starting in 3...","color":"yellow"}]
+execute if score .start_timer ir matches 60 unless score .autodone ir matches 1 run tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Starting in 2...","color":"yellow"}]
+execute if score .start_timer ir matches 80 unless score .autodone ir matches 1 run tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Starting in 1...","color":"yellow"}]
+execute if score .start_timer ir matches 100 unless score .autodone ir matches 1 run function infinite_rail:start

@@ -1,13 +1,13 @@
 # Ocean speed-up. When the ride crosses a run of ocean-biome chunks, raise the
-# minecart max-speed gamerule to #OCEANSPEED; after a run of non-ocean chunks,
-# drop back to #MAXSPEED. Sampled once per chunk, at the RIDER'S position (the
-# seat carries the player, #CAMAHEAD blocks ahead of the pace cart), so the
+# minecart max-speed gamerule to .OCEANSPEED; after a run of non-ocean chunks,
+# drop back to .MAXSPEED. Sampled once per chunk, at the RIDER'S position (the
+# seat carries the player, .CAMAHEAD blocks ahead of the pace cart), so the
 # speed reflects the biome the viewer is actually flying over -- not the pace
 # cart trailing far behind.
 #
 # Over ocean the target speed is RE-APPLIED every chunk (see speed_up), so the
-# configured #OCEANSPEED always wins and any manual /gamerule change or desynced
-# state self-heals. The land default (#MAXSPEED) is restored only once, on the
+# configured .OCEANSPEED always wins and any manual /gamerule change or desynced
+# state self-heals. The land default (.MAXSPEED) is restored only once, on the
 # transition back, so you can still tweak the gamerule by hand on land.
 #
 # Requires the minecart max-speed gamerule to exist (see set_speed); on worlds
@@ -16,40 +16,40 @@
 
 # Sky mode owns the ride speed while it is on (and the line flies far above
 # any water anyway) -- skip the whole ocean system. mode_sky_off resets the
-# run counters and #fast and restores #MAXSPEED on the way out.
-execute if score #SKYMODE ir matches 1 run return 0
+# run counters and .fast and restores .MAXSPEED on the way out.
+execute if score .SKYMODE ir matches 1 run return 0
 
 # Which chunk is the rider (seat) in now? (X floored to 16-block chunks.)
-execute store result score #rigX ir run data get entity @e[type=item_display,tag=ir_seat,limit=1] Pos[0] 1
-scoreboard players operation #chunkNow ir = #rigX ir
-scoreboard players operation #chunkNow ir /= #C16 ir
+execute store result score .rigX ir run data get entity @e[type=item_display,tag=ir_seat,limit=1] Pos[0] 1
+scoreboard players operation .chunkNow ir = .rigX ir
+scoreboard players operation .chunkNow ir /= .C16 ir
 # Nothing to do unless the rider just crossed into a new chunk.
-execute if score #chunkNow ir = #lastChunk ir run return 0
-scoreboard players operation #lastChunk ir = #chunkNow ir
+execute if score .chunkNow ir = .lastChunk ir run return 0
+scoreboard players operation .lastChunk ir = .chunkNow ir
 
 # Sample the biome under the rider: ocean or not? #minecraft:is_ocean covers
 # every ocean-named biome (ocean, deep/warm/lukewarm/cold/frozen variants, ...).
-scoreboard players set #isOcean ir 0
-execute at @e[type=item_display,tag=ir_seat,limit=1] if biome ~ ~ ~ #minecraft:is_ocean run scoreboard players set #isOcean ir 1
+scoreboard players set .isOcean ir 0
+execute at @e[type=item_display,tag=ir_seat,limit=1] if biome ~ ~ ~ #minecraft:is_ocean run scoreboard players set .isOcean ir 1
 
 # Debug helper: the pace cart's actual eastward speed x100 (0.4/tick ~= 40 at
 # vanilla 8 m/s, ~160 at 32 m/s). If this never climbs after a speed change, the
 # world lacks the Minecart Improvements gamerule.
-execute if score #DEBUGMODE ir matches 1 store result score #dbgmx ir run data get entity @e[type=minecart,tag=ir_cart,limit=1] Motion[0] 100
+execute if score .DEBUGMODE ir matches 1 store result score .dbgmx ir run data get entity @e[type=minecart,tag=ir_cart,limit=1] Motion[0] 100
 
 # Ocean chunk: grow the ocean run, clear the land run.
-execute if score #isOcean ir matches 1 run scoreboard players add #oceanRun ir 1
-execute if score #isOcean ir matches 1 run scoreboard players set #landRun ir 0
+execute if score .isOcean ir matches 1 run scoreboard players add .oceanRun ir 1
+execute if score .isOcean ir matches 1 run scoreboard players set .landRun ir 0
 # Debug: report only while counting up to the threshold, then go quiet.
-execute if score #DEBUGMODE ir matches 1 if score #isOcean ir matches 1 if score #oceanRun ir <= #OCEANCHUNKS ir run tellraw @a [{"text":"[IR debug] ","color":"dark_aqua"},{"text":"ocean chunk - oceanRun=","color":"aqua"},{"score":{"name":"#oceanRun","objective":"ir"},"color":"white"},{"text":"/","color":"aqua"},{"score":{"name":"#OCEANCHUNKS","objective":"ir"},"color":"white"},{"text":"  cartx100=","color":"gray"},{"score":{"name":"#dbgmx","objective":"ir"},"color":"white"}]
-# Past the ocean threshold -> enforce #OCEANSPEED (re-applied every ocean chunk).
-# (#OCEANSPEED 0 disables the feature, so it never triggers then.)
-execute if score #isOcean ir matches 1 if score #OCEANSPEED ir matches 1.. if score #oceanRun ir >= #OCEANCHUNKS ir run function infinite_rail:speed_up
+execute if score .DEBUGMODE ir matches 1 if score .isOcean ir matches 1 if score .oceanRun ir <= .OCEANCHUNKS ir run tellraw @a [{"text":"[IR debug] ","color":"dark_aqua"},{"text":"ocean chunk - oceanRun=","color":"aqua"},{"score":{"name":".oceanRun","objective":"ir"},"color":"white"},{"text":"/","color":"aqua"},{"score":{"name":".OCEANCHUNKS","objective":"ir"},"color":"white"},{"text":"  cartx100=","color":"gray"},{"score":{"name":".dbgmx","objective":"ir"},"color":"white"}]
+# Past the ocean threshold -> enforce .OCEANSPEED (re-applied every ocean chunk).
+# (.OCEANSPEED 0 disables the feature, so it never triggers then.)
+execute if score .isOcean ir matches 1 if score .OCEANSPEED ir matches 1.. if score .oceanRun ir >= .OCEANCHUNKS ir run function infinite_rail:speed_up
 
 # Non-ocean chunk: grow the land run, clear the ocean run.
-execute if score #isOcean ir matches 0 run scoreboard players add #landRun ir 1
-execute if score #isOcean ir matches 0 run scoreboard players set #oceanRun ir 0
+execute if score .isOcean ir matches 0 run scoreboard players add .landRun ir 1
+execute if score .isOcean ir matches 0 run scoreboard players set .oceanRun ir 0
 # Debug: report only while counting up to the threshold, then go quiet.
-execute if score #DEBUGMODE ir matches 1 if score #isOcean ir matches 0 if score #landRun ir <= #LANDCHUNKS ir run tellraw @a [{"text":"[IR debug] ","color":"dark_aqua"},{"text":"land chunk - landRun=","color":"yellow"},{"score":{"name":"#landRun","objective":"ir"},"color":"white"},{"text":"/","color":"yellow"},{"score":{"name":"#LANDCHUNKS","objective":"ir"},"color":"white"},{"text":"  cartx100=","color":"gray"},{"score":{"name":"#dbgmx","objective":"ir"},"color":"white"}]
-# Enough consecutive non-ocean chunks after a fast stretch -> restore #MAXSPEED once.
-execute if score #isOcean ir matches 0 if score #fast ir matches 1 if score #landRun ir >= #LANDCHUNKS ir run function infinite_rail:speed_down
+execute if score .DEBUGMODE ir matches 1 if score .isOcean ir matches 0 if score .landRun ir <= .LANDCHUNKS ir run tellraw @a [{"text":"[IR debug] ","color":"dark_aqua"},{"text":"land chunk - landRun=","color":"yellow"},{"score":{"name":".landRun","objective":"ir"},"color":"white"},{"text":"/","color":"yellow"},{"score":{"name":".LANDCHUNKS","objective":"ir"},"color":"white"},{"text":"  cartx100=","color":"gray"},{"score":{"name":".dbgmx","objective":"ir"},"color":"white"}]
+# Enough consecutive non-ocean chunks after a fast stretch -> restore .MAXSPEED once.
+execute if score .isOcean ir matches 0 if score .fast ir matches 1 if score .landRun ir >= .LANDCHUNKS ir run function infinite_rail:speed_down

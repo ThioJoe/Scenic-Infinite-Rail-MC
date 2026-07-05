@@ -1,5 +1,5 @@
 # Ends the ride and cleans up. The world and track are left as-is.
-scoreboard players set #started ir 0
+scoreboard players set .started ir 0
 effect clear @a[gamemode=adventure]
 # Take the Settings book (the mode-menu item) back -- the ride is over.
 clear @a[gamemode=adventure] minecraft:written_book

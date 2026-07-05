@@ -2,11 +2,13 @@
 // =============================================================================
 //  Infinite Rail logic simulator / regression test
 //
-//  Runs the ACTUAL shared .mcfunction files emitted by the build (both the
-//  Java copy and the dialect-rewritten Bedrock copy) through a tiny
-//  interpreter of the shared dual-dialect command subset, drives them with
-//  the same per-column pipeline the engines use (sample window -> decide ->
-//  place), and asserts the event-model invariants on synthetic terrains:
+//  Runs the ACTUAL shared .mcfunction files emitted by the build (the Java
+//  copy and the Bedrock copy -- byte-identical by construction, but each
+//  resolved through its OWN edition's ir_* call-bridge trampolines) through a
+//  tiny interpreter of the shared dual-dialect command subset, drives them
+//  with the same per-column pipeline the engines use (sample window ->
+//  decide -> place), and asserts the event-model invariants on synthetic
+//  terrains:
 //
 //    - the two edition copies make IDENTICAL decisions column for column
 //    - every elevation change is one contiguous 45-degree event
@@ -32,14 +34,23 @@ import { fileURLToPath } from 'node:url';
 import { camHeight } from '../src/bedrock/bp/scripts/cam_math.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const JAVA_FN = join(ROOT, 'dist', 'java', 'infinite_rail', 'data', 'infinite_rail', 'function');
-const BEDROCK_FN = join(ROOT, 'dist', 'bedrock', 'InfiniteRail_BP', 'functions', 'infinite_rail');
+// Each edition resolves a function name across two directories: the
+// infinite_rail functions themselves, plus the edition's home for the bare
+// ir_* call bridges (Java: the minecraft namespace; Bedrock: functions/ root).
+const JAVA_FN = [
+  join(ROOT, 'dist', 'java', 'infinite_rail', 'data', 'infinite_rail', 'function'),
+  join(ROOT, 'dist', 'java', 'infinite_rail', 'data', 'minecraft', 'function'),
+];
+const BEDROCK_FN = [
+  join(ROOT, 'dist', 'bedrock', 'InfiniteRail_BP', 'functions', 'infinite_rail'),
+  join(ROOT, 'dist', 'bedrock', 'InfiniteRail_BP', 'functions'),
+];
 
 let failures = 0;
 const fail = (msg) => { failures += 1; console.error(`  FAIL: ${msg}`); };
 const ok = (msg) => console.log(`  ok: ${msg}`);
 
-if (!existsSync(JAVA_FN) || !existsSync(BEDROCK_FN)) {
+if (![...JAVA_FN, ...BEDROCK_FN].every((d) => existsSync(d))) {
   console.error('dist/ not found -- run `node tools/build.mjs` first');
   process.exit(1);
 }
@@ -53,23 +64,24 @@ if (!existsSync(JAVA_FN) || !existsSync(BEDROCK_FN)) {
 const CONDS_RE = /^(?:(?:if|unless) score \S+ ir (?:matches \S+|(?:<=|>=|=|<|>) \S+ ir) )+$/;
 
 class Sim {
-  constructor(fnDir, prefix) {
-    this.fnDir = fnDir;
-    this.prefix = prefix; // '#' for the Java copy, '.' for the Bedrock copy
+  constructor(fnDirs) {
+    this.fnDirs = fnDirs;
     this.scores = new Map();
     this.fns = new Map();
   }
 
   load(name) {
     if (!this.fns.has(name)) {
-      const text = readFileSync(join(this.fnDir, `${name}.mcfunction`), 'utf8');
+      const dir = this.fnDirs.find((d) => existsSync(join(d, `${name}.mcfunction`)));
+      if (!dir) throw new Error(`function not found in any dir: ${name}`);
+      const text = readFileSync(join(dir, `${name}.mcfunction`), 'utf8');
       this.fns.set(name, text.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#')));
     }
     return this.fns.get(name);
   }
 
-  get(name) { return this.scores.get(this.prefix + name) ?? 0; }
-  set(name, v) { this.scores.set(this.prefix + name, v | 0); }
+  get(name) { return this.scores.get(`.${name}`) ?? 0; }
+  set(name, v) { this.scores.set(`.${name}`, v | 0); }
 
   call(name) { for (const line of this.load(name)) this.exec(line); }
 
@@ -98,7 +110,9 @@ class Sim {
       if (op === '><') this.scores.set(b, av | 0);
       return;
     }
-    if ((m = cmd.match(/^function infinite_rail[:/]([a-z0-9_]+)$/))) {
+    // Namespaced/path calls (edition-native files, e.g. the bridges) and the
+    // shared files' bare ir_* bridge calls all resolve through load().
+    if ((m = cmd.match(/^function (?:infinite_rail[:/])?([a-z0-9_]+)$/))) {
       this.call(m[1]);
       return;
     }
@@ -181,8 +195,8 @@ function advance(sim, S, surface, cfg) {
   return { dir, target, railYBefore, veg, retro };
 }
 
-function runRide(fnDir, prefix, surface, columns) {
-  const sim = new Sim(fnDir, prefix);
+function runRide(fnDirs, surface, columns) {
+  const sim = new Sim(fnDirs);
   sim.call('config');
   const cfg = Object.fromEntries(CFG_KEYS.map((k) => [k, sim.get(k)]));
   sim.set('slope', 0);
@@ -312,8 +326,8 @@ function checkCamera(name, ride) {
 const COLUMNS = 600;
 console.log('Simulating the shared event-model brain (emitted Java copy vs emitted Bedrock copy):');
 for (const [name, { settles, f: surface }] of Object.entries(TERRAINS)) {
-  const java = runRide(JAVA_FN, '#', surface, COLUMNS);
-  const bedrock = runRide(BEDROCK_FN, '.', surface, COLUMNS);
+  const java = runRide(JAVA_FN, surface, COLUMNS);
+  const bedrock = runRide(BEDROCK_FN, surface, COLUMNS);
 
   const jDirs = java.log.map((s) => s.dir).join('');
   const bDirs = bedrock.log.map((s) => s.dir).join('');
@@ -336,8 +350,8 @@ console.log('\nSimulating sky mode (the fixed-altitude #SKYY override in the sha
   const SKYY = 200;
   const surface = TERRAINS.rolling.f; // rolling hills around Y 48..80
   const dirsByEdition = [];
-  for (const [label, fnDir, prefix] of [['java', JAVA_FN, '#'], ['bedrock', BEDROCK_FN, '.']]) {
-    const sim = new Sim(fnDir, prefix);
+  for (const [label, fnDirs] of [['java', JAVA_FN], ['bedrock', BEDROCK_FN]]) {
+    const sim = new Sim(fnDirs);
     sim.call('config');
     const cfg = Object.fromEntries(CFG_KEYS.map((k) => [k, sim.get(k)]));
     sim.set('slope', 0);

@@ -6,7 +6,7 @@
 # every other ir score.
 # Called once per load: from load.mcfunction on Java, from the script's
 # init() on Bedrock.
-scoreboard players add #RAINMODE ir 0
-scoreboard players add #NIGHTMODE ir 0
-scoreboard players add #TORCHMODE ir 0
-scoreboard players add #SKYMODE ir 0
+scoreboard players add .RAINMODE ir 0
+scoreboard players add .NIGHTMODE ir 0
+scoreboard players add .TORCHMODE ir 0
+scoreboard players add .SKYMODE ir 0

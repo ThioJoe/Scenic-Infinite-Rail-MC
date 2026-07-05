@@ -6,7 +6,7 @@
 # The weather-cycle gamerule's NAME is version-dependent (doWeatherCycle /
 # advance_weather), so it comes from names.mcfunction via the set_rule macro
 # rather than being hard-coded here.
-scoreboard players set #RAINMODE ir 1
+scoreboard players set .RAINMODE ir 1
 data modify storage infinite_rail:rule rule set from storage infinite_rail:names weather_cycle
 data modify storage infinite_rail:rule v set value "false"
 function infinite_rail:set_rule with storage infinite_rail:rule

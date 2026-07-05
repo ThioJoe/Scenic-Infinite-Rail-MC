@@ -6,12 +6,13 @@
 #  To apply your edits, run  /reload  in chat (or quit and rejoin the world).
 #  Minecraft only re-reads .mcfunction files from disk on /reload; it then runs
 #  this file automatically, updating a ride already in progress. IMPORTANT:
-#  running  /function infinite_rail:config  by itself will NOT pick up file
+#  running the config function by itself (/function infinite_rail:config on
+#  Java, /function infinite_rail/config on Bedrock) will NOT pick up file
 #  edits -- it just re-runs the copy already loaded in memory. Its only real use
 #  is to reset live tweaks (below) back to the values in this file.
 #
 #  To experiment with ONE value without editing this file, set its score
-#  directly in chat, e.g.:   /scoreboard players set #HOVER ir 8
+#  directly in chat, e.g.:   /scoreboard players set .HOVER ir 8
 #  Live scoreboard edits take effect on the very next track column, and are
 #  reset back to the values below on the next /reload or rejoin.
 # =============================================================================
@@ -23,13 +24,13 @@
 # average terrain surface. Higher = a more sweeping, birds-eye view.
 # Keep it at least 2: the redstone power block under the rail is immune to
 # water, but the rail itself is not, so the track must stay above sea level.
-scoreboard players set #HOVER ir 2
+scoreboard players set .HOVER ir 2
 
 # How high (in blocks above the rail) each column's clearance bore is carved --
 # i.e. the tunnel/headroom height. Slope columns automatically carve one block
 # taller. Keep it at least 3 (the tunnel light sits at rail+3). Bigger = airier
 # tunnels and cuttings at the cost of more blocks changed per column.
-scoreboard players set #TUNNEL ir 6
+scoreboard players set .TUNNEL ir 6
 
 
 # --- Smooth camera (the ride rig) --------------------------------------------
@@ -39,7 +40,7 @@ scoreboard players set #TUNNEL ir 6
 # climbs begin rising BEFORE the corner, steady 45-degree runs are followed
 # exactly parallel with zero lag, and descents use a reactive exponential
 # glide. The camera never drops below the rail line. Meanwhile a hidden
-# "pace cart" rides the physical rails #CAMAHEAD blocks BEHIND the viewer and
+# "pace cart" rides the physical rails .CAMAHEAD blocks BEHIND the viewer and
 # sets the speed -- however fast the rails push it -- so the rig inherits real
 # cart pace without any of its bounce.
 
@@ -48,7 +49,7 @@ scoreboard players set #TUNNEL ir 6
 # Also the fine-tune knob if the ride cart ever looks like it floats or sinks
 # a hair. Keep it small (<= ~5) so climb corners can't lift your head into
 # tunnel roofs.
-scoreboard players set #CAMHEIGHT ir 0
+scoreboard players set .CAMHEIGHT ir 0
 
 # Length (in blocks, EVEN numbers) of the S-curve blend at every slope
 # change. The camera transitions between "level" and "moving parallel with
@@ -58,34 +59,34 @@ scoreboard players set #CAMHEIGHT ir 0
 # it just rides parallel, however long the slope: the blend does NOT stretch
 # across the whole climb, so it never accumulates into tunnel-roof
 # collisions. Bigger = longer, lazier arcs; smaller = snappier.
-scoreboard players set #CAMBLEND ir 6
+scoreboard players set .CAMBLEND ir 6
 
 # Glide strength for DESCENTS (and settling into valleys): each tick the
 # camera closes 1/N of the remaining gap when the track drops away below it.
 # Climbs don't use this -- they follow the constructed S-curve above with no
 # lag. Higher = softer, floatier drops; lower = tighter; 1 = off.
-scoreboard players set #CAMSMOOTH ir 6
+scoreboard players set .CAMSMOOTH ir 6
 
 # How high (in TENTHS of a block) the camera rides above the rail line while
 # climbing. This is the crest-smoothing budget: the camera reaches the summit
 # level about this many blocks early and glides level over the top. It also
-# sets how early lift-off begins (roughly #CAMBLEND/2 + this + 2 blocks
+# sets how early lift-off begins (roughly .CAMBLEND/2 + this + 2 blocks
 # before the slope). Bigger = smoother hilltops but the cart visibly floats
 # higher above the rails on the way up; smaller = hugs the climb tighter but
 # lands harder on crests. Keep it <= ~25 for tunnel headroom; going below
-# half of #CAMBLEND (in blocks) makes summit landings progressively harder.
+# half of .CAMBLEND (in blocks) makes summit landings progressively harder.
 # Setting this too high will probably make the camera raise too soon.
 # 25 seems to be an optimal number for smooth transitions.
-scoreboard players set #CAMLIFT ir 20
+scoreboard players set .CAMLIFT ir 20
 
 # How many blocks the viewer rides AHEAD of the hidden pace cart. Bigger
 # pushes the empty pacing cart further behind you (it's only visible looking
-# backward). Keep it at least ~40 below #AHEAD so there's always smoothed
+# backward). Keep it at least ~40 below .AHEAD so there's always smoothed
 # track under the rig. Applied cleanly on the next ride start; changing it
 # mid-ride shifts the view by the difference once.
 # (On Bedrock the pace cart is a virtual position computed by the script, so
 # there is nothing to see behind you; the knob works the same.)
-scoreboard players set #CAMAHEAD ir 64
+scoreboard players set .CAMAHEAD ir 64
 
 # BEDROCK EDITION ONLY (ignored on Java). Camera mode:
 #   0 = native rig (recommended): you sit in the gliding cart with the normal
@@ -93,7 +94,7 @@ scoreboard players set #CAMAHEAD ir 64
 #   1 = cinematic: the view is detached onto Bedrock's native camera system
 #       and eased along the path for extra glide, at the cost of your look
 #       input reaching the camera a beat (~0.15s) late.
-scoreboard players set #CAMMODE ir 0
+scoreboard players set .CAMMODE ir 0
 
 # BEDROCK EDITION ONLY (ignored on Java). Fine-tune for the minecart
 # VISUAL's height, in TENTHS of a block (negative = draw it lower). The
@@ -101,8 +102,8 @@ scoreboard players set #CAMMODE ir 0
 # purely for taste -- keep it small (within about -3..3). Large negative
 # values sink the cart ENTITY into the track blocks, where it suffocates.
 # Tune live (takes effect instantly):
-#   /scoreboard players set #CARTYOFF ir -1
-scoreboard players set #CARTYOFF ir 12
+#   /scoreboard players set .CARTYOFF ir -1
+scoreboard players set .CARTYOFF ir 12
 
 # BEDROCK EDITION ONLY (ignored on Java). 1 = hide the rider's first-person
 # arm automatically, like turning on the "Hide Hand" video setting, for a
@@ -114,16 +115,17 @@ scoreboard players set #CARTYOFF ir 12
 # in third-person / F5 view (the cart still shows). 0 = leave the arm
 # visible. Live-tunable mid-ride (takes effect within a second).
 # (Java has no equivalent mechanism; the Java rider keeps their arm.)
-scoreboard players set #HIDEHAND ir 1
+scoreboard players set .HIDEHAND ir 1
 
 
 # --- Auto-start -------------------------------------------------------------
 
 # 1 = the ride starts by itself for the first player to appear in a fresh
 # world -- no command needed. It only ever auto-starts once per world, and
-# stopping with /function infinite_rail:stop stays stopped across rejoins.
-# 0 = classic manual start via /function infinite_rail:start.
-scoreboard players set #AUTOSTART ir 1
+# stopping with the stop function stays stopped across rejoins.
+# 0 = classic manual start via the start function (/function
+# infinite_rail:start on Java, /function infinite_rail/start on Bedrock).
+scoreboard players set .AUTOSTART ir 1
 
 
 # --- Minecart speed (the max_minecart_speed gamerule) -----------------------
@@ -137,19 +139,19 @@ scoreboard players set #AUTOSTART ir 1
 
 # Default max minecart speed (blocks/second) set at ride start. Vanilla default
 # is 8; raise it for a brisker journey (valid up to 1000).
-scoreboard players set #MAXSPEED ir 8
+scoreboard players set .MAXSPEED ir 8
 
 # Speed used while crossing open ocean (see below). 0 disables the whole
-# ocean speed-up feature and the speed stays at #MAXSPEED everywhere.
-scoreboard players set #OCEANSPEED ir 32
+# ocean speed-up feature and the speed stays at .MAXSPEED everywhere.
+scoreboard players set .OCEANSPEED ir 32
 
 # How many consecutive ocean-biome chunks the ride must cross before it speeds
-# up to #OCEANSPEED (a chunk is 16 blocks; the biome is sampled at the cart).
-scoreboard players set #OCEANCHUNKS ir 6
+# up to .OCEANSPEED (a chunk is 16 blocks; the biome is sampled at the cart).
+scoreboard players set .OCEANCHUNKS ir 6
 
 # How many consecutive non-ocean chunks after a speed-up before it reverts to
-# #MAXSPEED (so brief islands/gaps don't keep flipping the speed).
-scoreboard players set #LANDCHUNKS ir 3
+# .MAXSPEED (so brief islands/gaps don't keep flipping the speed).
+scoreboard players set .LANDCHUNKS ir 3
 
 
 # --- Slope shaping (the "event" model) -------------------------------------
@@ -162,17 +164,17 @@ scoreboard players set #LANDCHUNKS ir 3
 
 # Minimum height difference (in blocks) before a new climb/descent is started.
 # Also acts as hysteresis, so small terrain noise never nudges the rail.
-scoreboard players set #DEADBAND ir 2
+scoreboard players set .DEADBAND ir 2
 
 # Minimum flat blocks between two changes in the SAME direction.
 # Higher = fewer, longer swoops. Terrain that rises faster than this allows
 # gets tunneled through instead of climbed.
-scoreboard players set #SAMEGAP ir 40
+scoreboard players set .SAMEGAP ir 40
 
 # Minimum flat blocks required before the rail may REVERSE direction.
 # Higher = no quick up-then-down bobbing; small bumps get tunneled through and
 # small dips get bridged across.
-scoreboard players set #TURNGAP ir 40
+scoreboard players set .TURNGAP ir 40
 
 
 # --- Track clearing / vegetation sparing ------------------------------------
@@ -184,14 +186,14 @@ scoreboard players set #TURNGAP ir 40
 # Terrain (stone, dirt, sand, ...) still carves at full height everywhere, so
 # tunnels are unchanged.
 
-# The one exception is around slopes: the camera floats up to #CAMLIFT above
+# The one exception is around slopes: the camera floats up to .CAMLIFT above
 # the rail line entering, riding and leaving a climb/descent, so overhanging
 # leaves there would brush the rider's face. Slope columns therefore always
 # carve their full center bore, and so do this many columns just BEFORE and
 # AFTER each slope (vertically only -- left/right stay vegetation-sparing).
-# Cover at least the camera's lift-off run (roughly #CAMBLEND/2 + #CAMLIFT/10
-# + 2 blocks) and keep it <= #SAMEGAP. 0 = only the slope columns themselves.
-scoreboard players set #SLOPECLEAR ir 8
+# Cover at least the camera's lift-off run (roughly .CAMBLEND/2 + .CAMLIFT/10
+# + 2 blocks) and keep it <= .SAMEGAP. 0 = only the slope columns themselves.
+scoreboard players set .SLOPECLEAR ir 8
 
 
 # --- Terrain-smoothing sensitivity -----------------------------------------
@@ -200,43 +202,44 @@ scoreboard players set #SLOPECLEAR ir 8
 
 # Larger = approaching mountains raise the target sooner (earlier, gentler
 # "one swoop" climbs).
-scoreboard players set #UPCLAMP ir 250
+scoreboard players set .UPCLAMP ir 250
 
 # Smaller = ravines, holes and canyons are ignored and bridged dead level
 # instead of dipped into.
-scoreboard players set #DOWNCLAMP ir 20
+scoreboard players set .DOWNCLAMP ir 20
 
 
 # --- Performance / world generation ----------------------------------------
 
 # How far ahead of the (hidden) pace cart the RAILS are kept built. The
-# viewer rides #CAMAHEAD ahead of that cart, so the visible track ahead of
-# them is roughly #AHEAD - #CAMAHEAD. Keep this comfortably above #CAMAHEAD,
+# viewer rides .CAMAHEAD ahead of that cart, so the visible track ahead of
+# them is roughly .AHEAD - .CAMAHEAD. Keep this comfortably above .CAMAHEAD,
 # and below ~250 (the rolling forceload releases chunks 256 behind the build
 # head -- the pace cart must never fall into that zone).
-scoreboard players set #AHEAD ir 224
+scoreboard players set .AHEAD ir 224
 
 # How far ahead of the track head (in blocks) terrain is force-GENERATED, so the
-# world exists before the rails reach it. Separate from #AHEAD: rails are built
-# #AHEAD ahead of the cart, and chunks are generated #GENAHEAD ahead of the rail
-# head -- so terrain exists roughly #AHEAD + #GENAHEAD blocks ahead of the cart.
+# world exists before the rails reach it. Separate from .AHEAD: rails are built
+# .AHEAD ahead of the cart, and chunks are generated .GENAHEAD ahead of the rail
+# head -- so terrain exists roughly .AHEAD + .GENAHEAD blocks ahead of the cart.
 # Bigger = more generation time (fewer flat "not generated yet" spots if the
 # ride outruns world-gen) at the cost of more loaded chunks. Keep it above ~64
 # (the heightmap scanner samples 48 blocks past the head).
-scoreboard players set #GENAHEAD ir 192
+scoreboard players set .GENAHEAD ir 192
 
 # Maximum track columns built per game tick. Higher = better catch-up if the
 # server hitches, at the cost of more work per tick.
-scoreboard players set #MAXTICK ir 15
+scoreboard players set .MAXTICK ir 15
 
 
 # --- Ride modes (see the mode_* functions) -----------------------------------
 # The modes themselves are toggled with chat commands, not here:
-#   /function infinite_rail:mode_rain_on      permanent rain          (_off)
-#   /function infinite_rail:mode_night_on     frozen midnight         (_off)
-#   /function infinite_rail:mode_torches_on   torch-scattered track   (_off)
-#   /function infinite_rail:mode_sky_on       high-altitude cruise    (_off)
-#   /function infinite_rail:modes             show what is currently on
+# (spell the path infinite_rail:<name> on Java, infinite_rail/<name> on Bedrock)
+#   mode_rain_on      permanent rain          (_off)
+#   mode_night_on     frozen midnight         (_off)
+#   mode_torches_on   torch-scattered track   (_off)
+#   mode_sky_on       high-altitude cruise    (_off)
+#   modes             show what is currently on
 # They are STATE, not settings -- independent switches that stack freely
 # (night + torches is the lantern ride, night + rain the storm ride), stick
 # across /reload, ride restarts and rejoins, and never get reset by this
@@ -248,21 +251,21 @@ scoreboard players set #MAXTICK ir 15
 # default rides just above the cloud layer (Y 192). Terrain taller than this
 # is punched through like any rise the rail cannot climb over -- raise it
 # toward ~260 to clear even the tallest jagged peaks (build limit 320).
-scoreboard players set #SKYY ir 180
+scoreboard players set .SKYY ir 180
 
 # Sky mode: cruising speed (blocks/second) while the mode is on. There is
 # nothing nearby to look at up there, so it defaults to ocean pace. Applied
 # when the mode is toggled on (and at ride start if the mode was left on);
-# mode_sky_off restores #MAXSPEED. The ocean speed-up is paused while sky
+# mode_sky_off restores .MAXSPEED. The ocean speed-up is paused while sky
 # mode owns the speed.
-scoreboard players set #SKYSPEED ir 18
+scoreboard players set .SKYSPEED ir 18
 
 # Torch mode: the percent chance (0-100) that each newly built column plants
-# a torch somewhere beside the track (#TORCHRANGE below controls how far
+# a torch somewhere beside the track (.TORCHRANGE below controls how far
 # out). 10 = on average about one torch per 10 blocks of line. Torches are
 # only placed where one can actually stand (never on water, ice or snow
 # layers), and only on NEW track built while the mode is on.
-scoreboard players set #TORCHODDS ir 35
+scoreboard players set .TORCHODDS ir 35
 
 # Torch mode: how far (in blocks) a torch may land from the track's
 # centerline. Each torch rolls a random distance from 2 up to this, on a
@@ -270,7 +273,7 @@ scoreboard players set #TORCHODDS ir 35
 # values above 8 automatically widen the rolling forceload corridor so the
 # whole torch band stays loaded and generated (a few more chunks in memory
 # while torch mode is on); both editions cap the effective value at 48.
-scoreboard players set #TORCHRANGE ir 32
+scoreboard players set .TORCHRANGE ir 32
 
 
 # --- Debugging --------------------------------------------------------------
@@ -285,4 +288,4 @@ scoreboard players set #TORCHRANGE ir 32
 # minecartMaxSpeed / max_minecart_speed gamerule). If debug shows the speed
 # being set but the cart never gets faster, recreate the world with that
 # experiment/feature turned on.
-scoreboard players set #DEBUGMODE ir 0
+scoreboard players set .DEBUGMODE ir 0

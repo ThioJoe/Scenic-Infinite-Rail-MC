@@ -19,16 +19,20 @@
 //                                                   depends on the RP, so
 //                                                   activating one pulls both)
 //
-//  Shared .mcfunction files must parse on BOTH engines, so this script:
-//    1. lints them against a strict dual-dialect subset (scoreboard math,
-//       execute-if-score, and function calls only), and
-//    2. rewrites two mechanical dialect differences for the Bedrock copy --
-//       the entire per-edition delta:
-//         - "function infinite_rail:name" -> "function infinite_rail/name"
-//           (Bedrock functions are addressed by folder path, not namespace)
-//         - "#NAME" fake players -> ".NAME" (the '#' score-holder prefix is a
-//           Java convention; '.' is the prefix proven safe on Bedrock's
-//           command parser -- see BUILDING.md)
+//  Shared .mcfunction files must parse on BOTH engines, so this script lints
+//  them against a strict dual-dialect subset (scoreboard math on '.NAME' fake
+//  players, execute-if-score, and bare-name "function ir_*" bridge calls only)
+//  and then injects them into both packs VERBATIM -- byte-identical copies, so
+//  the shared sources can also be symlinked straight into a dev world.
+//  The two engine-specific spellings that used to be rewritten here are gone
+//  from the shared files by construction:
+//    - score holders use the '.' prefix in BOTH editions ('.' parses on
+//      Bedrock, where Java's '#' convention does not -- see BUILDING.md);
+//    - shared-to-shared calls go through bare names ("function ir_end_event"),
+//      resolved per edition by one-line trampolines: Java's minecraft-
+//      namespace bridges (src/java/data/minecraft/function/ir_*.mcfunction)
+//      and Bedrock's functions-root bridges (src/bedrock/bp/functions/
+//      ir_*.mcfunction).
 //
 //  Zero dependencies: the .zip/.mcpack writer below uses only node:zlib.
 //  Usage: node tools/build.mjs [--check]   (--check = lint/validate only)
@@ -82,6 +86,9 @@ const FORBIDDEN_ANYWHERE = [
   ['storage', 'command storage is Java-only'],
   ['@', 'selectors are not dialect-safe (positioning/NBT rules differ)'],
   ['~', 'coordinates imply engine-specific positioning'],
+  [':', 'namespaced ids are engine-specific (Java ":" vs Bedrock "/") -- call a bare-name ir_* bridge'],
+  ['/', 'function folder paths are Bedrock-only -- call a bare-name ir_* bridge'],
+  ['#', "the '#' score-holder prefix is Java-only -- use '.' fake players"],
 ];
 
 function lintSharedLine(file, lineNo, raw) {
@@ -102,8 +109,13 @@ function checkCommand(file, lineNo, cmd) {
     return;
   }
   if (head === 'function') {
-    if (!/^function infinite_rail:[a-z0-9_]+$/.test(cmd)) {
-      fail(`${file}:${lineNo}: shared function calls must be plain "function infinite_rail:<name>" (no macro args)`);
+    // Bare names are the one function-call spelling both engines accept:
+    // Java resolves them in the minecraft namespace, Bedrock from the
+    // functions/ root -- each edition supplies a one-line ir_* trampoline
+    // there that hops into the real shared file. (Assembled-pack validation
+    // below checks every bridge actually exists on both sides.)
+    if (!/^function ir_[a-z0-9_]+$/.test(cmd)) {
+      fail(`${file}:${lineNo}: shared function calls must be bare bridge names ("function ir_<name>", no namespace/path/macro args)`);
     }
     return;
   }
@@ -163,12 +175,9 @@ if (!CHECK_ONLY) {
   writeFileSync(join(keepDir, 'keep.json'),
     `${JSON.stringify({ values: javaKeepTagValues() }, null, 2)}\n`);
 
-  // Bedrock: copy the edition tree, then inject the shared functions with the
-  // two mechanical dialect rewrites (namespace colon -> folder slash; '#'
-  // score-holder prefix -> '.'). Comment lines get the same score-holder
-  // rewrite on their TEXT (the leading comment marker is preserved), so the
-  // shipped Bedrock copies document Bedrock syntax -- a user reading the
-  // Bedrock config sees ".HOVER", not the Java-only "#HOVER".
+  // Bedrock: copy the edition tree, then drop the shared functions in
+  // verbatim too -- the shared dialect (lint above) is byte-identical on both
+  // engines, so the Bedrock copies are the same files Java ships.
   cpSync(SRC_BEDROCK_BP, BEDROCK_OUT, { recursive: true });
   cpSync(SRC_BEDROCK_RP, BEDROCK_RP_OUT, { recursive: true });
   // Bedrock gets the same vegetation source as a script module: main.js
@@ -177,18 +186,8 @@ if (!CHECK_ONLY) {
   cpSync(join(ROOT, 'src', 'shared', 'vegetation.js'),
     join(BEDROCK_OUT, 'scripts', 'vegetation.js'));
   mkdirSync(join(BEDROCK_OUT, 'functions', 'infinite_rail'), { recursive: true });
-  const dotify = (s) => s.replaceAll(/(^|\s)#(?=[A-Za-z0-9_])/g, '$1.');
   for (const [f, content] of shared) {
-    const rewritten = content
-      .split('\n')
-      .map((line) => {
-        const hash = line.trimStart().startsWith('#') ? line.indexOf('#') : -1;
-        if (hash >= 0) return line.slice(0, hash + 1) + dotify(line.slice(hash + 1));
-        return dotify(line);
-      })
-      .join('\n')
-      .replaceAll(/function infinite_rail:([a-z0-9_]+)/g, 'function infinite_rail/$1');
-    writeFileSync(join(BEDROCK_OUT, 'functions', 'infinite_rail', f), rewritten);
+    writeFileSync(join(BEDROCK_OUT, 'functions', 'infinite_rail', f), content);
   }
 }
 
@@ -215,15 +214,20 @@ function validatePack(root, edition) {
     ? join(root, 'data', 'infinite_rail', 'function')
     : join(root, 'functions');
   const overlayFnDir = join(root, 'overlay_snake', 'data', 'infinite_rail', 'function');
+  // Java resolves a bare (namespace-less) function name in the minecraft
+  // namespace -- where the ir_* bridge trampolines the shared files call live.
+  const mcFnDir = join(root, 'data', 'minecraft', 'function');
   const existsFn = (name) => {
     if (edition === 'java') {
-      return existsSync(join(fnDir, `${name}.mcfunction`)) ||
-        existsSync(join(overlayFnDir, `${name}.mcfunction`));
+      if (!name.includes(':')) return existsSync(join(mcFnDir, `${name}.mcfunction`));
+      const local = name.split(':')[1];
+      return existsSync(join(fnDir, `${local}.mcfunction`)) ||
+        existsSync(join(overlayFnDir, `${local}.mcfunction`));
     }
     return existsSync(join(fnDir, ...`${name}.mcfunction`.split('/')));
   };
   const refRe = edition === 'java'
-    ? /(?:^|run )function infinite_rail:([a-z0-9_]+)/gm
+    ? /(?:^|run )function ((?:infinite_rail:)?[a-z0-9_]+)/gm
     : /(?:^|run )function ([a-z0-9_/]+)/gm;
 
   for (const file of walk(root)) {
@@ -235,7 +239,7 @@ function validatePack(root, edition) {
       const tag = JSON.parse(readFileSync(file, 'utf8'));
       for (const v of tag.values ?? []) {
         const m = edition === 'java'
-          ? /^infinite_rail:([a-z0-9_/]+)$/.exec(v)
+          ? /^(infinite_rail:[a-z0-9_/]+)$/.exec(v)
           : /^([a-z0-9_/]+)$/.exec(v);
         if (m && !existsFn(m[1])) {
           fail(`${relative(ROOT, file)}: tag references missing function "${m[1]}"`);
