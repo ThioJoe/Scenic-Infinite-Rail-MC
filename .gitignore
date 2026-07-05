@@ -1,6 +1,12 @@
-*.lnk
 # Build output (assembled packs + release archives); rebuild with: node tools/build.mjs
 dist/
+dist_links/
+
+# Shortcuts
+*.lnk
+
+# Other / Misc
 prompt.txt
+Make_Symlinks-Signed.ps1
 
 
