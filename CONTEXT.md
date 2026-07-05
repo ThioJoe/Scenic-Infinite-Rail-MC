@@ -123,6 +123,10 @@ A single `dummy` objective named `ir` holds every variable. All are on `.`-named
 | `.SLOPECLEAR`| How many columns just **before and after** every slope get their full-height center clear even through vegetation (§7i) — the camera floats above the rail line around slopes. Vertical only; the cells left/right of the track always spare plants. Keep ≥ the camera's lift-off run (~`.CAMBLEND/2 + .CAMLIFT/10 + 2`) and ≤ `.SAMEGAP`. 0 = only the slope columns themselves. |
 | `.UPCLAMP`   | Max a single heightmap sample may pull the rolling average **up** per column. Larger values make approaching mountains raise the target sooner (earlier, gentler climbs). |
 | `.DOWNCLAMP` | Max a single heightmap sample may pull the rolling average **down** per column. Smaller values mean ravines and canyons are ignored and bridged dead level instead of dipped into. |
+| `.UPLOOK`    | Climb-side ground-contact scan reach (blocks ahead of the head — §7j): within it, a climb may start while `.diff` is still inside the deadband (≥ 1) if the level line would physically plow into terrain, and a climb in progress keeps climbing over ground still poking above the rail. `0` = climb timing is ruled by the average alone. |
+| `.UPGRACE`   | How many blocks **above** the average-derived `.target` a climb may overshoot to clear ground the `.UPLOOK` scan still sees above the rail (crest completion — wide hilltops are ridden over instead of tunneled just under the summit; narrow ridges above this budget still get punched). `0` = climbs stop exactly at the target. |
+| `.DOWNLOOK`  | Descent-side ground scan reach (blocks — §7j): a descent neither starts nor continues into ground within this range — it holds level to the drop-off and glides down in open air past it. Doubles as the dig tolerance: high ground *shorter* than this is still notched through when lower ground lies just beyond. `0` = descent timing is ruled by the average alone. |
+| `.DOWNGRACE` | The grace height: clearance a descent keeps above the **lowest** `.DOWNLOOK`-scanned surface when it bottoms out — it lands high, and if the terrain keeps dropping it descends again ≥ `.SAMEGAP` later instead of trenching in and climbing back out. Keep it `< .HOVER` (or descents stop short of their target even on flat ground). |
 | `.AHEAD`     | How far (blocks) ahead of the **cart** the rails are kept built (Java: keep < ~250; Bedrock: useful up to ~270, the single-scout ceiling). |
 | `.GENAHEAD`  | **Java only**; how far (blocks) ahead of the **rail head** terrain is force-generated (keep >= ~64). |
 | `.MAXTICK`   | Max columns built per game tick (catch-up budget). |
@@ -164,6 +168,11 @@ A single `dummy` objective named `ir` holds every variable. All are on `.`-named
 | `.lo`,`.hi` | Per-column clamp bounds `.avg−.DOWNCLAMP` / `.avg+.UPCLAMP`. |
 | `.target`   | Desired rail Y this column = `.avg + .HOVER`. |
 | `.diff`     | `.target − .railY` (how far the rail is from where it wants to be). |
+| `.gmin`,`.gmax` | The near-ground scan's outputs (§7j), set natively per column before `decide`: the lowest / highest terrain surface within `.DOWNLOOK` / `.UPLOOK` blocks ahead of the head. `−10000` = no data (fails every guard open — plain event behavior). |
+| `.dig`,`.dig2` | Computed by `decide` from `.gmin`: one more down-step (resp. **two**) would land the rail below the grace floor (`.gmin + .DOWNGRACE`). `.dig` ends a descent in progress; `.dig2` vetoes a descent start. |
+| `.push`     | Computed by `decide` from `.gmax`: ground within `.UPLOOK` still pokes above the rail and the rail may still overshoot (`.railY < .target + .UPGRACE`) — a climb in progress keeps climbing. |
+| `.glim`,`.glift`,`.rnext` | Guard scratch in `decide`: the grace floor, the overshoot ceiling, and the candidate next rail Y. |
+| `.nw`,`.nk`,`.gnd` | Java `near_scan`/`near_step` state: the scan reach (`max(.UPLOOK, .DOWNLOOK)`, capped 48), the walking offset, and the count of valid `.gmin` samples (0 → sentinel fallback). |
 | `.ndead`    | `−.DEADBAND` (temp, the negative threshold for descending). |
 | `.slope`    | Direction of the **event in progress**: `-1` descending, `0` flat, `1` climbing. Persists across columns. |
 | `.slope0`   | Snapshot of `.slope` taken at the top of `decide` (so mid-function mutations don't confuse the branch logic). |
@@ -278,6 +287,8 @@ Every game tick (while .started == 1)
 advance (per column)
    1. sample_window ─► .avg (rolling average of the next 48 blocks' surface)
    2. .target = .avg + .HOVER
+   2b. near_scan ─► .gmin/.gmax (the actual ground just ahead — the
+       slope-timing guards' inputs, §7j)
    3. decide ─► .dir (-1/0/1)  [event model; may call consider_start]
       (decide also sets .veg, this column's carve mode — §7i)
    3b. if .retro (a slope just started): retro_clear the center bore behind the head
@@ -379,6 +390,7 @@ Computes `.gap = .headX − .cartX`. If there is budget left **and** the head is
 Builds **one** column (see §7 for the algorithms it drives):
 1. Zero `.sum`, run `sample_window` at the head, compute `.avg = .sum / .C12`.
 2. `.target = .avg + .HOVER`.
+2b. Run `near_scan` at the head → `.gmin`/`.gmax` (the ground-contact inputs for decide's slope-timing guards, §7j).
 3. `decide` → sets `.dir` (-1/0/1) and `.veg` (this column's carve mode, §7i).
 3b. If `.retro` (a slope just started): retro_clear the center bore behind the head
 4. Move the head and place the column, per `.dir`:
@@ -395,14 +407,18 @@ Builds **one** column (see §7 for the algorithms it drives):
 **`function/sample_window.mcfunction`**
 Runs positioned at the head. Computes the clamp window `.lo = .avg − .DOWNCLAMP`, `.hi = .avg + .UPCLAMP` (using the previous column's `.avg`). Then, for each of **12** offsets `~4, ~8, … ~48` blocks east: teleport `ir_probe` there and `positioned over motion_blocking_no_leaves` (snaps it to the surface — ignores tree leaves, includes water/lava surfaces so oceans read as sea level); read its Y into `.s`; discard void/ungenerated reads (`.s ≤ −63 → .s = .avg`); clamp `.s` to `[.lo, .hi]`; add to `.sum`. `advance` then divides `.sum` by `.C12` to get the new `.avg`. **The clamp is what makes narrow ravines/spikes barely move the average** (so they get bridged/tunneled level) while broad mountains still shift it. *(This is the one function whose exact number of sample blocks is fixed — `.C12` must equal the count here.)*
 
+**`function/near_scan.mcfunction`** / **`function/near_step.mcfunction`** *(recursive)*
+The near-ground scan (§7j), run at the head between the sample window and `decide`. `near_scan` computes the scan reach `.nw = max(.UPLOOK, .DOWNLOOK)` (capped 48), seeds the accumulators, and — if the reach is ≥ 1 — starts `near_step` positioned one block east. Each `near_step` snaps the `ir_probe` marker onto the surface (the same `positioned over motion_blocking_no_leaves` trick as `sample_window`), folds the read into `.gmin` (min, while the offset is within `.DOWNLOOK`) and `.gmax` (max, within `.UPLOOK`), then hops 2 blocks east and recurses — so the probes land at odd offsets `~1, ~3, ~5, …`. Void/ungenerated reads are skipped; if no valid `.gmin` sample was seen (counted in `.gnd`), `.gmin` falls back to the `−10000` sentinel that fails every guard open. Both windows 0 = the scan does nothing but set the sentinels.
+
 **`function/decide.mcfunction`**
-Chooses this column's `.dir` using the **event model** (§7b). Computes `.diff = .target − .railY` and snapshots `.slope0 = .slope`.
-- If an event is in progress (`.slope0 = ±1`): keep sloping the same way until the rail reaches the target — climb while `.diff ≥ 1`, descend while `.diff ≤ −1`; otherwise call `end_event` (the event is complete; this column is flat).
+Chooses this column's `.dir` using the **event model** (§7b). Computes `.diff = .target − .railY`, snapshots `.slope0 = .slope`, and derives the three ground-contact guard flags from the near scan (§7j): `.dig` / `.dig2` (one / two more down-steps would land the rail below the grace floor `.gmin + .DOWNGRACE`) and `.push` (ground within `.UPLOOK` still pokes above the rail and the rail is still under `.target + .UPGRACE`). All three stay 0 while `.SKYMODE` is 1 (sky mode holds `.SKYY` dead level and punches through whatever it meets) or while their scan window knob is 0.
+- If an event is in progress (`.slope0 = ±1`): keep sloping the same way until the rail reaches the target — climb while `.diff ≥ 1` **or `.push` is 1** (crest completion: finish over ground the level line would still hit, up to `.UPGRACE` past the target), descend while `.diff ≤ −1` **and `.dig` is 0** (grace landing: stop above ground the next step would dip into); otherwise call `end_event` (the event is complete; this column is flat).
 - If flat (`.slope0 = 0`): call `consider_start` to maybe begin a new event.
 
 **`function/consider_start.mcfunction`**
 Decides, when flat, whether to begin a climb/descent:
 - `.want = 1` if `.diff ≥ .DEADBAND`; `.want = −1` if `.diff ≤ −.DEADBAND` (via `.ndead = −.DEADBAND`); else `0`.
+- **Ground-contact overrides (§7j):** a climb is also wanted inside the deadband (`.want 0 → 1`) when `.diff ≥ 1` and `.gmax > .railY` — the level line is about to plow into rising terrain, so climb now instead of tunneling in and climbing late. A wanted descent is vetoed (`.want −1 → 0`) while `.dig2` is 1 — never start a descent that would trench; hold level and let the ground fall away first.
 - If `.want = 0`: stay flat, `.flat += 1` (count toward the next gap).
 - If `.want ≠ 0`: pick `.need = .SAMEGAP` (if `.want == .lastDir`) or `.TURNGAP` (reversal). If `.flat ≥ .need`, call `start_event`; otherwise **hold level** (`.flat += 1`, guarded by `.slope == 0`). Holding is what produces bridges (the ground drops away under a level rail) and tunnels (the ground rises into it).
 
@@ -536,7 +552,7 @@ The click dispatcher, run from `tick` every tick (ride or no ride, so a click ca
 Per column, `sample_window` reads the surface Y at 12 points spread over the next 48 blocks and averages them into `.avg`. Two safeguards: void/ungenerated reads (`≤ −63`) are replaced by the previous average, and each sample is **clamped to `±.DOWNCLAMP / +.UPCLAMP` around the previous average**. The clamp is the "smoothing" dial: small values make the line ignore sudden dips/spikes (they get bridged/tunneled level); large values make it hug the terrain closely.
 
 ### 7b. The event model (slope shaping)
-The target elevation is `.avg + .HOVER`. Rather than nudging one block at a time, the rail moves in **events**: once it decides to climb or descend, it does so as a single unbroken 45° run (`.slope` persists; `decide` keeps `.dir` nonzero) until `.railY` reaches the target — never "up, flat, up, flat." Between events the rail is flat, and two spacing gaps govern when a new event may start: `.SAMEGAP` (repeat the same direction) and `.TURNGAP` (reverse). `.DEADBAND` adds hysteresis so terrain noise below that height difference is ignored. When a change is *wanted* but a gap forbids it, the rail **holds level** — which is exactly what turns into a **bridge** (ground falls away) or a **tunnel** (ground rises into the carve). So bridges and tunnels are not special cases; they emerge from "hold the line until the gap allows a change."
+The target elevation is `.avg + .HOVER`. Rather than nudging one block at a time, the rail moves in **events**: once it decides to climb or descend, it does so as a single unbroken 45° run (`.slope` persists; `decide` keeps `.dir` nonzero) until `.railY` reaches the target — never "up, flat, up, flat." Between events the rail is flat, and two spacing gaps govern when a new event may start: `.SAMEGAP` (repeat the same direction) and `.TURNGAP` (reverse). `.DEADBAND` adds hysteresis so terrain noise below that height difference is ignored. When a change is *wanted* but a gap forbids it, the rail **holds level** — which is exactly what turns into a **bridge** (ground falls away) or a **tunnel** (ground rises into the carve). So bridges and tunnels are not special cases; they emerge from "hold the line until the gap allows a change." On top of this, the **ground-contact guards** (§7j) re-time and re-bound events against the actual surface just ahead — always *within* the gap rules, never around them.
 
 ### 7c. Column geometry (how slopes map to blocks)
 `advance` moves the head and picks the place function by `.dir`:
@@ -580,13 +596,28 @@ The **what-is-vegetation list is per edition**: Java's is the `#infinite_rail:ke
 
 Two deliberate consequences: a tree trunk dead on the centerline keeps its crown (the envelope punches a 2-block gap through it, plus the light cell at rail+3), and spared leaves with no log left in range decay naturally — that's vanilla behavior, not a bug.
 
+### 7j. Ground-hugging slope timing (the near scan)
+
+The rolling average (§7a) is good at deciding **where** the line wants to be, but bad at deciding **when** to move: it is a 48-block forward *mean*, so it lags and dilutes around edges. Left alone, that produces three signature uglinesses — the line starts a descent while still crossing high ground (trenching down through a mountain's tail to get a head start on the valley beyond), it descends a level or two *into* a valley floor it is about to leave anyway (dip, cruise in a trench, then descend again), and it ends climbs at the crest-diluted average, tunneling right under hilltops.
+
+The fix is a second, much shorter terrain read: the **near scan**. Each edition natively probes the surface every 2 blocks over the next `max(.UPLOOK, .DOWNLOOK)` blocks (odd offsets +1, +3, …; Java: the `near_scan`/`near_step` probe recursion; Bedrock: `nearScan()` over the memoized `surfaceY()` reads — effectively free there) and boils it down to two integers handed to the shared brain beside `.target`/`.railY`: **`.gmin`** (lowest surface within `.DOWNLOOK`) and **`.gmax`** (highest surface within `.UPLOOK`). From them the shared `decide`/`consider_start` apply four rules:
+
+- **Descend late** (start veto, `.dig2`): a descent may not *start* unless there is room for at least two down-steps above the **grace floor** — `.gmin + .DOWNGRACE`. Wanting to descend while the ground under the next few blocks is still high just holds the level (counting `.flat` like any hold); the descent then begins at the drop-off and glides down in open air. The two-step minimum also means a descent can never begin as a single-column notch.
+- **Grace landing** (continue guard, `.dig`): a descent in progress ends **early** when one more step would dip below the grace floor. It lands high; if the terrain keeps dropping, the *next* descent event starts ≥ `.SAMEGAP` later — "wait instead of digging in." Because `.gmin` is a *minimum over the window*, high ground **shorter** than `.DOWNLOOK` does not stop a descent: a short notch through a basin's rim on the way to lower ground is deliberate (and cheap) — `.DOWNLOOK` *is* the dig tolerance.
+- **Climb early** (deadband override): when the level line would physically plow into terrain within `.UPLOOK` (`.gmax > .railY`) and the average agrees the ground is rising (`.diff ≥ 1`), the climb is wanted even though `.diff` is still inside `.DEADBAND`. The spacing gaps still have the final say.
+- **Crest completion** (`.push`): a climb in progress keeps climbing past its target while `.gmax` still pokes above the rail, up to `.UPGRACE` blocks above the target. Wide hilltops (whose beyond-crest downslope dilutes the average below the summit) get ridden *over* instead of tunneled just under; anything taller than the `.UPGRACE` budget still gets punched, so narrow rock fins don't turn into bobbing.
+
+Priorities and safety: the gaps always win (`.SAMEGAP`/`.TURNGAP` gate every start exactly as before — the guards only *veto*, *re-time*, or *bound* events, never add them closer together); sky mode bypasses all four rules (it holds `.SKYY` dead level and punches through, as documented); and the `−10000` no-data sentinel plus per-probe void discards mean ungenerated terrain simply fails the guards open, reverting to plain event behavior. Setting `.UPLOOK`/`.DOWNLOOK` to 0 disables each side wholesale; `.UPGRACE 0` disables only the overshoot.
+
+`tools/simulate.mjs` locks the behavior in: it feeds the same near-scan values to both editions' emitted brains, asserts no descent column ever lands below the grace floor and no descent starts without two-step room, allows climb starts inside the deadband only with logged ground contact, and runs two purpose-built terrains — `mesa` (the line must cross a high tabletop level and descend only at the drop-off, where it used to trench down through the last ~45 columns of the top) and `ridge` (a narrow ridge diluted to `.diff = 1`, reachable only through the early-climb + crest-push path).
+
 ---
 
 ## 8. Tuning
 
 All knobs live in `config.mcfunction` (see the table in §4.1). **To apply edits: change the value, then run `/reload`** (or rejoin the world) — the game re-reads the file and re-runs `config`, updating a ride already in progress. To experiment without editing the file, set a score live, e.g. `/scoreboard players set .HOVER ir 8` (takes effect on the next column; wiped on the next `/reload`/rejoin). Running `/function infinite_rail:config` by itself does **not** pick up file edits — it re-runs the copy already in memory.
 
-Current defaults in `config.mcfunction`: `.HOVER 2`, `.TUNNEL 6`, `.CAMHEIGHT 0`, `.CAMBLEND 6`, `.CAMSMOOTH 6`, `.CAMLIFT 20`, `.CAMAHEAD 64`, `.CAMMODE 0`, `.CARTYOFF 12`, `.HIDEHAND 1`, `.AUTOSTART 1`, `.MAXSPEED 8`, `.OCEANSPEED 32`, `.OCEANCHUNKS 6`, `.LANDCHUNKS 3`, `.DEADBAND 2`, `.SAMEGAP 40`, `.TURNGAP 40`, `.SLOPECLEAR 8`, `.UPCLAMP 250`, `.DOWNCLAMP 20`, `.AHEAD 224`, `.GENAHEAD 192`, `.MAXTICK 15`, `.DEBUGMODE 0`, `.SKYY 180`, `.SKYSPEED 18`, `.TORCHODDS 35`, `.TORCHRANGE 32`. (These are tuned to taste and change often; the algorithm works across a wide range. The gaps and deadband are far lower than the pre-camera 50/50/4 because the profile-driven camera erases slope corners entirely, so frequent small elevation changes are now visually free. `.AHEAD` includes the `.CAMAHEAD` offset — the viewer sees roughly `.AHEAD − .CAMAHEAD` blocks of ready track ahead.)
+Current defaults in `config.mcfunction`: `.HOVER 2`, `.TUNNEL 6`, `.CAMHEIGHT 0`, `.CAMBLEND 6`, `.CAMSMOOTH 6`, `.CAMLIFT 20`, `.CAMAHEAD 64`, `.CAMMODE 0`, `.CARTYOFF 12`, `.HIDEHAND 1`, `.AUTOSTART 1`, `.MAXSPEED 8`, `.OCEANSPEED 32`, `.OCEANCHUNKS 6`, `.LANDCHUNKS 3`, `.DEADBAND 2`, `.SAMEGAP 40`, `.TURNGAP 40`, `.SLOPECLEAR 8`, `.UPCLAMP 250`, `.DOWNCLAMP 20`, `.UPLOOK 12`, `.UPGRACE 4`, `.DOWNLOOK 8`, `.DOWNGRACE 1`, `.AHEAD 224`, `.GENAHEAD 192`, `.MAXTICK 15`, `.DEBUGMODE 0`, `.SKYY 180`, `.SKYSPEED 18`, `.TORCHODDS 35`, `.TORCHRANGE 32`. (These are tuned to taste and change often; the algorithm works across a wide range. The gaps and deadband are far lower than the pre-camera 50/50/4 because the profile-driven camera erases slope corners entirely, so frequent small elevation changes are now visually free. `.AHEAD` includes the `.CAMAHEAD` offset — the viewer sees roughly `.AHEAD − .CAMAHEAD` blocks of ready track ahead.)
 
 ---
 
@@ -618,6 +649,7 @@ Current defaults in `config.mcfunction`: `.HOVER 2`, `.TUNNEL 6`, `.CAMHEIGHT 0`
                         ├─ modes_init   (seed the mode toggles, add-0)
                         └─ names   (version-selected by overlay: gamerule names → storage)
 #minecraft:tick ─ tick ─┬─ main ─┬─ build_loop ⇄ build_step ─ advance ─┬─ sample_window
+                        │        │                                     ├─ near_scan ⇄ near_step   (.gmin/.gmax for decide's guards — §7j)
                         │        │                                     ├─ decide ─ consider_start ─ start_event
                         │        │                                     │                 └─ (decide also calls) end_event   (shared-to-shared calls hop through the bare-name ir_* bridges)
                         │        │                                     ├─ (if .retro) retro_clear ─ retro_fill (macro)
@@ -654,7 +686,7 @@ The repository is a monorepo: `src/shared/functions/` + `src/java/` build the Ja
 
 ### 11a. The logic boundary: what is shared and what is native
 
-**Shared (identical `.mcfunction` source, both editions):** the event-model brain — `decide`, `consider_start`, `start_event`, `end_event` — plus `config` and `modes_init` (the ride-mode toggle seeding, §6.9). These are pure scoreboard math on the `ir` objective. Each engine boils its world down to two integers per column (`.target`, `.railY`), calls `decide`, and reads back one integer (`.dir`). All event state (`.slope`, `.flat`, `.lastDir`, the gap rules, the deadband) lives *only* inside the shared files, so the slope-shaping behavior of the two editions cannot drift apart. `tools/simulate.mjs` enforces this in CI by interpreting both emitted copies over synthetic terrains and failing if their decisions ever differ.
+**Shared (identical `.mcfunction` source, both editions):** the event-model brain — `decide`, `consider_start`, `start_event`, `end_event` — plus `config` and `modes_init` (the ride-mode toggle seeding, §6.9). These are pure scoreboard math on the `ir` objective. Each engine boils its world down to four integers per column (`.target`, `.railY`, and the near-ground scan's `.gmin`/`.gmax` — §7j), calls `decide`, and reads back one integer (`.dir`). All event state (`.slope`, `.flat`, `.lastDir`, the gap rules, the deadband, the ground-contact guards) lives *only* inside the shared files, so the slope-shaping behavior of the two editions cannot drift apart. `tools/simulate.mjs` enforces this in CI by interpreting both emitted copies over synthetic terrains and failing if their decisions ever differ.
 
 The carve-mode logic rides along in the same shared files: `decide` computes `.veg` (may this column spare vegetation? — §7i), `end_event` arms the `.vclear` after-slope buffer, and `start_event` raises `.retro` (the before-slope retro-clear request), so the two editions cannot disagree about *which* columns clear what. The list of *what counts as vegetation*, by contrast, is **per edition by design**: Java's `#infinite_rail:keep` block tag (`src/java/.../tags/block/keep.json`) and Bedrock's `scripts/vegetation.js` module are independent hand-maintained files — Java tests cells against the tag in commands, Bedrock calls `isVegetation()` in script, and since the editions' block ids and grouping mechanisms differ anyway (vanilla group tags vs typeId fragment matching), each file spells the shared *policy* in its own edition's terms. Keep the pair in sync when changing what the carve spares; the build fails if either file is missing from its pack.
 
@@ -665,6 +697,7 @@ The shared files are **byte-identical on both engines** — the build injects th
 | Job | Java mechanism (kept) | Bedrock mechanism (replaces it) |
 | --- | --- | --- |
 | Heightmap sampling | `ir_probe` marker + `execute positioned over motion_blocking_no_leaves` | `dimension.getTopmostBlock()` + a short walk down past leaves/foliage + a climb back up any liquid column — Bedrock's topmost-block probe **skips liquids**, so an ocean read lands on the sea *floor*; the climb restores Java's liquids-count-as-surface semantics, so oceans read as sea level and get bridged instead of dived into. Reads are memoized per column (the sliding window re-samples each X twelve times) |
+| Near-ground scan (slope timing, §7j) | `near_scan`/`near_step` — a probe recursion at odd offsets +1, +3, … folding surface reads into `.gmin`/`.gmax` with scoreboard min/max operations | `nearScan()` — the same odd-offset loop over the memoized `surfaceY()` reads (the 48-block window already fills the memo, so the scan costs no extra real probes) |
 | Track history | storage `infinite_rail:track y` list + `cam_get` macro (NBT paths need literal indices) | a plain JS array (`trackY`), trimmed behind the ride and persisted (below) |
 | The build loop | `build_loop` ⇄ `build_step` bounded recursion (mcfunction has no loops) | a `while` loop with the same `.budget` / `.AHEAD` conditions |
 | Camera math | fixed-point milliblock scoreboard arithmetic (`cam_follow`/`cam_blend`/`cam_scan`/`cam_sample`) | the same construction in ordinary floating point (`camFollow()` / `lifted()`) |

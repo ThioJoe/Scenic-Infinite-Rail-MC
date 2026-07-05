@@ -209,6 +209,55 @@ scoreboard players set .UPCLAMP ir 250
 scoreboard players set .DOWNCLAMP ir 20
 
 
+# --- Ground-hugging slope timing (the near-ground scan) ----------------------
+# The lookahead average above decides WHERE the rail wants to be; these four
+# knobs decide WHEN to move, by checking the actual ground surface just ahead
+# of the build head. Without them, slopes are timed purely by the average --
+# which lags/dilutes around edges, so the line tends to trench down early to
+# get off a mountain, dip a level or two into a valley floor it is about to
+# leave anyway, and tunnel right under hilltops. With them, descents wait for
+# the drop-off and land with a grace height, and climbs start/stretch to
+# clear ground the line would otherwise plow into. The .SAMEGAP / .TURNGAP
+# spacing rules always keep the final say -- these guards never place events
+# closer together than the gaps allow; they only re-time or shorten them.
+
+# How far ahead (blocks) to scan for RISING ground that the current level
+# would plow into. Within that range, a climb may begin while the height
+# difference is still under .DEADBAND (it must be at least 1, and the gap
+# rules still apply), and a climb in progress keeps climbing over ground
+# that still pokes above the rail (capped by .UPGRACE below). Bigger =
+# climbs begin, and crest obstructions, earlier. 0 = climb timing is ruled
+# by the average alone (the old behavior).
+scoreboard players set .UPLOOK ir 12
+
+# How many blocks ABOVE its average-derived target a climb may overshoot to
+# clear ground the .UPLOOK scan still sees poking above the rail. Without
+# this, a wide hilltop ends its climb at the crest-diluted average and
+# tunnels right under the summit. Bigger = hills are crested over more
+# often; smaller = ridgetops get punched through as before. 0 = climbs stop
+# exactly at the target, never overshooting.
+scoreboard players set .UPGRACE ir 4
+
+# How far ahead (blocks) to scan for the ground under a would-be descent. A
+# descent will not start (or keep going) into ground within this range -- it
+# holds its level to the drop-off and glides down in open air past it. This
+# doubles as the dig tolerance: high ground SHORTER than this is still cut
+# through when lower ground lies just beyond (a short notch through a
+# basin's rim is cheaper than staying high). 0 = descent timing is ruled by
+# the average alone (the old behavior).
+scoreboard players set .DOWNLOOK ir 8
+
+# The grace height: the clearance a descent keeps above the LOWEST surface
+# the .DOWNLOOK scan sees when it bottoms out. Instead of forcing the line
+# all the way down to the average-derived target, the descent ends early
+# once one more step would dip under this floor -- it lands high, and if the
+# terrain keeps dropping it simply descends again .SAMEGAP columns later
+# instead of ploughing a trench and climbing back out. Keep it below .HOVER
+# (or descents stop short of their target even on flat ground). 0 = the
+# rail may touch the lowest nearby surface exactly, never below it.
+scoreboard players set .DOWNGRACE ir 1
+
+
 # --- Performance / world generation ----------------------------------------
 
 # How far ahead of the (hidden) pace cart the RAILS are kept built. The

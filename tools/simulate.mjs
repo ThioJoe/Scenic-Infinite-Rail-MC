@@ -12,8 +12,11 @@
 //
 //    - the two edition copies make IDENTICAL decisions column for column
 //    - every elevation change is one contiguous 45-degree event
-//    - events only start when |target - railY| >= #DEADBAND (checked exactly)
+//    - events only start when |target - railY| >= #DEADBAND (checked exactly;
+//      a climb may also start at diff >= 1 on near-scan ground contact)
 //    - flat gaps between events respect #SAMEGAP / #TURNGAP (exact counting)
+//    - descents never step below the dig-guard's grace floor (the lowest
+//      near-scan surface + #DOWNGRACE), and never start without two-step room
 //    - on terrain that settles, the rail converges onto terrain + #HOVER
 //
 //  All knobs come from the emitted config.mcfunction itself (run through the
@@ -162,6 +165,7 @@ function inRange(v, range) {
 // Every knob is read from the emitted config.mcfunction via the interpreter.
 // ---------------------------------------------------------------------------
 const CFG_KEYS = ['HOVER', 'DEADBAND', 'SAMEGAP', 'TURNGAP', 'UPCLAMP', 'DOWNCLAMP',
+  'UPLOOK', 'UPGRACE', 'DOWNLOOK', 'DOWNGRACE',
   'CAMBLEND', 'CAMLIFT', 'CAMSMOOTH', 'CAMAHEAD', 'SLOPECLEAR'];
 
 function advance(sim, S, surface, cfg) {
@@ -176,8 +180,25 @@ function advance(sim, S, surface, cfg) {
   S.avg = Math.floor(sum / 12);
   const target = S.avg + cfg.HOVER;
 
+  // The near-ground scan (Java's near_scan/near_step, Bedrock's nearScan):
+  // surface min/max at odd offsets +1, +3, ... within .DOWNLOOK / .UPLOOK,
+  // -10000 when a window is 0 or returned no generated terrain (fail-open).
+  const w = Math.min(48, Math.max(cfg.UPLOOK, cfg.DOWNLOOK));
+  let gmin = null;
+  let gmax = null;
+  for (let off = 1; off <= w; off += 2) {
+    const s = surface(S.headX + off);
+    if (s === undefined || s <= -63) continue;
+    if (off <= cfg.DOWNLOOK && (gmin === null || s < gmin)) gmin = s;
+    if (off <= cfg.UPLOOK && (gmax === null || s > gmax)) gmax = s;
+  }
+  gmin ??= -10000;
+  gmax ??= -10000;
+
   sim.set('target', target);
   sim.set('railY', S.railY);
+  sim.set('gmin', gmin);
+  sim.set('gmax', gmax);
   sim.call('decide');
   const dir = sim.get('dir');
   // The carve-mode answers: veg (may this column spare vegetation?) and
@@ -192,7 +213,7 @@ function advance(sim, S, surface, cfg) {
   else if (dir === 1) S.railY += 1;
   S.headX += 1;
   S.track.push(S.railY);
-  return { dir, target, railYBefore, veg, retro };
+  return { dir, target, railYBefore, veg, retro, gmin, gmax };
 }
 
 function runRide(fnDirs, surface, columns) {
@@ -204,6 +225,7 @@ function runRide(fnDirs, surface, columns) {
   sim.set('lastDir', 0);
   sim.set('vclear', 0);
   sim.set('retro', 0);
+  sim.set('SKYMODE', 0); // modes_init seeds this on both engines
   const startRailY = surface(0) + cfg.HOVER;
   const S = { headX: 0, railY: startRailY, avg: surface(0), track: [startRailY] };
   const log = [];
@@ -226,6 +248,15 @@ const TERRAINS = {
   ravine: { settles: true, f: (x) => (x >= 200 && x < 210 ? 20 : 64) }, // narrow slot canyon
   rolling: { settles: false, f: (x) => 64 + Math.round(10 * Math.sin(x / 40) + 6 * Math.sin(x / 97)) },
   mountain: { settles: false, f: (x) => 64 + Math.max(0, Math.round((x - 100) / 3) % 60) },
+  // A high tabletop with a sheer drop-off: the descent dig-guard must hold the
+  // line level to the edge instead of trenching down through the tabletop
+  // early to chase the (already low) forward average. See checkMesa.
+  mesa: { settles: true, f: (x) => (x < 200 ? 64 : x < 320 ? 89 : 64) },
+  // A narrow 10-high ridge the 12-sample average dilutes to diff=1 (inside
+  // the deadband): only the early-climb ground-contact rule reacts, starting
+  // a climb below #DEADBAND and crest-pushing #UPGRACE past the target --
+  // exercises the contact-start path of the invariant checks.
+  ridge: { settles: true, f: (x) => (x >= 300 && x < 308 ? 74 : 64) },
 };
 
 function checkInvariants(name, ride, settles) {
@@ -251,12 +282,32 @@ function checkInvariants(name, ride, settles) {
 
     if (dir !== 0) {
       if (inEvent !== 0 && dir !== inEvent) fail(`${name}: direction flip inside an event at column ${i}`);
+      // The descent dig-guard: no descending column may ever land the rail
+      // below the grace floor (the lowest scanned surface + #DOWNGRACE).
+      const gminReal = cfg.DOWNLOOK >= 1 && step.gmin > -10000;
+      if (dir === -1 && gminReal && step.railYBefore - 1 < step.gmin + cfg.DOWNGRACE) {
+        fail(`${name}: descent stepped below the grace floor (rail ${step.railYBefore - 1} < ${step.gmin}+${cfg.DOWNGRACE}) at column ${i}`);
+      }
       if (inEvent === 0) {
         // event start: check the deadband and the gap the brain just approved
         const need = dir === lastDir ? cfg.SAMEGAP : cfg.TURNGAP;
         if (flats < need) fail(`${name}: event started after ${flats} flat columns (needed ${need}) at column ${i}`);
-        const diff = Math.abs(step.target - step.railYBefore);
-        if (diff < cfg.DEADBAND) fail(`${name}: event started with |target-railY|=${diff} < DEADBAND=${cfg.DEADBAND} at column ${i}`);
+        const diff = step.target - step.railYBefore;
+        if (dir === 1) {
+          // A climb may also start inside the deadband on ground contact
+          // (diff >= 1 and the near scan sees terrain above the rail).
+          const contact = cfg.UPLOOK >= 1 && diff >= 1 && step.gmax > step.railYBefore;
+          if (diff < cfg.DEADBAND && !contact) {
+            fail(`${name}: climb started with diff=${diff} < DEADBAND=${cfg.DEADBAND} and no ground contact at column ${i}`);
+          }
+        } else {
+          if (-diff < cfg.DEADBAND) fail(`${name}: descent started with diff=${diff} inside DEADBAND=${cfg.DEADBAND} at column ${i}`);
+          // Descent starts additionally need room for at least two steps
+          // above the grace floor (decide's #dig2 veto).
+          if (gminReal && step.railYBefore - 2 < step.gmin + cfg.DOWNGRACE) {
+            fail(`${name}: descent started without two-step room above the grace floor at column ${i}`);
+          }
+        }
         inEvent = dir;
         lastDir = dir;
       }
@@ -274,6 +325,25 @@ function checkInvariants(name, ride, settles) {
     const drift = Math.abs(last.target - S.railY);
     if (drift >= cfg.DEADBAND + 1) fail(`${name}: rail ended ${drift} blocks from target`);
   }
+}
+
+// The mesa's specific promise (the descent dig-guard): the line crosses the
+// whole tabletop at or above its surface and descends only at the drop-off.
+// The old average-chasing behavior started the descent ~45 columns early and
+// trenched down through the tabletop (up to ~25 blocks deep) to get a head
+// start on the valley beyond. A small notch right at the rim -- within
+// #DOWNLOOK of the edge -- is the documented dig tolerance, so the checked
+// range stops short of it.
+function checkMesa(ride) {
+  const { S, cfg } = ride;
+  if (cfg.DOWNLOOK < 1) return;
+  const top = 89; // the mesa terrain's tabletop surface
+  for (let x = 230; x <= 320 - cfg.DOWNLOOK - 2; x++) {
+    if (S.track[x] < top) {
+      return fail(`mesa: the rail trenched into the tabletop (railY ${S.track[x]} < ${top} at x=${x})`);
+    }
+  }
+  ok('mesa: rides the tabletop level and descends only at the drop-off');
 }
 
 // ---------------------------------------------------------------------------
@@ -336,6 +406,7 @@ for (const [name, { settles, f: surface }] of Object.entries(TERRAINS)) {
 
   checkInvariants(name, java, settles);
   checkCamera(name, java);
+  if (name === 'mesa') checkMesa(java);
 }
 
 // ---------------------------------------------------------------------------

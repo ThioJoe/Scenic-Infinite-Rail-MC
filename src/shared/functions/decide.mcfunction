@@ -9,6 +9,14 @@
 # target is reached. Only when flat do the spacing gaps get a say in whether a
 # new event may begin.
 #
+# Besides .target and .railY, the native side also supplies two GROUND-CONTACT
+# inputs each column -- .gmin / .gmax, the lowest / highest terrain surface
+# within .DOWNLOOK / .UPLOOK blocks ahead (each edition's near-ground scan) --
+# which time the events against the actual ground instead of only the lagging
+# average: descents hold back / land high instead of trenching in (.dig /
+# .dig2), and climbs may crest ground still poking above the rail (.push).
+# See the guard block below and CONTEXT.md section 7j.
+#
 # DIALECT NOTE: this file is shared verbatim with the Bedrock port, and
 # negative literals inside `matches` ranges are not confirmed to parse on
 # Bedrock's command engine. Every negative comparison therefore goes through
@@ -31,10 +39,52 @@ scoreboard players operation .diff ir = .target ir
 scoreboard players operation .diff ir -= .railY ir
 scoreboard players operation .slope0 ir = .slope ir
 
+# --- Ground-contact guards (fed by each edition's near-ground scan) ---
+# .gmin / .gmax arrive from the native side every column: the LOWEST and
+# HIGHEST terrain surface within .DOWNLOOK / .UPLOOK blocks ahead of the
+# head (sentinel -10000 = no data, which fails every guard open, i.e. plain
+# event behavior). The add-0 lines only create the scores at 0 if a native
+# side has never written them (e.g. the Bedrock startup self-test) so the
+# operations below always have defined operands.
+#   .dig  = one more DOWN step would land the rail below the grace floor
+#           (.gmin + .DOWNGRACE) -- an in-progress descent must stop here.
+#   .dig2 = there is not even room for TWO down steps -- a descent must not
+#           START here (never begin as a one-column notch; wait for the
+#           ground to fall away and descend past the edge in open air).
+#   .push = the level line would still plow into ground within .UPLOOK
+#           (.gmax above the rail) and the rail may still overshoot the
+#           target (below .target + .UPGRACE) -- an in-progress climb keeps
+#           climbing over the obstruction instead of ending under it.
+# Sky mode bypasses all three: it holds .SKYY dead level and punches through
+# whatever it meets. Setting a scan window to 0 disables that side entirely.
+scoreboard players add .gmin ir 0
+scoreboard players add .gmax ir 0
+scoreboard players set .dig ir 0
+scoreboard players set .dig2 ir 0
+scoreboard players set .push ir 0
+scoreboard players operation .glim ir = .gmin ir
+scoreboard players operation .glim ir += .DOWNGRACE ir
+scoreboard players operation .rnext ir = .railY ir
+scoreboard players remove .rnext ir 1
+execute unless score .SKYMODE ir matches 1 if score .DOWNLOOK ir matches 1.. if score .rnext ir < .glim ir run scoreboard players set .dig ir 1
+scoreboard players remove .rnext ir 1
+execute unless score .SKYMODE ir matches 1 if score .DOWNLOOK ir matches 1.. if score .rnext ir < .glim ir run scoreboard players set .dig2 ir 1
+scoreboard players operation .glift ir = .target ir
+scoreboard players operation .glift ir += .UPGRACE ir
+execute unless score .SKYMODE ir matches 1 if score .UPLOOK ir matches 1.. if score .gmax ir > .railY ir if score .railY ir < .glift ir run scoreboard players set .push ir 1
+
 # --- Continue an in-progress climb/descent until it reaches the target ---
+# A climb also continues past the target while ground still pokes above the
+# rail just ahead (.push): it crests the obstruction -- up to .UPGRACE above
+# the target -- instead of stopping under it and tunneling the summit.
+# A descent stops EARLY when the next step would dip below the grace floor
+# (.dig): it lands high, and if the terrain keeps dropping the next descent
+# event simply starts .SAMEGAP columns later ("wait instead of digging in").
 execute if score .slope0 ir matches 1 if score .diff ir matches 1.. run scoreboard players set .dir ir 1
-execute if score .slope0 ir matches 1 if score .diff ir matches ..0 run function ir_end_event
-execute if score .slope0 ir = .nOne ir if score .diff ir <= .nOne ir run scoreboard players operation .dir ir = .nOne ir
+execute if score .slope0 ir matches 1 if score .diff ir matches ..0 if score .push ir matches 1 run scoreboard players set .dir ir 1
+execute if score .slope0 ir matches 1 if score .diff ir matches ..0 if score .push ir matches 0 run function ir_end_event
+execute if score .slope0 ir = .nOne ir if score .diff ir <= .nOne ir if score .dig ir matches 0 run scoreboard players operation .dir ir = .nOne ir
+execute if score .slope0 ir = .nOne ir if score .diff ir <= .nOne ir if score .dig ir matches 1 run function ir_end_event
 execute if score .slope0 ir = .nOne ir if score .diff ir matches 0.. run function ir_end_event
 
 # --- If currently flat, decide whether to begin a new event ---
