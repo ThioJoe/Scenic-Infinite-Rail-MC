@@ -228,7 +228,7 @@ scoreboard players set .DOWNCLAMP ir 20
 # that still pokes above the rail (capped by .UPGRACE below). Bigger =
 # climbs begin, and crest obstructions, earlier. 0 = climb timing is ruled
 # by the average alone (the old behavior).
-scoreboard players set .UPLOOK ir 12
+scoreboard players set .UPLOOK ir 50
 
 # How many blocks ABOVE its average-derived target a climb may overshoot to
 # clear ground the .UPLOOK scan still sees poking above the rail. Without
@@ -236,7 +236,7 @@ scoreboard players set .UPLOOK ir 12
 # tunnels right under the summit. Bigger = hills are crested over more
 # often; smaller = ridgetops get punched through as before. 0 = climbs stop
 # exactly at the target, never overshooting.
-scoreboard players set .UPGRACE ir 4
+scoreboard players set .UPGRACE ir 10
 
 # How far ahead (blocks) to scan for the ground under a would-be descent. A
 # descent will not start (or keep going) into ground within this range -- it
@@ -245,7 +245,7 @@ scoreboard players set .UPGRACE ir 4
 # through when lower ground lies just beyond (a short notch through a
 # basin's rim is cheaper than staying high). 0 = descent timing is ruled by
 # the average alone (the old behavior).
-scoreboard players set .DOWNLOOK ir 8
+scoreboard players set .DOWNLOOK ir 50
 
 # The grace height: the clearance a descent keeps above the LOWEST surface
 # the .DOWNLOOK scan sees when it bottoms out. Instead of forcing the line
