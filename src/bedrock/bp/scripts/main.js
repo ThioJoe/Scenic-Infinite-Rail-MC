@@ -70,10 +70,10 @@ import { world, system, BlockPermutation, BlockVolume, EasingType, GameMode, Ite
 // provided wherever the pack loads at all.
 import { ModalFormData } from '@minecraft/server-ui';
 import { camHeight } from './cam_math.js';
-// The vegetation the carve spares -- the SAME source file that generates
-// Java's #infinite_rail:keep block tag (src/shared/vegetation.js; the build
-// copies it in here). Bedrock commands have no block tags, so the
-// classification runs at runtime instead.
+// The vegetation the carve spares -- Bedrock's own hand-maintained list
+// (keep it in sync with Java's tags/block/keep.json, the other edition's
+// realization of the same policy). Bedrock commands have no block tags, so
+// the classification runs at runtime instead.
 import { isVegetation } from './vegetation.js';
 
 // --- Constants ---------------------------------------------------------------
