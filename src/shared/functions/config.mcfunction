@@ -215,11 +215,14 @@ scoreboard players set .DOWNCLAMP ir 20
 # of the build head. Without them, slopes are timed purely by the average --
 # which lags/dilutes around edges, so the line tends to trench down early to
 # get off a mountain, dip a level or two into a valley floor it is about to
-# leave anyway, and tunnel right under hilltops. With them, descents wait for
-# the drop-off and land with a grace height, and climbs start/stretch to
-# clear ground the line would otherwise plow into. The .SAMEGAP / .TURNGAP
-# spacing rules always keep the final say -- these guards never place events
-# closer together than the gaps allow; they only re-time or shorten them.
+# leave anyway, and tunnel right under hilltops. With them, a descent never
+# steps down into ground: it waits for the drop-off, PAUSES (holds level,
+# same event) over any high ground it meets on the way down, and resumes the
+# moment the ground falls away -- so the descent is shifted forward past
+# obstructions but still finishes at the normal hover height. Climbs
+# start/stretch to clear ground the line would otherwise plow into. The
+# .SAMEGAP / .TURNGAP spacing rules still gate every NEW event exactly as
+# before (a paused descent resuming is the same event, not a new one).
 
 # How far ahead (blocks) to scan for RISING ground that the current level
 # would plow into. Within that range, a climb may begin while the height
@@ -238,23 +241,25 @@ scoreboard players set .UPLOOK ir 50
 # exactly at the target, never overshooting.
 scoreboard players set .UPGRACE ir 10
 
-# How far ahead (blocks) to scan for the ground under a would-be descent. A
-# descent will not start (or keep going) into ground within this range -- it
-# holds its level to the drop-off and glides down in open air past it. This
-# doubles as the dig tolerance: high ground SHORTER than this is still cut
-# through when lower ground lies just beyond (a short notch through a
-# basin's rim is cheaper than staying high). 0 = descent timing is ruled by
-# the average alone (the old behavior).
-scoreboard players set .DOWNLOOK ir 50
+# How far ahead (blocks) to scan for ground under a would-be descent step.
+# A descent never steps down into (or within .DOWNGRACE of) the TALLEST
+# surface in this range -- so descents physically cannot trench. When ground
+# blocks the next step, the descent PAUSES: it holds its level, stays the
+# same event, and resumes the moment the ground ahead falls away -- the
+# descent gets shifted forward past the obstruction and still finishes at
+# the normal hover height, never parked high. This window is therefore the
+# "clear runway" requirement: dips and gaps NARROWER than this are crossed
+# level (bridged) instead of dipped into, so bigger = a calmer line that
+# only descends into openings at least this wide; smaller = hugs every
+# little hollow. 0 = descent timing is ruled by the average alone (the old
+# plow-prone behavior).
+scoreboard players set .DOWNLOOK ir 16
 
-# The grace height: the clearance a descent keeps above the LOWEST surface
-# the .DOWNLOOK scan sees when it bottoms out. Instead of forcing the line
-# all the way down to the average-derived target, the descent ends early
-# once one more step would dip under this floor -- it lands high, and if the
-# terrain keeps dropping it simply descends again .SAMEGAP columns later
-# instead of ploughing a trench and climbing back out. Keep it below .HOVER
-# (or descents stop short of their target even on flat ground). 0 = the
-# rail may touch the lowest nearby surface exactly, never below it.
+# The clearance a descending step keeps above that tallest scanned surface.
+# 0 = a descent may touch down exactly onto the highest nearby ground;
+# higher values pause the descent sooner / keep it flying higher over
+# terrain it crosses. Keep it BELOW .HOVER, or descents pause just short of
+# their target over flat ground and the line rides permanently high.
 scoreboard players set .DOWNGRACE ir 1
 
 

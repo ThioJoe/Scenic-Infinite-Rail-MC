@@ -11,12 +11,15 @@
 //  terrains:
 //
 //    - the two edition copies make IDENTICAL decisions column for column
-//    - every elevation change is one contiguous 45-degree event
+//    - climbs are contiguous 45-degree events; descents are monotone and may
+//      hold level mid-event ONLY as ground-contact pauses (never stalling
+//      with a clear floor below)
 //    - events only start when |target - railY| >= #DEADBAND (checked exactly;
 //      a climb may also start at diff >= 1 on near-scan ground contact)
 //    - flat gaps between events respect #SAMEGAP / #TURNGAP (exact counting)
-//    - descents never step below the dig-guard's grace floor (the lowest
-//      near-scan surface + #DOWNGRACE), and never start without two-step room
+//    - descents never step below the grace floor (the TALLEST near-scan
+//      surface + #DOWNGRACE -- no trenching), and never start without
+//      two-step runway
 //    - on terrain that settles, the rail converges onto terrain + #HOVER
 //
 //  All knobs come from the emitted config.mcfunction itself (run through the
@@ -181,23 +184,24 @@ function advance(sim, S, surface, cfg) {
   const target = S.avg + cfg.HOVER;
 
   // The near-ground scan (Java's near_scan/near_step, Bedrock's nearScan):
-  // surface min/max at odd offsets +1, +3, ... within .DOWNLOOK / .UPLOOK,
+  // the HIGHEST surface at odd offsets +1, +3, ... within .DOWNLOOK (the
+  // descent guard's floor basis) and .UPLOOK (the climb contact trigger),
   // -10000 when a window is 0 or returned no generated terrain (fail-open).
   const w = Math.min(48, Math.max(cfg.UPLOOK, cfg.DOWNLOOK));
-  let gmin = null;
+  let gfloor = null;
   let gmax = null;
   for (let off = 1; off <= w; off += 2) {
     const s = surface(S.headX + off);
     if (s === undefined || s <= -63) continue;
-    if (off <= cfg.DOWNLOOK && (gmin === null || s < gmin)) gmin = s;
+    if (off <= cfg.DOWNLOOK && (gfloor === null || s > gfloor)) gfloor = s;
     if (off <= cfg.UPLOOK && (gmax === null || s > gmax)) gmax = s;
   }
-  gmin ??= -10000;
+  gfloor ??= -10000;
   gmax ??= -10000;
 
   sim.set('target', target);
   sim.set('railY', S.railY);
-  sim.set('gmin', gmin);
+  sim.set('gfloor', gfloor);
   sim.set('gmax', gmax);
   sim.call('decide');
   const dir = sim.get('dir');
@@ -213,7 +217,7 @@ function advance(sim, S, surface, cfg) {
   else if (dir === 1) S.railY += 1;
   S.headX += 1;
   S.track.push(S.railY);
-  return { dir, target, railYBefore, veg, retro, gmin, gmax };
+  return { dir, target, railYBefore, veg, retro, gfloor, gmax };
 }
 
 function runRide(fnDirs, surface, columns) {
@@ -257,6 +261,10 @@ const TERRAINS = {
   // a climb below #DEADBAND and crest-pushing #UPGRACE past the target --
   // exercises the contact-start path of the invariant checks.
   ridge: { settles: true, f: (x) => (x >= 300 && x < 308 ? 74 : 64) },
+  // A long 1:2 downhill face: the descent must hug it as a pause-resume
+  // staircase without ever stepping below the surface -- the old min-window
+  // floor let 45-degree descents knife several blocks into the face.
+  hillside: { settles: true, f: (x) => (x < 150 ? 96 : Math.max(64, 96 - Math.floor((x - 150) / 2))) },
 };
 
 function checkInvariants(name, ride, settles) {
@@ -267,44 +275,58 @@ function checkInvariants(name, ride, settles) {
   // brain compared against #SAMEGAP/#TURNGAP.
   let flats = 99, lastDir = 0, inEvent = 0, vbuf = 0;
   log.forEach((step, i) => {
-    const { dir, veg, retro } = step;
+    const { dir, veg, retro, gfloor, gmax } = step;
+    const diff = step.target - step.railYBefore;
+    const floorReal = cfg.DOWNLOOK >= 1 && gfloor > -10000;
+    const digNow = floorReal && step.railYBefore - 1 < gfloor + cfg.DOWNGRACE;
+
+    // A dir=0 column during a descent is either a PAUSE (the descent still
+    // wants to go lower but the next step would land below the grace floor
+    // -- the event stays open, mirroring decide's own rule) or the event's
+    // end. A descent that answers 0 while it wants down AND the floor is
+    // clear has stalled for no reason -- that's a brain bug.
+    const paused = dir === 0 && inEvent === -1 && diff <= -1 && digNow;
+    if (dir === 0 && inEvent === -1 && diff <= -1 && !digNow) {
+      fail(`${name}: descent stalled without ground contact at column ${i}`);
+    }
+
     // Mirror the carve-mode contract: #retro fires exactly on event-start
-    // columns; #veg is 0 on every slope column and for #SLOPECLEAR flat
-    // columns after an event ends (counting the landing column), 1 elsewhere.
+    // columns; #veg is 0 on every slope column, on every PAUSED descent
+    // column (the event is still open -- the camera floats there), and for
+    // #SLOPECLEAR flat columns after an event ends, 1 elsewhere.
     const starting = dir !== 0 && inEvent === 0;
     if (retro !== (starting ? 1 : 0)) {
       fail(`${name}: #retro was ${retro} at column ${i} (${starting ? 'event start' : 'no event start'})`);
     }
-    if (dir === 0 && inEvent !== 0) vbuf = cfg.SLOPECLEAR; // end_event armed the buffer
-    const expectVeg = dir !== 0 || vbuf > 0 ? 0 : 1;
+    if (dir === 0 && inEvent !== 0 && !paused) vbuf = cfg.SLOPECLEAR; // end_event armed the buffer
+    const expectVeg = dir !== 0 || paused || vbuf > 0 ? 0 : 1;
     if (veg !== expectVeg) fail(`${name}: #veg was ${veg} at column ${i} (expected ${expectVeg})`);
-    if (dir === 0 && vbuf > 0) vbuf -= 1;
+    if (dir === 0 && !paused && vbuf > 0) vbuf -= 1;
 
     if (dir !== 0) {
       if (inEvent !== 0 && dir !== inEvent) fail(`${name}: direction flip inside an event at column ${i}`);
       // The descent dig-guard: no descending column may ever land the rail
-      // below the grace floor (the lowest scanned surface + #DOWNGRACE).
-      const gminReal = cfg.DOWNLOOK >= 1 && step.gmin > -10000;
-      if (dir === -1 && gminReal && step.railYBefore - 1 < step.gmin + cfg.DOWNGRACE) {
-        fail(`${name}: descent stepped below the grace floor (rail ${step.railYBefore - 1} < ${step.gmin}+${cfg.DOWNGRACE}) at column ${i}`);
+      // below the grace floor (the TALLEST scanned surface + #DOWNGRACE) --
+      // descents physically cannot trench.
+      if (dir === -1 && digNow) {
+        fail(`${name}: descent stepped below the grace floor (rail ${step.railYBefore - 1} < ${gfloor}+${cfg.DOWNGRACE}) at column ${i}`);
       }
       if (inEvent === 0) {
         // event start: check the deadband and the gap the brain just approved
         const need = dir === lastDir ? cfg.SAMEGAP : cfg.TURNGAP;
         if (flats < need) fail(`${name}: event started after ${flats} flat columns (needed ${need}) at column ${i}`);
-        const diff = step.target - step.railYBefore;
         if (dir === 1) {
           // A climb may also start inside the deadband on ground contact
           // (diff >= 1 and the near scan sees terrain above the rail).
-          const contact = cfg.UPLOOK >= 1 && diff >= 1 && step.gmax > step.railYBefore;
+          const contact = cfg.UPLOOK >= 1 && diff >= 1 && gmax > step.railYBefore;
           if (diff < cfg.DEADBAND && !contact) {
             fail(`${name}: climb started with diff=${diff} < DEADBAND=${cfg.DEADBAND} and no ground contact at column ${i}`);
           }
         } else {
           if (-diff < cfg.DEADBAND) fail(`${name}: descent started with diff=${diff} inside DEADBAND=${cfg.DEADBAND} at column ${i}`);
-          // Descent starts additionally need room for at least two steps
-          // above the grace floor (decide's #dig2 veto).
-          if (gminReal && step.railYBefore - 2 < step.gmin + cfg.DOWNGRACE) {
+          // Descent starts additionally need clear runway for at least two
+          // steps above the grace floor (decide's #dig2 veto).
+          if (floorReal && step.railYBefore - 2 < gfloor + cfg.DOWNGRACE) {
             fail(`${name}: descent started without two-step room above the grace floor at column ${i}`);
           }
         }
@@ -312,6 +334,8 @@ function checkInvariants(name, ride, settles) {
         lastDir = dir;
       }
       flats = 0;
+    } else if (paused) {
+      flats = 0; // the event stays open; gap counting stays frozen
     } else {
       flats = inEvent !== 0 ? 0 : flats + 1; // ending column resets, like end_event
       inEvent = 0;
@@ -327,23 +351,28 @@ function checkInvariants(name, ride, settles) {
   }
 }
 
-// The mesa's specific promise (the descent dig-guard): the line crosses the
-// whole tabletop at or above its surface and descends only at the drop-off.
-// The old average-chasing behavior started the descent ~45 columns early and
-// trenched down through the tabletop (up to ~25 blocks deep) to get a head
-// start on the valley beyond. A small notch right at the rim -- within
-// #DOWNLOOK of the edge -- is the documented dig tolerance, so the checked
-// range stops short of it.
+// The mesa's specific promise (the descent guard): once the line has crested
+// onto the tabletop it never goes below the tabletop surface again until the
+// drop-off at x=320 -- the descent start is vetoed until the whole #DOWNLOOK
+// runway is past the edge, so there is no early trench and no rim notch at
+// all. (The old average-chasing behavior started the descent ~45 columns
+// early and trenched down through the tabletop to get a head start on the
+// valley beyond.)
 function checkMesa(ride) {
   const { S, cfg } = ride;
   if (cfg.DOWNLOOK < 1) return;
   const top = 89; // the mesa terrain's tabletop surface
-  for (let x = 230; x <= 320 - cfg.DOWNLOOK - 2; x++) {
+  let crest = -1;
+  for (let x = 200; x <= 280; x++) {
+    if (S.track[x] >= top + cfg.HOVER) { crest = x; break; }
+  }
+  if (crest < 0) return fail('mesa: the line never reached cruising height over the tabletop');
+  for (let x = crest; x <= 319; x++) {
     if (S.track[x] < top) {
-      return fail(`mesa: the rail trenched into the tabletop (railY ${S.track[x]} < ${top} at x=${x})`);
+      return fail(`mesa: the rail dipped into the tabletop (railY ${S.track[x]} < ${top} at x=${x})`);
     }
   }
-  ok('mesa: rides the tabletop level and descends only at the drop-off');
+  ok(`mesa: rides the tabletop level (from x=${crest}) and descends only at the drop-off`);
 }
 
 // ---------------------------------------------------------------------------

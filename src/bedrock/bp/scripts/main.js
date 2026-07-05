@@ -46,9 +46,9 @@
 //    1. sampleWindow() -> average surface of the next 48 blocks (12 samples,
 //       clamped +/-UPCLAMP/DOWNCLAMP, void reads fall back to the average)
 //    2. target = avg + HOVER  ->  written to the scoreboard, along with the
-//       near-ground scan's .gmin/.gmax (nearScan -- the slope-timing guards)
+//       near-ground scan's .gfloor/.gmax (nearScan -- the slope-timing guards)
 //    3. "function infinite_rail/decide"  (the SHARED brain; reads .target,
-//       .railY, .gmin, .gmax, keeps .slope/.flat/.lastDir, answers with .dir)
+//       .railY, .gfloor, .gmax, keeps .slope/.flat/.lastDir, answers with .dir)
 //    4. place the column per .dir (carve, redstone support, rail, light)
 //    5. append railY to the track history (the camera's map of the path)
 //    6. every 16 blocks: rollChunks()
@@ -187,7 +187,7 @@ const CONFIG_DEFAULTS = {
   CAMAHEAD: 64, CAMMODE: 0, CARTYOFF: 12, HIDEHAND: 1, AUTOSTART: 1,
   MAXSPEED: 8, OCEANSPEED: 32, OCEANCHUNKS: 6, LANDCHUNKS: 3, DEADBAND: 2,
   SAMEGAP: 40, TURNGAP: 40, SLOPECLEAR: 8, UPCLAMP: 250, DOWNCLAMP: 20,
-  UPLOOK: 12, UPGRACE: 4, DOWNLOOK: 8, DOWNGRACE: 1,
+  UPLOOK: 50, UPGRACE: 10, DOWNLOOK: 16, DOWNGRACE: 1,
   AHEAD: 224, GENAHEAD: 192, MAXTICK: 15, DEBUGMODE: 0,
   SKYY: 180, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 32,
 };
@@ -592,26 +592,26 @@ function sampleWindow() {
 
 // The near-ground scan feeding the shared brain's slope-timing guards
 // (decide's .dig/.dig2/.push and consider_start's early climb -- CONTEXT.md
-// section 7j): the lowest / highest surface within the next .DOWNLOOK /
-// .UPLOOK blocks of the head, probed every 2 blocks at odd offsets +1, +3,
-// +5, ... exactly like Java's near_scan/near_step, boiled down to the .gmin
-// and .gmax scores. -10000 is the no-data sentinel (fail-open: the guards
-// pass and the ground-contact rules go inert). The reads hit the per-column
-// surface memo the 48-block sample window already fills, so the scan costs
-// no extra real probes.
+// section 7j): the HIGHEST surface within the next .DOWNLOOK / .UPLOOK
+// blocks of the head, probed every 2 blocks at odd offsets +1, +3, +5, ...
+// exactly like Java's near_scan/near_step, boiled down to the .gfloor
+// (descent guard) and .gmax (climb contact) scores. -10000 is the no-data
+// sentinel (fail-open: the guards pass and the ground-contact rules go
+// inert). The reads hit the per-column surface memo the 48-block sample
+// window already fills, so the scan costs no extra real probes.
 function nearScan() {
   const up = cfg('UPLOOK');
   const down = cfg('DOWNLOOK');
   const w = Math.min(48, Math.max(up, down));
-  let gmin = null;
+  let gfloor = null;
   let gmax = null;
   for (let off = 1; off <= w; off += 2) {
     const s = surfaceY(S.headX + off, S.centerZ);
     if (s === undefined || s <= -63) continue;
-    if (off <= down && (gmin === null || s < gmin)) gmin = s;
+    if (off <= down && (gfloor === null || s > gfloor)) gfloor = s;
     if (off <= up && (gmax === null || s > gmax)) gmax = s;
   }
-  brainSet('gmin', gmin ?? -10000);
+  brainSet('gfloor', gfloor ?? -10000);
   brainSet('gmax', gmax ?? -10000);
 }
 
@@ -734,7 +734,7 @@ function advance() {
   // this column's direction. Everything else decide/consider_start/start_event/
   // end_event touch (.slope, .flat, .lastDir, .want, .need, ...) stays inside
   // the scoreboard, exactly as on Java. The near scan adds the two
-  // ground-contact inputs (.gmin/.gmax) beside .target/.railY.
+  // ground-contact inputs (.gfloor/.gmax) beside .target/.railY.
   brainSet('target', target);
   brainSet('railY', S.railY);
   nearScan();
@@ -1559,7 +1559,7 @@ function bridgeTest() {
   if (bridgeMode === 'cmd' && S.started) return;
   const touched = ['slope', 'flat', 'lastDir', 'target', 'railY', 'dir',
     'diff', 'slope0', 'want', 'need', 'ndead', 'nOne', 'bt',
-    'gmin', 'gmax', 'dig', 'dig2', 'push', 'glim', 'glift', 'rnext'];
+    'gfloor', 'gmax', 'dig', 'dig2', 'push', 'glim', 'glift', 'rnext'];
   const snap = {};
   if (bridgeMode === 'api') {
     for (const k of touched) snap[k] = getScore(k, undefined);

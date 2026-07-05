@@ -20,11 +20,11 @@ execute if score .diff ir <= .ndead ir run scoreboard players set .want ir -1
 # (.diff >= 1): want the climb even inside the deadband, instead of tunneling
 # in and climbing late. The spacing gaps below still have the final say.
 execute unless score .SKYMODE ir matches 1 if score .UPLOOK ir matches 1.. if score .want ir matches 0 if score .diff ir matches 1.. if score .gmax ir > .railY ir run scoreboard players set .want ir 1
-# Descend LATE: never START a descent that would dig -- if there is not room
-# for even two steps above the near ground (.dig2, from decide), hold the
-# level and let the ground fall away first. The descent then begins at the
-# drop-off and glides down in open air, rather than trenching down through
-# the ground to get a head start.
+# Descend LATE: never START a descent without clear runway -- if there is
+# not room for even two steps above the tallest ground within .DOWNLOOK
+# (.dig2, from decide), hold the level and let the ground fall away first.
+# The descent then begins at the drop-off and glides down in open air,
+# rather than opening an event that would pause on its first step.
 execute unless score .want ir matches 0.. if score .dig2 ir matches 1 run scoreboard players set .want ir 0
 
 # No change wanted: stay flat and keep counting toward the next gap.

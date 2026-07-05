@@ -11,7 +11,7 @@ scoreboard players operation .avg ir /= .C12 ir
 scoreboard players operation .target ir = .avg ir
 scoreboard players operation .target ir += .HOVER ir
 
-# --- 2b. Near-ground scan: .gmin/.gmax for decide's slope-timing guards ---
+# --- 2b. Near-ground scan: .gfloor/.gmax for decide's slope-timing guards ---
 execute at @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:near_scan
 
 # --- 3. Decide this column's slope: -1, 0, or +1 (event model) ---
