@@ -46,9 +46,10 @@
 //    1. sampleWindow() -> average surface of the next 48 blocks (12 samples,
 //       clamped +/-UPCLAMP/DOWNCLAMP, void reads fall back to the average)
 //    2. target = avg + HOVER  ->  written to the scoreboard, along with the
-//       near-ground scan's .gfloor/.gmax (nearScan -- the slope-timing guards)
+//       near-ground scan's .gfloor/.gmax/.gcone (nearScan -- slope timing)
 //    3. "function infinite_rail/decide"  (the SHARED brain; reads .target,
-//       .railY, .gfloor, .gmax, keeps .slope/.flat/.lastDir, answers with .dir)
+//       .railY and the scan scores, keeps .slope/.flat/.lastDir, answers
+//       with .dir)
 //    4. place the column per .dir (carve, redstone support, rail, light)
 //    5. append railY to the track history (the camera's map of the path)
 //    6. every 16 blocks: rollChunks()
@@ -187,7 +188,7 @@ const CONFIG_DEFAULTS = {
   CAMAHEAD: 64, CAMMODE: 0, CARTYOFF: 12, HIDEHAND: 1, AUTOSTART: 1,
   MAXSPEED: 8, OCEANSPEED: 32, OCEANCHUNKS: 6, LANDCHUNKS: 3, DEADBAND: 2,
   SAMEGAP: 40, TURNGAP: 40, SLOPECLEAR: 8, UPCLAMP: 250, DOWNCLAMP: 20,
-  UPLOOK: 50, UPGRACE: 10, DOWNLOOK: 16, DOWNGRACE: 1,
+  UPLOOK: 50, UPGRACE: 10, UPEARLY: 6, DOWNLOOK: 16, DOWNGRACE: 1,
   AHEAD: 224, GENAHEAD: 192, MAXTICK: 15, DEBUGMODE: 0,
   SKYY: 180, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 32,
 };
@@ -591,28 +592,50 @@ function sampleWindow() {
 }
 
 // The near-ground scan feeding the shared brain's slope-timing guards
-// (decide's .dig/.dig2/.push and consider_start's early climb -- CONTEXT.md
-// section 7j): the HIGHEST surface within the next .DOWNLOOK / .UPLOOK
-// blocks of the head, probed every 2 blocks at odd offsets +1, +3, +5, ...
-// exactly like Java's near_scan/near_step, boiled down to the .gfloor
-// (descent guard) and .gmax (climb contact) scores. -10000 is the no-data
-// sentinel (fail-open: the guards pass and the ground-contact rules go
-// inert). The reads hit the per-column surface memo the 48-block sample
-// window already fills, so the scan costs no extra real probes.
+// (decide's .dig/.dig2/.push/.due and consider_start's start rules --
+// CONTEXT.md section 7j): probed every 2 blocks at odd offsets +1, +3, +5,
+// ... exactly like Java's near_scan/near_step. Consecutive probes fold into
+// PAIRS -- min(this, prev) -- because the surface probe counts tree trunks
+// as ground: a 1-2 block spike only catches one probe of a pair, so the min
+// erases it, while real terrain (4+ wide) spans both probes and registers.
+// Three scores result: .gfloor (highest pair within .DOWNLOOK -- the
+// descent guard), .gmax (highest pair within .UPLOOK -- the climb contact
+// trigger) and .gcone (the climb schedule: over pairs actually in the way,
+// above railY - HOVER, the highest 45-degree projection pair - distance).
+// Sentinels: -10000 for .gfloor/.gmax (their guards fail open without
+// data) and for a .gcone with nothing to climb for (the schedule gate
+// holds); +32000 for .gcone when the scan got no valid probes at all
+// (reverts to plain average-driven behavior). The reads hit the per-column
+// surface memo the 48-block sample window already fills, so the scan costs
+// no extra real probes.
 function nearScan() {
   const up = cfg('UPLOOK');
   const down = cfg('DOWNLOOK');
   const w = Math.min(48, Math.max(up, down));
+  const gbase = S.railY - cfg('HOVER');
   let gfloor = null;
   let gmax = null;
+  let gcone = null;
+  let valid = 0;
+  let prev = null;
   for (let off = 1; off <= w; off += 2) {
     const s = surfaceY(S.headX + off, S.centerZ);
-    if (s === undefined || s <= -63) continue;
-    if (off <= down && (gfloor === null || s > gfloor)) gfloor = s;
-    if (off <= up && (gmax === null || s > gmax)) gmax = s;
+    if (s === undefined || s <= -63) { prev = null; continue; }
+    valid += 1;
+    if (prev !== null) {
+      const pmin = Math.min(prev, s);
+      const nd = off - 2; // the pair's near end
+      if (off <= down && (gfloor === null || pmin > gfloor)) gfloor = pmin;
+      if (off <= up) {
+        if (gmax === null || pmin > gmax) gmax = pmin;
+        if (pmin > gbase && (gcone === null || pmin - nd > gcone)) gcone = pmin - nd;
+      }
+    }
+    prev = s;
   }
   brainSet('gfloor', gfloor ?? -10000);
   brainSet('gmax', gmax ?? -10000);
+  brainSet('gcone', gcone ?? (valid === 0 ? 32000 : -10000));
 }
 
 // --- Column placement ----------------------------------------------------------
@@ -733,8 +756,8 @@ function advance() {
   // Hand the boiled-down state to the shared .mcfunction brain and read back
   // this column's direction. Everything else decide/consider_start/start_event/
   // end_event touch (.slope, .flat, .lastDir, .want, .need, ...) stays inside
-  // the scoreboard, exactly as on Java. The near scan adds the two
-  // ground-contact inputs (.gfloor/.gmax) beside .target/.railY.
+  // the scoreboard, exactly as on Java. The near scan adds the three
+  // ground-contact inputs (.gfloor/.gmax/.gcone) beside .target/.railY.
   brainSet('target', target);
   brainSet('railY', S.railY);
   nearScan();
@@ -1559,7 +1582,8 @@ function bridgeTest() {
   if (bridgeMode === 'cmd' && S.started) return;
   const touched = ['slope', 'flat', 'lastDir', 'target', 'railY', 'dir',
     'diff', 'slope0', 'want', 'need', 'ndead', 'nOne', 'bt',
-    'gfloor', 'gmax', 'dig', 'dig2', 'push', 'glim', 'glift', 'rnext'];
+    'gfloor', 'gmax', 'gcone', 'dig', 'dig2', 'push', 'due', 'cgate',
+    'glim', 'glift', 'rnext'];
   const snap = {};
   if (bridgeMode === 'api') {
     for (const k of touched) snap[k] = getScore(k, undefined);
@@ -1573,6 +1597,11 @@ function bridgeTest() {
     brainSet('target', 100);
     brainSet('railY', 90);
     brainSet('dir', 0);
+    // Neutral near-scan inputs (their fail-open sentinels): a stale .gcone
+    // from a previous ride would otherwise hold the test climb back.
+    brainSet('gfloor', -10000);
+    brainSet('gmax', -10000);
+    brainSet('gcone', 32000);
     runCmd(`function ${NS}/decide`);
     brainOk = brainGetDir() === 1; // a wanted 10-block climb must answer dir=1
   } catch { /* reported below */ }

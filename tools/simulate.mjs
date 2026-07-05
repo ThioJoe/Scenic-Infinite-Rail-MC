@@ -11,15 +11,14 @@
 //  terrains:
 //
 //    - the two edition copies make IDENTICAL decisions column for column
-//    - climbs are contiguous 45-degree events; descents are monotone and may
-//      hold level mid-event ONLY as ground-contact pauses (never stalling
-//      with a clear floor below)
+//    - every elevation change is one contiguous 45-degree event
 //    - events only start when |target - railY| >= #DEADBAND (checked exactly;
 //      a climb may also start at diff >= 1 on near-scan ground contact)
+//    - climbs never start ahead of schedule (the 45-degree cone + #UPEARLY)
 //    - flat gaps between events respect #SAMEGAP / #TURNGAP (exact counting)
-//    - descents never step below the grace floor (the TALLEST near-scan
-//      surface + #DOWNGRACE -- no trenching), and never start without
-//      two-step runway
+//    - descents never step below the descent floor (the TALLEST near-scan
+//      surface + #DOWNGRACE -- no trenching), never start without two-step
+//      runway, and never end while the floor below is still clear
 //    - on terrain that settles, the rail converges onto terrain + #HOVER
 //
 //  All knobs come from the emitted config.mcfunction itself (run through the
@@ -168,7 +167,7 @@ function inRange(v, range) {
 // Every knob is read from the emitted config.mcfunction via the interpreter.
 // ---------------------------------------------------------------------------
 const CFG_KEYS = ['HOVER', 'DEADBAND', 'SAMEGAP', 'TURNGAP', 'UPCLAMP', 'DOWNCLAMP',
-  'UPLOOK', 'UPGRACE', 'DOWNLOOK', 'DOWNGRACE',
+  'UPLOOK', 'UPGRACE', 'UPEARLY', 'DOWNLOOK', 'DOWNGRACE',
   'CAMBLEND', 'CAMLIFT', 'CAMSMOOTH', 'CAMAHEAD', 'SLOPECLEAR'];
 
 function advance(sim, S, surface, cfg) {
@@ -183,26 +182,46 @@ function advance(sim, S, surface, cfg) {
   S.avg = Math.floor(sum / 12);
   const target = S.avg + cfg.HOVER;
 
-  // The near-ground scan (Java's near_scan/near_step, Bedrock's nearScan):
-  // the HIGHEST surface at odd offsets +1, +3, ... within .DOWNLOOK (the
-  // descent guard's floor basis) and .UPLOOK (the climb contact trigger),
-  // -10000 when a window is 0 or returned no generated terrain (fail-open).
+  // The near-ground scan (Java's near_scan/near_step, Bedrock's nearScan),
+  // at odd offsets +1, +3, ..., folded into PAIRS (min of two consecutive
+  // probes -- erases 1-2 wide spikes like tree trunks): the highest pair
+  // within .DOWNLOOK (the descent guard's floor basis) and .UPLOOK (the
+  // climb contact trigger), plus the climb schedule .gcone -- over pairs
+  // above railY - HOVER (ground actually in the way), the highest 45-degree
+  // projection pair - near-distance. Sentinels: -10000 for the maxes and a
+  // nothing-to-climb schedule (its gate holds); +32000 for a no-data
+  // schedule (gate never holds -- plain average behavior).
   const w = Math.min(48, Math.max(cfg.UPLOOK, cfg.DOWNLOOK));
+  const gbase = S.railY - cfg.HOVER;
   let gfloor = null;
   let gmax = null;
+  let gcone = null;
+  let valid = 0;
+  let prev = null;
   for (let off = 1; off <= w; off += 2) {
     const s = surface(S.headX + off);
-    if (s === undefined || s <= -63) continue;
-    if (off <= cfg.DOWNLOOK && (gfloor === null || s > gfloor)) gfloor = s;
-    if (off <= cfg.UPLOOK && (gmax === null || s > gmax)) gmax = s;
+    if (s === undefined || s <= -63) { prev = null; continue; }
+    valid += 1;
+    if (prev !== null) {
+      const pmin = Math.min(prev, s);
+      const nd = off - 2;
+      if (off <= cfg.DOWNLOOK && (gfloor === null || pmin > gfloor)) gfloor = pmin;
+      if (off <= cfg.UPLOOK) {
+        if (gmax === null || pmin > gmax) gmax = pmin;
+        if (pmin > gbase && (gcone === null || pmin - nd > gcone)) gcone = pmin - nd;
+      }
+    }
+    prev = s;
   }
   gfloor ??= -10000;
   gmax ??= -10000;
+  gcone ??= valid === 0 ? 32000 : -10000;
 
   sim.set('target', target);
   sim.set('railY', S.railY);
   sim.set('gfloor', gfloor);
   sim.set('gmax', gmax);
+  sim.set('gcone', gcone);
   sim.call('decide');
   const dir = sim.get('dir');
   // The carve-mode answers: veg (may this column spare vegetation?) and
@@ -217,7 +236,7 @@ function advance(sim, S, surface, cfg) {
   else if (dir === 1) S.railY += 1;
   S.headX += 1;
   S.track.push(S.railY);
-  return { dir, target, railYBefore, veg, retro, gfloor, gmax };
+  return { dir, target, railYBefore, veg, retro, gfloor, gmax, gcone };
 }
 
 function runRide(fnDirs, surface, columns) {
@@ -261,9 +280,9 @@ const TERRAINS = {
   // a climb below #DEADBAND and crest-pushing #UPGRACE past the target --
   // exercises the contact-start path of the invariant checks.
   ridge: { settles: true, f: (x) => (x >= 300 && x < 308 ? 74 : 64) },
-  // A long 1:2 downhill face: the descent must hug it as a pause-resume
-  // staircase without ever stepping below the surface -- the old min-window
-  // floor let 45-degree descents knife several blocks into the face.
+  // A long 1:2 downhill face: descents must come down it in gap-paced
+  // 45-degree swoops that never enter the ground -- the old min-window
+  // floor let them knife several blocks into the face.
   hillside: { settles: true, f: (x) => (x < 150 ? 96 : Math.max(64, 96 - Math.floor((x - 150) / 2))) },
 };
 
@@ -275,41 +294,37 @@ function checkInvariants(name, ride, settles) {
   // brain compared against #SAMEGAP/#TURNGAP.
   let flats = 99, lastDir = 0, inEvent = 0, vbuf = 0;
   log.forEach((step, i) => {
-    const { dir, veg, retro, gfloor, gmax } = step;
+    const { dir, veg, retro, gfloor, gmax, gcone } = step;
     const diff = step.target - step.railYBefore;
     const floorReal = cfg.DOWNLOOK >= 1 && gfloor > -10000;
     const digNow = floorReal && step.railYBefore - 1 < gfloor + cfg.DOWNGRACE;
 
-    // A dir=0 column during a descent is either a PAUSE (the descent still
-    // wants to go lower but the next step would land below the grace floor
-    // -- the event stays open, mirroring decide's own rule) or the event's
-    // end. A descent that answers 0 while it wants down AND the floor is
-    // clear has stalled for no reason -- that's a brain bug.
-    const paused = dir === 0 && inEvent === -1 && diff <= -1 && digNow;
+    // A descent may only end while it still wants to go lower (diff <= -1)
+    // if the next step would have landed below the descent floor -- ending
+    // with a clear floor below would be an unmotivated stall.
     if (dir === 0 && inEvent === -1 && diff <= -1 && !digNow) {
-      fail(`${name}: descent stalled without ground contact at column ${i}`);
+      fail(`${name}: descent ended without ground contact at column ${i}`);
     }
 
     // Mirror the carve-mode contract: #retro fires exactly on event-start
-    // columns; #veg is 0 on every slope column, on every PAUSED descent
-    // column (the event is still open -- the camera floats there), and for
-    // #SLOPECLEAR flat columns after an event ends, 1 elsewhere.
+    // columns; #veg is 0 on every slope column and for #SLOPECLEAR flat
+    // columns after an event ends (counting the landing column), 1 elsewhere.
     const starting = dir !== 0 && inEvent === 0;
     if (retro !== (starting ? 1 : 0)) {
       fail(`${name}: #retro was ${retro} at column ${i} (${starting ? 'event start' : 'no event start'})`);
     }
-    if (dir === 0 && inEvent !== 0 && !paused) vbuf = cfg.SLOPECLEAR; // end_event armed the buffer
-    const expectVeg = dir !== 0 || paused || vbuf > 0 ? 0 : 1;
+    if (dir === 0 && inEvent !== 0) vbuf = cfg.SLOPECLEAR; // end_event armed the buffer
+    const expectVeg = dir !== 0 || vbuf > 0 ? 0 : 1;
     if (veg !== expectVeg) fail(`${name}: #veg was ${veg} at column ${i} (expected ${expectVeg})`);
-    if (dir === 0 && !paused && vbuf > 0) vbuf -= 1;
+    if (dir === 0 && vbuf > 0) vbuf -= 1;
 
     if (dir !== 0) {
       if (inEvent !== 0 && dir !== inEvent) fail(`${name}: direction flip inside an event at column ${i}`);
       // The descent dig-guard: no descending column may ever land the rail
-      // below the grace floor (the TALLEST scanned surface + #DOWNGRACE) --
-      // descents physically cannot trench.
+      // below the descent floor (the TALLEST scanned surface + #DOWNGRACE)
+      // -- descents physically cannot trench.
       if (dir === -1 && digNow) {
-        fail(`${name}: descent stepped below the grace floor (rail ${step.railYBefore - 1} < ${gfloor}+${cfg.DOWNGRACE}) at column ${i}`);
+        fail(`${name}: descent stepped below the descent floor (rail ${step.railYBefore - 1} < ${gfloor}+${cfg.DOWNGRACE}) at column ${i}`);
       }
       if (inEvent === 0) {
         // event start: check the deadband and the gap the brain just approved
@@ -322,20 +337,25 @@ function checkInvariants(name, ride, settles) {
           if (diff < cfg.DEADBAND && !contact) {
             fail(`${name}: climb started with diff=${diff} < DEADBAND=${cfg.DEADBAND} and no ground contact at column ${i}`);
           }
+          // The climb schedule: no climb may begin before it is due -- the
+          // rail must already be within #HOVER + #UPEARLY of the highest
+          // 45-degree-projected surface ahead (decide's #due gate).
+          if (cfg.UPLOOK >= 1 && gcone < 32000
+            && step.railYBefore >= gcone + cfg.HOVER + cfg.UPEARLY) {
+            fail(`${name}: climb started ahead of schedule (rail ${step.railYBefore} >= cone ${gcone}+${cfg.HOVER}+${cfg.UPEARLY}) at column ${i}`);
+          }
         } else {
           if (-diff < cfg.DEADBAND) fail(`${name}: descent started with diff=${diff} inside DEADBAND=${cfg.DEADBAND} at column ${i}`);
           // Descent starts additionally need clear runway for at least two
-          // steps above the grace floor (decide's #dig2 veto).
+          // steps above the descent floor (decide's #dig2 veto).
           if (floorReal && step.railYBefore - 2 < gfloor + cfg.DOWNGRACE) {
-            fail(`${name}: descent started without two-step room above the grace floor at column ${i}`);
+            fail(`${name}: descent started without two-step room above the descent floor at column ${i}`);
           }
         }
         inEvent = dir;
         lastDir = dir;
       }
       flats = 0;
-    } else if (paused) {
-      flats = 0; // the event stays open; gap counting stays frozen
     } else {
       flats = inEvent !== 0 ? 0 : flats + 1; // ending column resets, like end_event
       inEvent = 0;

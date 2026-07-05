@@ -1,13 +1,25 @@
 # One probe of the near-ground scan (see near_scan): snaps the probe marker
 # onto the surface at the current position (same heightmap trick as
-# sample_window -- ignores leaves, counts water surfaces), folds the read
-# into .gfloor (max, while the offset is within .DOWNLOOK) and .gmax (max,
-# within .UPLOOK), then hops 2 blocks east and recurses while .nk <= .nw.
-# A void / ungenerated read (<= -63) is skipped entirely, leaving the
-# -10000 fail-open sentinel untouched.
+# sample_window -- ignores leaves, counts water surfaces), pairs the read
+# with the previous probe (.pmin = min of the two, which erases 1-2 block
+# wide spikes like tree trunks), folds the pair into .gfloor / .gmax /
+# .gcone, then hops 2 blocks east and recurses while .nk <= .nw.
+# The pair's distance is its NEAR end (.nk - 2, via .prj). A void /
+# ungenerated read (<= -63) breaks the pair chain and is skipped entirely;
+# .gnu counts valid probes so near_scan can fail the schedule open when
+# there were none.
 execute positioned over motion_blocking_no_leaves run tp @e[type=marker,tag=ir_probe,limit=1] ~ ~ ~
 execute store result score .s ir run data get entity @e[type=marker,tag=ir_probe,limit=1] Pos[1]
-execute if score .s ir matches -62.. if score .nk ir <= .DOWNLOOK ir run scoreboard players operation .gfloor ir > .s ir
-execute if score .s ir matches -62.. if score .nk ir <= .UPLOOK ir run scoreboard players operation .gmax ir > .s ir
+scoreboard players operation .pmin ir = .s ir
+scoreboard players operation .pmin ir < .sprev ir
+scoreboard players operation .prj ir = .pmin ir
+scoreboard players operation .prj ir -= .nk ir
+scoreboard players add .prj ir 2
+execute if score .s ir matches -62.. if score .sprev ir matches -62.. if score .nk ir <= .DOWNLOOK ir run scoreboard players operation .gfloor ir > .pmin ir
+execute if score .s ir matches -62.. if score .sprev ir matches -62.. if score .nk ir <= .UPLOOK ir run scoreboard players operation .gmax ir > .pmin ir
+execute if score .s ir matches -62.. if score .sprev ir matches -62.. if score .nk ir <= .UPLOOK ir if score .pmin ir > .gbase ir run scoreboard players operation .gcone ir > .prj ir
+execute if score .s ir matches -62.. run scoreboard players add .gnu ir 1
+execute if score .s ir matches -62.. run scoreboard players operation .sprev ir = .s ir
+execute if score .s ir matches ..-63 run scoreboard players set .sprev ir -32000
 scoreboard players add .nk ir 2
 execute if score .nk ir <= .nw ir positioned ~2 ~ ~ run function infinite_rail:near_step

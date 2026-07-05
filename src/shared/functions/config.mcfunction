@@ -197,69 +197,90 @@ scoreboard players set .SLOPECLEAR ir 8
 
 
 # --- Terrain-smoothing sensitivity -----------------------------------------
-# Per-column limits on how far a single lookahead sample may pull the rolling
-# average up or down.
+# The line's DESIRED height each column is the average of 12 terrain readings
+# spread over the next 48 blocks, plus .HOVER. These two knobs clamp each
+# reading: terrain more than this many blocks ABOVE/BELOW the current average
+# only counts as this far above/below. In plain terms they set how much of a
+# height feature the line acknowledges at all.
 
-# Larger = approaching mountains raise the target sooner (earlier, gentler
-# "one swoop" climbs).
+# Terrain higher than the current line by more than this reads as only this
+# many blocks higher. With 250 it is effectively unlimited: every mountain
+# ahead raises the desired height to its full size, so the ride goes over
+# everything it can (WHEN the climb starts is a separate question -- see
+# .UPEARLY below). Lowering it toward ~5 makes the desired height rise
+# sluggishly, so tall terrain gets tunneled into at mid-height instead.
 scoreboard players set .UPCLAMP ir 250
 
-# Smaller = ravines, holes and canyons are ignored and bridged dead level
-# instead of dipped into.
+# Terrain lower than the current line by more than this reads as only this
+# many blocks lower. This is why a narrow 60-deep ravine is crossed as a
+# dead-level bridge (it reads as a 20-deep dip diluted across the average)
+# while a broad valley still lowers the line properly. Bigger = the line
+# dives after every hole; smaller = it bridges more and descends less.
 scoreboard players set .DOWNCLAMP ir 20
 
 
-# --- Ground-hugging slope timing (the near-ground scan) ----------------------
-# The lookahead average above decides WHERE the rail wants to be; these four
+# --- Ground-aware slope timing (the near-ground scan) ------------------------
+# The lookahead average above decides WHERE the rail wants to be; these five
 # knobs decide WHEN to move, by checking the actual ground surface just ahead
 # of the build head. Without them, slopes are timed purely by the average --
-# which lags/dilutes around edges, so the line tends to trench down early to
-# get off a mountain, dip a level or two into a valley floor it is about to
-# leave anyway, and tunnel right under hilltops. With them, a descent never
-# steps down into ground: it waits for the drop-off, PAUSES (holds level,
-# same event) over any high ground it meets on the way down, and resumes the
-# moment the ground falls away -- so the descent is shifted forward past
-# obstructions but still finishes at the normal hover height. Climbs
-# start/stretch to clear ground the line would otherwise plow into. The
-# .SAMEGAP / .TURNGAP spacing rules still gate every NEW event exactly as
-# before (a paused descent resuming is the same event, not a new one).
+# which lags/dilutes around edges, so the line would ramp up dozens of blocks
+# before a mountain, trench down early to get off one, and dip into valley
+# floors it is about to leave anyway. With them: climbs start "on schedule"
+# (just early enough for a 45-degree ramp to crest what is coming, plus
+# .UPEARLY blocks of slack), and descents never cut into ground -- they stop
+# just above it and continue, .SAMEGAP-paced like every other event, once it
+# falls away. The .SAMEGAP / .TURNGAP spacing rules always keep the final
+# say; these guards only hold events back or stop them early, never squeeze
+# them closer together.
 
-# How far ahead (blocks) to scan for RISING ground that the current level
-# would plow into. Within that range, a climb may begin while the height
-# difference is still under .DEADBAND (it must be at least 1, and the gap
-# rules still apply), and a climb in progress keeps climbing over ground
-# that still pokes above the rail (capped by .UPGRACE below). Bigger =
-# climbs begin, and crest obstructions, earlier. 0 = climb timing is ruled
-# by the average alone (the old behavior).
+# How far ahead (blocks) the climb-side ground scan reaches. This is both
+# the contact detector (a climb may begin inside the deadband when the level
+# line would physically hit ground in this range) and the reach of the climb
+# SCHEDULE (see .UPEARLY) -- so it also bounds the tallest wall that can be
+# crested without any tunneling: a rise taller than this reach hits the line
+# before the ramp can finish. Effective maximum 48 (the scan's cap). 0 =
+# climb timing is ruled by the average alone (the old behavior).
 scoreboard players set .UPLOOK ir 50
 
 # How many blocks ABOVE its average-derived target a climb may overshoot to
-# clear ground the .UPLOOK scan still sees poking above the rail. Without
-# this, a wide hilltop ends its climb at the crest-diluted average and
-# tunnels right under the summit. Bigger = hills are crested over more
+# clear ground the .UPLOOK scan still sees at or above the rail line.
+# Without this, a wide hilltop ends its climb at the crest-diluted average
+# and tunnels right under the summit. Bigger = hills are crested over more
 # often; smaller = ridgetops get punched through as before. 0 = climbs stop
 # exactly at the target, never overshooting.
 scoreboard players set .UPGRACE ir 10
 
+# The climb schedule's slack, in blocks: how much sooner than STRICTLY
+# NECESSARY a climb may begin. The scan projects every surface ahead onto a
+# 45-degree line ("to clear that point from here, the rail must already be
+# at its height minus its distance"); a climb is held back -- even when the
+# average is begging for one -- until the rail is within this many blocks of
+# that projected height. 0 = ramps start at the last possible column and
+# top out exactly at the crest; bigger = earlier, longer, more leisurely
+# ramps that finish about this many blocks before the crest; ~50+ =
+# no schedule at all (climbs start as soon as the average sees the mountain
+# -- the old ramp-up-way-early behavior).
+scoreboard players set .UPEARLY ir 6
+
 # How far ahead (blocks) to scan for ground under a would-be descent step.
 # A descent never steps down into (or within .DOWNGRACE of) the TALLEST
 # surface in this range -- so descents physically cannot trench. When ground
-# blocks the next step, the descent PAUSES: it holds its level, stays the
-# same event, and resumes the moment the ground ahead falls away -- the
-# descent gets shifted forward past the obstruction and still finishes at
-# the normal hover height, never parked high. This window is therefore the
-# "clear runway" requirement: dips and gaps NARROWER than this are crossed
-# level (bridged) instead of dipped into, so bigger = a calmer line that
-# only descends into openings at least this wide; smaller = hugs every
-# little hollow. 0 = descent timing is ruled by the average alone (the old
-# plow-prone behavior).
+# blocks the next step the descent ENDS, resting just above that ground, and
+# the line carries on downward as a NEW event (>= .SAMEGAP later, exactly
+# like any other) once the ground has dropped away -- long descents down
+# rough slopes become clean 45-degree swoops separated by proper benches,
+# never 1-2 column stair-steps. The window is also the "clear runway"
+# requirement: dips and gaps NARROWER than this are crossed level (bridged)
+# instead of dipped into. Bigger = a calmer line that only descends into
+# wider openings; smaller = hugs every little hollow. 0 = descent timing is
+# ruled by the average alone (the old plow-prone behavior).
 scoreboard players set .DOWNLOOK ir 16
 
 # The clearance a descending step keeps above that tallest scanned surface.
 # 0 = a descent may touch down exactly onto the highest nearby ground;
-# higher values pause the descent sooner / keep it flying higher over
-# terrain it crosses. Keep it BELOW .HOVER, or descents pause just short of
-# their target over flat ground and the line rides permanently high.
+# higher values stop descents sooner / keep the line flying higher over
+# terrain it crosses. Keep it BELOW .HOVER, or descents end just short of
+# their target even over flat ground and the line rides permanently high.
 scoreboard players set .DOWNGRACE ir 1
 
 
