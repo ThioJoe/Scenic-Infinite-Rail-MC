@@ -68,10 +68,12 @@ To start it manually (or restart it at a new location later):
 /function infinite_rail:start
 ```
 
-To end the ride:
+To end the ride (and other controls):
 
 ```
 /function infinite_rail:stop
+/function infinite_rail:debug       (debug chat output on)
+/function infinite_rail:debug_off
 ```
 
 (This stops the builder and removes the cart; run `/gamemode creative` if you
@@ -86,7 +88,9 @@ want to move around afterward.)
   every newer version still provides).
 - **No experiments.** The Script API used here is the stable one.
 - Cheats/commands only if you want to stop, restart, or tweak the ride —
-  auto-start needs nothing.
+  auto-start needs nothing. (A pack cannot switch a world's cheats toggle on
+  by itself — enable **Activate Cheats** at world creation if you want the
+  commands.)
 
 ### Installation
 
@@ -104,6 +108,8 @@ Manual control (note the `/` instead of Java's `:`):
 ```
 /function infinite_rail/start
 /function infinite_rail/stop
+/function infinite_rail/debug       (debug chat output ON + command feedback)
+/function infinite_rail/debug_off
 ```
 
 Press **F1** (or Hide GUI) for the full ambient experience on either edition.

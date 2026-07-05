@@ -74,8 +74,16 @@ const TAG_SEAT = 'ir_seat';
 // engine fighting the script over the cart was what made the ride bob
 // vertically. The script only ever moves the seat.
 const SEAT_TYPE = 'infinite_rail:seat';
-const AREA_A = 'ir_area_a';
-const AREA_B = 'ir_area_b';
+// The generation corridor: four long-lived 128-block ticking-area tiles that
+// advance one at a time. Bedrock generates ticking-area terrain slowly and
+// asynchronously, so areas must live a long time (each tile survives ~500
+// blocks of travel) and reach far ahead (~380-500 blocks past the head) --
+// the old design of one big area re-created every 16 blocks never gave the
+// generator time to finish anything.
+const TILE = 128;
+const TILE_NAMES = ['ir_t0', 'ir_t1', 'ir_t2', 'ir_t3'];
+// Legacy area names from older versions of this pack, removed on cleanup.
+const LEGACY_AREAS = ['ir_area_a', 'ir_area_b'];
 const PREFIX = '§6[Infinite Rail]§r ';
 const DBG = '§3[IR debug]§r ';
 
@@ -148,6 +156,7 @@ const S = {
   landRun: 0,      // #landRun -- consecutive non-ocean chunks
   lastChunk: 0,    // #lastChunk -- last chunk index the ocean check processed
   s2: 0,           // #s2 -- the reactive descent chaser (blocks; double)
+  lastBad: 0,      // how many of the last column's 12 samples were fallbacks
   riderName: '',   // the one player this ride belongs to
   startTimer: 0,   // auto-start countdown (ticks with a player present)
   cartId: '',      // entity id of the ride cart (rediscovered by tag if stale)
@@ -160,6 +169,12 @@ const S = {
 let dim = null;   // the overworld
 let inited = false;
 let saveCountdown = 0;
+// How the script talks to the shared .mcfunction brain. 'api' uses the native
+// scoreboard API (normal). If the startup self-test finds that API-written
+// scores are invisible to commands (a split some versions exhibit), it flips
+// to 'cmd': brain inputs are written via /scoreboard commands and the brain's
+// answer is read back through execute-if-score successCount probes.
+let bridgeMode = 'api';
 // Bumped by every begin() and stop(): a begin() in its async chunk-wait phase
 // aborts if a newer begin/stop superseded it, so a stale poll can never
 // resurrect a canceled ride.
@@ -211,7 +226,21 @@ function runCmd(command) {
 }
 
 function say(msg) { world.sendMessage(PREFIX + msg); }
-function dbg(msg) { if (cfg('DEBUGMODE') === 1) world.sendMessage(DBG + msg); }
+
+// Is debug output on? In command-bridge mode the API can't read the score, so
+// it is probed through a command (cached for a second).
+let dbgCache = false;
+let dbgCacheAt = -100;
+function debugOn() {
+  if (bridgeMode === 'api') return cfg('DEBUGMODE') === 1;
+  if (tickN - dbgCacheAt > 20) {
+    dbgCacheAt = tickN;
+    const r = runCmd(`execute if score ${P}DEBUGMODE ir matches 1 run scoreboard players add ${P}probe ir 1`);
+    dbgCache = (r?.successCount ?? 0) > 0;
+  }
+  return dbgCache;
+}
+function dbg(msg) { if (debugOn()) world.sendMessage(DBG + msg); }
 
 function findRider() {
   if (!S.riderName) return undefined;
@@ -252,6 +281,26 @@ function chunkLoaded(x, z) {
   // getBlock is documented to return undefined for unloaded chunks, which
   // makes it the most portable "is this column ready" probe.
   try { return dim.getBlock({ x, y: 100, z }) !== undefined; } catch { return false; }
+}
+
+// --- The brain bridge ----------------------------------------------------------
+// All traffic between this script and the shared decide/consider_start brain
+// goes through these two functions, so the whole pack keeps working even on
+// versions where the scoreboard API and command scoreboards don't see each
+// other (bridgeMode 'cmd', chosen by the startup self-test).
+
+function brainSet(name, value) {
+  if (bridgeMode === 'api') setScore(name, value);
+  else runCmd(`scoreboard players set ${P}${name} ir ${value | 0}`);
+}
+
+function brainGetDir() {
+  if (bridgeMode === 'api') return getScore('dir', 0);
+  // successCount probes: the execute's run-command succeeds iff the condition
+  // matched. Two probes distinguish the three possible answers.
+  if ((runCmd(`execute if score ${P}dir ir matches 1 run scoreboard players add ${P}probe ir 1`)?.successCount ?? 0) > 0) return 1;
+  if ((runCmd(`execute if score ${P}dir ir matches 0 run scoreboard players add ${P}probe ir 1`)?.successCount ?? 0) > 0) return 0;
+  return -1;
 }
 
 // --- Persistence ---------------------------------------------------------------
@@ -302,8 +351,19 @@ function surfaceY(x, z) {
   let block;
   try { block = dim.getTopmostBlock({ x, z }); } catch { return undefined; }
   for (let i = 0; block && i < 48; i++) {
-    if (block.isLiquid) return block.y + 1;
-    if (!block.typeId.includes('leaves') && block.isSolid) return block.y + 1;
+    const id = block.typeId ?? '';
+    if (id === 'minecraft:water' || id === 'minecraft:flowing_water' || block.isLiquid === true) {
+      return block.y + 1;
+    }
+    // Skip what Java's motion_blocking_no_leaves skips: leaves, and blocks the
+    // engine reports as explicitly NON-solid (foliage, snow layers). The
+    // comparisons are deliberately against literal true/false: if isSolid /
+    // isLiquid are unavailable on this module version they read undefined, and
+    // the block is ACCEPTED as surface -- a flower miscounted as ground costs
+    // a block of noise (well inside #DEADBAND), whereas skipping everything
+    // would freeze the terrain average and flatline the whole ride.
+    const skip = id.includes('leaves') || block.isSolid === false;
+    if (!skip) return block.y + 1;
     try { block = dim.getTopmostBlock({ x, z }, block.y - 1); } catch { return undefined; }
   }
   return undefined;
@@ -316,14 +376,16 @@ function sampleWindow() {
   const lo = S.avg - cfg('DOWNCLAMP');
   const hi = S.avg + cfg('UPCLAMP');
   let sum = 0;
+  let bad = 0;
   for (let off = 4; off <= 48; off += 4) {
     let s = surfaceY(S.headX + off, S.centerZ);
-    if (s === undefined || s <= -63) s = S.avg; // void / ungenerated: discard
+    if (s === undefined || s <= -63) { s = S.avg; bad += 1; } // void: discard
     if (s < lo) s = lo;
     if (s > hi) s = hi;
     sum += s;
   }
   S.avg = Math.floor(sum / 12);
+  S.lastBad = bad; // surfaced in the debug roll line: 12/12 = probe is broken
 }
 
 // --- Column placement ----------------------------------------------------------
@@ -359,10 +421,10 @@ function advance() {
   // this column's direction. Everything else decide/consider_start/start_event/
   // end_event touch (.slope, .flat, .lastDir, .want, .need, ...) stays inside
   // the scoreboard, exactly as on Java.
-  setScore('target', target);
-  setScore('railY', S.railY);
+  brainSet('target', target);
+  brainSet('railY', S.railY);
   dim.runCommand(`function ${NS}/decide`);
-  const dir = getScore('dir', 0);
+  const dir = brainGetDir();
 
   const colX = S.headX + 1;
   if (dir === -1) {
@@ -427,33 +489,66 @@ function buildLoop() {
 }
 
 // --- Chunk management ----------------------------------------------------------
-// roll_chunks/forceload: every 16 blocks of head travel, re-lay a ticking-area
-// corridor and roll the world spawn + respawn points forward with the ride.
-// The corridor reaches from behind the RIG (the rig trails the head by up to
-// #AHEAD - #CAMAHEAD blocks, and its chunk must stay ticked for the cart) out
-// to #GENAHEAD ahead of the head. Bedrock allows 10 named ticking areas of up
-// to 100 chunks each; two alternating names leapfrog so coverage never gaps
-// while one is being moved (with defaults the corridor is (192+192+32)/16 x 3
-// ~= 78 chunks -- inside the per-area cap).
+// roll_chunks/forceload: keep a generation corridor ahead of the head and roll
+// the world spawn + respawn points forward with the ride.
+//
+// The corridor is four 128-block ticking-area TILES covering consecutive
+// segments from just behind the head to ~380-500 blocks ahead of it. Tiles
+// advance one at a time (the rearmost is re-created at the front when the
+// head crosses a segment boundary), so each area lives for ~500 blocks of
+// travel -- Bedrock's asynchronous generator needs long-lived, far-ahead
+// requests; short-lived areas get destroyed before they finish generating
+// anything. Each tile is 8x3 = 24 chunks, four tiles = 96 ticked chunks,
+// comfortably inside Bedrock's caps (10 areas, 100 chunks each). Nothing is
+// spent backward: the rider sits at the rig, so their own simulation distance
+// keeps the rig's chunks loaded.
 
-let areaFlip = false;
+let tilesBase = null; // segment index of the rearmost tile, or null if unplaced
+
+const tileSeg = (x) => Math.floor(x / TILE);
+
+function placeTile(seg) {
+  const name = TILE_NAMES[((seg % TILE_NAMES.length) + TILE_NAMES.length) % TILE_NAMES.length];
+  const x0 = seg * TILE;
+  runCmd(`tickingarea remove ${name}`);
+  return runCmd(`tickingarea add ${x0} 0 ${S.centerZ - 8} ${x0 + TILE - 1} 0 ${S.centerZ + 8} ${name}`);
+}
+
+function removeCorridor() {
+  for (const name of [...TILE_NAMES, ...LEGACY_AREAS]) runCmd(`tickingarea remove ${name}`);
+  tilesBase = null;
+}
+
+function ensureCorridor() {
+  const first = tileSeg(S.headX - 16);
+  if (tilesBase === null || Math.abs(first - tilesBase) > TILE_NAMES.length * 2) {
+    // Fresh placement (ride start, resume, or a discontinuous jump).
+    for (let s = first; s < first + TILE_NAMES.length; s++) placeTile(s);
+    tilesBase = first;
+  } else {
+    while (tilesBase < first) {
+      // Recycle the rearmost tile to the new front segment.
+      placeTile(tilesBase + TILE_NAMES.length);
+      tilesBase += 1;
+    }
+  }
+}
 
 function rollChunks() {
-  const gen = cfg('GENAHEAD');
-  const back = Math.max(32, cfg('AHEAD') - cfg('CAMAHEAD') + 32);
   const x = S.headX, y = S.railY, z = S.centerZ;
-  const name = areaFlip ? AREA_A : AREA_B;
-  areaFlip = !areaFlip;
-  runCmd(`tickingarea remove ${name}`);
-  const added = runCmd(`tickingarea add ${x - back} 0 ${z - 8} ${x + gen} 0 ${z + 8} ${name}`);
+  ensureCorridor();
   runCmd(`setworldspawn ${x} ${y + 1} ${z}`);
   runCmd(`spawnpoint @a ${x} ${y + 1} ${z}`);
   S.nextLoad += 16;
-  if (cfg('DEBUGMODE') === 1) {
-    const probes = [32, 96, gen]
-      .map((d) => `+${d}:${chunkLoaded(x + d, z) ? '§aloaded§7' : '§cnot yet§7'}`)
-      .join(' ');
-    dbg(`corridor rolled at x=${x} (add ${added ? 'ok' : '§cFAILED§7'}); ahead ${probes}`);
+  if (debugOn()) {
+    // The contiguous generated frontier ahead of the head, plus the terrain
+    // algorithm's live numbers -- together these say at a glance whether
+    // generation keeps up AND whether the elevation logic is getting data
+    // (badSamples 12/12 means the surface probe is returning nothing).
+    const reach = (tilesBase + TILE_NAMES.length) * TILE - 1 - x;
+    let frontier = 0;
+    while (frontier < reach && chunkLoaded(x + frontier + 16, z)) frontier += 16;
+    dbg(`x=${x}: generated §f+${frontier}§7 of +${reach} requested | badSamples=§f${S.lastBad}§7/12 avg=§f${S.avg}§7 railY=§f${S.railY}§7 bridge=${bridgeMode}`);
   }
 }
 
@@ -702,9 +797,8 @@ function begin(player) {
   S.headX = startX;
   S.nextLoad = startX + 16;
 
-  runCmd(`tickingarea remove ${AREA_A}`);
-  runCmd(`tickingarea remove ${AREA_B}`);
-  runCmd(`tickingarea add ${startX - 16} 0 ${S.centerZ - 8} ${startX + cfg('GENAHEAD')} 0 ${S.centerZ + 8} ${AREA_A}`);
+  removeCorridor();
+  ensureCorridor();
 
   S.paceSpeed = 0;
   S.targetSpeed = cfg('MAXSPEED') / 20;
@@ -739,8 +833,7 @@ function begin(player) {
 // command works. Java's begin() is synchronous and cannot abort half-way.
 function abortLaunch(reason) {
   say(`§cRide start aborted: ${reason}`);
-  runCmd(`tickingarea remove ${AREA_A}`);
-  runCmd(`tickingarea remove ${AREA_B}`);
+  removeCorridor();
   saveState();
 }
 
@@ -750,15 +843,18 @@ function beginPhase2(startX) {
 
   // Initial rail elevation = terrain surface here + hover altitude.
   const surf = surfaceY(startX, S.centerZ);
+  if (surf === undefined) {
+    say('§eWarning: the terrain probe returned nothing at the start position. If the track never follows the landscape, report this with your Minecraft version.');
+  }
   S.railY = (surf ?? Math.floor(player.location.y)) + cfg('HOVER');
   S.avg = S.railY - cfg('HOVER');
 
   // Initialize the shared brain's event-model state, exactly as begin does on
   // Java: flat, with a large flat-gap so the first slope is unrestricted.
-  setScore('slope', 0);
-  setScore('flat', 99);
-  setScore('lastDir', 0);
-  setScore('railY', S.railY);
+  brainSet('slope', 0);
+  brainSet('flat', 99);
+  brainSet('lastDir', 0);
+  brainSet('railY', S.railY);
 
   // Track history: one rail-Y per column; the camera's whole map of the path.
   S.trackY = [S.railY];
@@ -838,8 +934,7 @@ function stop(silent) {
       try { e.getComponent('minecraft:rideable')?.ejectRiders(); } catch { /* empty */ }
       try { e.remove(); } catch { /* already gone */ }
     }
-    runCmd(`tickingarea remove ${AREA_A}`);
-    runCmd(`tickingarea remove ${AREA_B}`);
+    removeCorridor();
   }
   S.cartId = '';
   S.seatId = '';
@@ -873,42 +968,71 @@ function autoStart() {
 // Only runs when no ride is active (it exercises the brain's live state,
 // snapshotting and restoring every score it touches).
 function bridgeTest() {
-  const touched = ['slope', 'flat', 'lastDir', 'target', 'railY', 'dir',
-    'diff', 'slope0', 'want', 'need', 'ndead', 'nOne', 'bt'];
-  const snap = {};
-  for (const k of touched) snap[k] = getScore(k, undefined);
-
-  let legScores = false;
-  let legBrain = false;
+  // Leg 1: are API-written scores visible to commands (and vice versa)?
+  let apiOk = false;
   try {
     setScore('bt', 41);
     runCmd(`scoreboard players add ${P}bt ir 1`);
-    legScores = getScore('bt', -1) === 42;
+    apiOk = getScore('bt', -1) === 42;
+  } catch { /* apiOk stays false */ }
 
-    setScore('slope', 0);
-    setScore('flat', 99);
-    setScore('lastDir', 0);
-    setScore('target', 100);
-    setScore('railY', 90);
-    setScore('dir', 0);
-    runCmd(`function ${NS}/decide`);
-    legBrain = getScore('dir', 0) === 1; // 10-block climb wanted -> dir must be 1
-  } catch { /* reported below */ }
-
-  for (const k of touched) {
-    if (snap[k] === undefined) {
-      try { objective().removeParticipant(P + k); } catch { /* never existed */ }
+  if (!apiOk) {
+    // Verify the command-only path round-trips before committing to it.
+    runCmd(`scoreboard players set ${P}bt ir 7`);
+    const r = runCmd(`execute if score ${P}bt ir matches 7 run scoreboard players add ${P}probe ir 1`);
+    if ((r?.successCount ?? 0) > 0) {
+      bridgeMode = 'cmd';
+      say('§eCompatibility: this version splits the script and command scoreboards -- switching to the command bridge. Live ".KNOB" scoreboard tweaks will read as config-file defaults.');
     } else {
-      setScore(k, snap[k]);
+      say('§cSELF-TEST FAILED: neither the API nor the command bridge can reach the scoreboard. The ride cannot follow terrain -- please report this with your Minecraft version.');
+      return;
     }
   }
 
-  if (!legScores) {
-    say('§cSELF-TEST FAILED: script-written scores are not visible to commands. The ride cannot follow terrain on this version -- please report this along with your Minecraft version.');
-  } else if (!legBrain) {
+  // Leg 2: the shared brain must answer through the chosen bridge. In api
+  // mode everything the test touches is snapshotted and restored; in cmd mode
+  // scores can't be read back, so the test only runs when no ride is active
+  // (clobbering a fresh brain's state is harmless -- it is re-seeded below).
+  if (bridgeMode === 'cmd' && S.started) return;
+  const touched = ['slope', 'flat', 'lastDir', 'target', 'railY', 'dir',
+    'diff', 'slope0', 'want', 'need', 'ndead', 'nOne', 'bt'];
+  const snap = {};
+  if (bridgeMode === 'api') {
+    for (const k of touched) snap[k] = getScore(k, undefined);
+  }
+
+  let brainOk = false;
+  try {
+    brainSet('slope', 0);
+    brainSet('flat', 99);
+    brainSet('lastDir', 0);
+    brainSet('target', 100);
+    brainSet('railY', 90);
+    brainSet('dir', 0);
+    runCmd(`function ${NS}/decide`);
+    brainOk = brainGetDir() === 1; // a wanted 10-block climb must answer dir=1
+  } catch { /* reported below */ }
+
+  if (bridgeMode === 'api') {
+    for (const k of touched) {
+      if (snap[k] === undefined) {
+        try { objective().removeParticipant(P + k); } catch { /* never existed */ }
+      } else {
+        setScore(k, snap[k]);
+      }
+    }
+    runCmd(`scoreboard players reset ${P}bt ir`);
+  } else {
+    // cmd mode, no active ride: re-seed begin()'s initial brain state.
+    brainSet('slope', 0);
+    brainSet('flat', 99);
+    brainSet('lastDir', 0);
+  }
+
+  if (!brainOk) {
     say('§cSELF-TEST FAILED: the shared decide function did not answer (the track would stay flat). Check the Content Log for errors loading infinite_rail functions and report this.');
   } else {
-    dbg('bridge self-test OK (scores + shared decide)');
+    dbg(`bridge self-test OK (mode: ${bridgeMode})`);
   }
 }
 
@@ -939,10 +1063,9 @@ function init() {
   inited = true;
 
   // The self-test runs LAST, fully guarded, and after inited is set: it is a
-  // diagnostic, and no diagnostic may ever be the thing that breaks startup.
-  if (!S.started) {
-    try { bridgeTest(); } catch (e) { reportError('self-test', e); }
-  }
+  // diagnostic (and the bridge-mode chooser), and no diagnostic may ever be
+  // the thing that breaks startup.
+  try { bridgeTest(); } catch (e) { reportError('self-test', e); }
 }
 
 // init() is called from worldLoad, but also lazily from the tick driver and
@@ -1020,6 +1143,18 @@ function tick() {
           cart = findCart();
           S.rigMissing = 0;
         } catch { /* rig chunk not ready yet; retry next tick */ }
+      } else if (S.rigMissing > 200 && sy !== undefined) {
+        // The rig chunk refuses to load (e.g. the rider respawned far from
+        // it and nothing else loads that area anymore): bring the rider to
+        // the rig position -- their presence loads the chunk, and the next
+        // ticks respawn the rig and re-seat them.
+        const rider = findRider();
+        if (rider && rider.getGameMode() === GameMode.Adventure
+          && !rider.getComponent('minecraft:riding')) {
+          try {
+            rider.teleport({ x: rigX, y: sy + 2, z: S.centerZ + 0.5 });
+          } catch { /* retry on a later tick */ }
+        }
       }
     }
   } else {

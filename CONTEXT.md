@@ -994,7 +994,7 @@ counterparts all live in `src/bedrock/scripts/main.js` (stable
 | Moving the rig | `ir_seat` item_display with `teleport_duration:1` + `cam_tp` macro (client-interpolated teleports) | `ir_seat` **custom entity** (this pack's BP+RP: invisible, no gravity, no collision) that the ride cart rides as a passenger, moved by per-tick **velocity drive** (`clearVelocity` + `applyImpulse`; Bedrock clients interpolate physics motion, not teleports), with a teleport fallback for drift |
 | The pace | hidden `ir_cart` on the physical rails + `ir_plug` + stall keeper + the minecart max-speed gamerule | a **virtual pace position** (`paceX`) advanced by scripted speed with smooth acceleration — no entity, no keepers, nothing visible behind the rider |
 | Ocean detection | `execute if biome ~ ~ ~ #minecraft:is_ocean` | `dimension.getBiome()` against an explicit ocean-id set (Bedrock has no biome tags) |
-| Chunk management | `forceload` macro corridor | two named `/tickingarea`s leapfrogging every 16 blocks, spanning from behind the rig to `#GENAHEAD` past the head so the ride cart's chunk always ticks (Bedrock caps: 10 areas × 100 chunks — the corridor uses 2 × ~78 with defaults) |
+| Chunk management | `forceload` macro corridor | four long-lived 128-block `/tickingarea` tiles reaching ~380–500 blocks past the head; each tile survives ~500 blocks of travel because Bedrock's asynchronous generator gets nothing done inside short-lived areas (caps: 10 areas × 100 chunks — 4 × 24 used) |
 | Column placement | `place_flat/up/down` + `carve` macro + `support` | `fillBlocks` + `setBlockPermutation` (`golden_rail` `rail_direction` 1/2/3, `redstone_block`, `light_block_11`) |
 | Start/stop entry | `/function infinite_rail:start` | `/function infinite_rail/start` — a one-line function bridging into the script via `/scriptevent` |
 | World tuning | `setup_world` (camelCase) + overlay (snake_case) | `setup_world` (Bedrock's lowercase gamerule names) — a third small file, same rules |
@@ -1080,16 +1080,23 @@ which is unbounded by design.
 - **`/reload` reloads both functions and scripts** on Bedrock; the script
   re-initializes lazily and resumes the ride from its persisted state. Editing
   `config.mcfunction` + `/reload` refreshes knobs mid-ride, same as Java.
-- **Terrain generation is asynchronous** behind `/tickingarea` (as it is
-  behind Java's `forceload`): the builder never decides a column until the
+- **Terrain generation is asynchronous** behind `/tickingarea` (much more so
+  than Java's `forceload`): the builder never decides a column until the
   column *and its entire 48-block sample window* are loaded — deciding from
   missing samples would freeze the rolling average and bake a permanently
   flat line into the world. While the builder waits, the pace **eases off
   smoothly** (the allowed speed shrinks with the remaining track buffer)
   rather than letting the ride outrun the track, a guard Java doesn't need
   thanks to its larger margins. If starvation persists, a one-time chat
-  warning points at `.DEBUGMODE 1`, which reports corridor-loading status on
-  every roll.
+  warning points at debug mode (`/function infinite_rail/debug`), which
+  reports the generated frontier and the algorithm's live numbers
+  (`badSamples`, `avg`, `railY`) on every corridor roll.
+- **The scoreboard bridge self-heals.** The startup self-test verifies that
+  API-written scores are visible to commands; if a version splits the two
+  scoreboards, the script switches to a command-based bridge (inputs via
+  `/scoreboard`, the brain's answer read back through execute-if-score
+  successCount probes) and says so. In that mode live `.KNOB` tweaks read as
+  config defaults.
 - **Distribution is a single `.mcaddon`** (behavior pack + the small resource
   pack holding the seat entity's invisible client definition); the BP's
   manifest depends on the RP, so activating the BP pulls the RP in
