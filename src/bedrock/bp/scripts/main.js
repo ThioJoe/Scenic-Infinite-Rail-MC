@@ -20,10 +20,13 @@
 //      (mcfunction has no loops)
 //    fixed-point milliblock scoreboard math    ->  ordinary doubles
 //      (scoreboards are int-only)
-//    ir_seat item_display + teleport_duration  ->  per-tick velocity drive of
-//      + cam_tp macro (client interpolation)       the ride cart (Bedrock
-//                                                  interpolates physics motion,
-//                                                  not teleports) + optional
+//    ir_seat item_display + teleport_duration  ->  ir_seat CUSTOM ENTITY (this
+//      + cam_tp macro (client interpolation)       pack's BP+RP: invisible, no
+//                                                  gravity, no collision) that
+//                                                  the ride cart RIDES, moved
+//                                                  by per-tick velocity (which
+//                                                  Bedrock clients interpolate,
+//                                                  unlike teleports) + optional
 //                                                  native Camera API mode
 //    hidden pace cart + plug + stall keeper    ->  a virtual pace position
 //      (only way to get real rail pace and         advanced by scripted speed
@@ -62,6 +65,15 @@ const NS = 'infinite_rail';
 const OBJ = 'ir';
 const P = '.'; // fake-player prefix ('#' on Java; '.' survives Bedrock's parser)
 const TAG_RIDE = 'ir_ride';
+const TAG_SEAT = 'ir_seat';
+// The invisible camera seat -- a custom entity from this pack's BP+RP pair
+// (no gravity, no collision, rideable by minecarts). The ride cart is its
+// permanent PASSENGER, exactly like Java's item_display seat: passengers run
+// no physics of their own, so the cart can never be captured by the powered
+// rails under it, dragged by gravity, or bounced by ground contact -- the
+// engine fighting the script over the cart was what made the ride bob
+// vertically. The script only ever moves the seat.
+const SEAT_TYPE = 'infinite_rail:seat';
 const AREA_A = 'ir_area_a';
 const AREA_B = 'ir_area_b';
 const PREFIX = '§6[Infinite Rail]§r ';
@@ -139,8 +151,10 @@ const S = {
   riderName: '',   // the one player this ride belongs to
   startTimer: 0,   // auto-start countdown (ticks with a player present)
   cartId: '',      // entity id of the ride cart (rediscovered by tag if stale)
+  seatId: '',      // entity id of the camera seat (rediscovered by tag if stale)
+  rigMissing: 0,   // consecutive ticks the rig has been missing (respawn grace)
   camActive: false, // whether the optional Camera API mode is currently applied
-  teleportFallback: false, // set if applyImpulse is unavailable on carts
+  teleportFallback: false, // set if applyImpulse is unavailable on the seat
 };
 
 let dim = null;   // the overworld
@@ -182,16 +196,34 @@ function findRider() {
   return world.getAllPlayers().find((p) => p.name === S.riderName);
 }
 
-function findCart() {
-  // Prefer the cached entity id; fall back to the tag (covers rejoins where
-  // ids change and manual meddling).
-  if (S.cartId) {
-    const e = world.getEntity(S.cartId);
-    if (e?.isValid) return e;
+// Find the one live entity wearing our tag, REMOVING any duplicates: rejoin
+// races (a replacement spawned before the original's chunk loaded back in)
+// and stale sessions can leave extras behind, and an untracked cart would
+// keep drifting around the line forever.
+function findTagged(type, tag, preferId) {
+  let tagged;
+  try { tagged = dim.getEntities({ type, tags: [tag] }); } catch { return undefined; }
+  const keep = tagged.find((e) => e.id === preferId && e.isValid)
+    ?? tagged.find((e) => e.isValid);
+  for (const e of tagged) {
+    if (e !== keep) {
+      try { e.getComponent('minecraft:rideable')?.ejectRiders(); } catch { /* none */ }
+      try { e.remove(); } catch { /* already gone */ }
+    }
   }
-  const tagged = dim.getEntities({ type: 'minecraft:minecart', tags: [TAG_RIDE] });
-  if (tagged.length > 0) { S.cartId = tagged[0].id; return tagged[0]; }
-  return undefined;
+  return keep;
+}
+
+function findCart() {
+  const cart = findTagged('minecraft:minecart', TAG_RIDE, S.cartId);
+  if (cart) S.cartId = cart.id;
+  return cart;
+}
+
+function findSeat() {
+  const seat = findTagged(SEAT_TYPE, TAG_SEAT, S.seatId);
+  if (seat) S.seatId = seat.id;
+  return seat;
 }
 
 function chunkLoaded(x, z) {
@@ -332,16 +364,43 @@ function advance() {
   if (S.headX >= S.nextLoad) rollChunks();
 }
 
+// A column may only be built once its OWN chunk and its entire 48-block
+// sample window are loaded/generated. This is the load-bearing guard for
+// terrain-following: deciding a column while the lookahead is unloaded would
+// read every sample as "no data", leave the rolling average frozen, and bake
+// a permanently flat line into the world. Better to pause and keep the data
+// honest -- the pace cap already slows the ride while the head waits.
+function buildReady() {
+  for (let off = 1; off <= 49; off += 16) {
+    if (!chunkLoaded(S.headX + off, S.centerZ)) return false;
+  }
+  return true;
+}
+
+let stallTicks = 0;
+let stallWarned = false;
+
 function buildLoop() {
   let budget = cfg('MAXTICK');
   const ahead = cfg('AHEAD');
+  let built = false;
   while (budget > 0 && S.headX - Math.floor(S.paceX) < ahead) {
-    // Never place columns into chunks that haven't generated yet -- stop and
-    // retry next tick once the ticking area catches up (Java's forceload is
-    // equally asynchronous; its samples just read air until then).
-    if (!chunkLoaded(S.headX + 1, S.centerZ)) break;
+    if (!buildReady()) break;
     budget -= 1;
-    try { advance(); } catch { break; }
+    try { advance(); } catch (e) { dbg(`build error at x=${S.headX + 1}: ${e}`); break; }
+    built = true;
+  }
+  // If the builder is starved for terrain while the track buffer is running
+  // low, say so once -- the likeliest cause is ticking areas not generating
+  // chunks ahead (the ride then follows the player's own chunk loading).
+  if (!built && S.headX - Math.floor(S.paceX) < ahead - 64) {
+    stallTicks += 1;
+    if (stallTicks === 200 && !stallWarned) {
+      stallWarned = true;
+      say('§eTerrain ahead is generating slowly; the ride will ease off until it catches up. Set §b.DEBUGMODE§e to 1 for corridor status.');
+    }
+  } else {
+    stallTicks = 0;
   }
 }
 
@@ -364,10 +423,16 @@ function rollChunks() {
   const name = areaFlip ? AREA_A : AREA_B;
   areaFlip = !areaFlip;
   runCmd(`tickingarea remove ${name}`);
-  runCmd(`tickingarea add ${x - back} 0 ${z - 8} ${x + gen} 0 ${z + 8} ${name}`);
+  const added = runCmd(`tickingarea add ${x - back} 0 ${z - 8} ${x + gen} 0 ${z + 8} ${name}`);
   runCmd(`setworldspawn ${x} ${y + 1} ${z}`);
   runCmd(`spawnpoint @a ${x} ${y + 1} ${z}`);
   S.nextLoad += 16;
+  if (cfg('DEBUGMODE') === 1) {
+    const probes = [32, 96, gen]
+      .map((d) => `+${d}:${chunkLoaded(x + d, z) ? '§aloaded§7' : '§cnot yet§7'}`)
+      .join(' ');
+    dbg(`corridor rolled at x=${x} (add ${added ? 'ok' : '§cFAILED§7'}); ahead ${probes}`);
+  }
 }
 
 // --- Ocean speed-up ------------------------------------------------------------
@@ -423,15 +488,16 @@ function oceanCheck() {
 function tickPace() {
   if (!S.fast) S.targetSpeed = cfg('MAXSPEED') / 20; // land speed stays live-tweakable
   const accel = ACCEL / 20;
-  if (S.paceSpeed < S.targetSpeed) S.paceSpeed = Math.min(S.targetSpeed, S.paceSpeed + accel);
-  else if (S.paceSpeed > S.targetSpeed) S.paceSpeed = Math.max(S.targetSpeed, S.paceSpeed - accel);
-  S.paceX += S.paceSpeed;
   // Never let the ride outrun the built track (e.g. while world generation is
-  // catching up): hold the pace so the rig always has rail under it. Java has
-  // no such guard -- its cart would roll onto unbuilt ground -- but there the
-  // #AHEAD margin makes it nearly impossible; here it is free to enforce.
-  const maxPace = S.headX - cfg('CAMAHEAD') - 8;
-  if (S.paceX > maxPace) S.paceX = Math.max(maxPace, S.paceX - S.paceSpeed);
+  // catching up). This is a SOFT ceiling: the allowed speed shrinks smoothly
+  // with the remaining track buffer, so a starved builder reads as the ride
+  // gently easing off -- a hard positional clamp here made the cart surge and
+  // jerk whenever the buffer ran low at ocean speed.
+  const headroom = (S.headX - cfg('CAMAHEAD') - 8) - S.paceX;
+  const allowed = Math.max(0, Math.min(S.targetSpeed, headroom / 40));
+  if (S.paceSpeed < allowed) S.paceSpeed = Math.min(allowed, S.paceSpeed + accel);
+  else if (S.paceSpeed > allowed) S.paceSpeed = Math.max(allowed, S.paceSpeed - accel * 2);
+  S.paceX += S.paceSpeed;
 }
 
 // --- The smooth camera ---------------------------------------------------------
@@ -456,26 +522,28 @@ function camFollow() {
   return r.sy;
 }
 
-// cam_move: fly the rig (the ride cart, and with it the seated rider) to
-// CAMAHEAD blocks east of the pace position at the smoothed height. Instead of
-// Java's interpolated-teleport seat, the cart is driven by velocity -- Bedrock
-// clients interpolate physics motion smoothly, where per-tick teleports strobe
-// at 20 fps. A drift catch teleports it back if anything knocks it far off.
-function camMove(cart, sy) {
+// cam_move: fly the rig -- the seat, and with it the cart riding it and the
+// player riding the cart -- to CAMAHEAD blocks east of the pace position at
+// the smoothed height. The seat is driven by velocity: Bedrock clients
+// interpolate physics motion smoothly, where per-tick teleports strobe at
+// 20 fps; and because the seat has no gravity or collision, the commanded
+// motion is exactly the motion that happens (nothing fights the control
+// loop). A drift catch teleports it back if anything knocks it far off.
+function camMove(seat, sy) {
   const target = {
     x: S.paceX + cfg('CAMAHEAD'),
     y: sy + CART_REST + cfg('CAMHEIGHT') / 10,
     z: S.centerZ + 0.5,
   };
-  const pos = cart.location;
+  const pos = seat.location;
   const d = { x: target.x - pos.x, y: target.y - pos.y, z: target.z - pos.z };
   const drift = Math.abs(d.x) + Math.abs(d.y) + Math.abs(d.z);
   if (drift > 4 || S.teleportFallback) {
-    try { cart.teleport(target, { keepVelocity: false }); } catch { /* unloaded */ }
+    try { seat.teleport(target, { keepVelocity: false }); } catch { /* unloaded */ }
   } else {
     try {
-      cart.clearVelocity();
-      cart.applyImpulse(d);
+      seat.clearVelocity();
+      seat.applyImpulse(d);
     } catch {
       S.teleportFallback = true; // applyImpulse unsupported here: teleport from now on
     }
@@ -501,16 +569,58 @@ function camMove(cart, sy) {
   }
 }
 
+// Spawn the two-piece rig at a position: the invisible seat and the ride cart
+// mounted on it. Returns the seat (the mover), or throws if the chunk isn't
+// ready. Any prior rig pieces are removed first so this can never duplicate.
+function spawnRig(pos) {
+  const oldSeat = findSeat();
+  if (oldSeat) { try { oldSeat.remove(); } catch { /* gone */ } }
+  const oldCart = findCart();
+  if (oldCart) { try { oldCart.remove(); } catch { /* gone */ } }
+  S.seatId = '';
+  S.cartId = '';
+
+  const seat = dim.spawnEntity(SEAT_TYPE, pos);
+  seat.addTag(TAG_SEAT);
+  S.seatId = seat.id;
+
+  let cart;
+  try {
+    cart = dim.spawnEntity('minecraft:minecart', pos, { initialRotation: -90 });
+  } catch {
+    cart = dim.spawnEntity('minecraft:minecart', pos);
+  }
+  cart.addTag(TAG_RIDE);
+  S.cartId = cart.id;
+
+  seat.getComponent('minecraft:rideable')?.addRider(cart);
+  return seat;
+}
+
 // --- Keepers ---------------------------------------------------------------
 // main.mcfunction's per-tick guards, minus everything the virtual pace cart
 // made obsolete (plug, stall re-boost, pace-cart ejections). The ride cart
 // holds exactly one seat, so while the rider is aboard nothing else can enter
 // it and it can't scoop up mobs.
 
-function keepers(cart) {
+function keepers(seat, cart) {
   const rider = findRider();
   const rideable = cart.getComponent('minecraft:rideable');
   if (!rideable) return;
+
+  // Keeper: the ride cart must always be the seat's passenger -- that is what
+  // exempts it from its own minecart physics (rail capture, gravity, ground
+  // bounce). Re-mount it if anything ever separates the two.
+  if (!cart.getComponent('minecraft:riding')) {
+    try {
+      const sp = seat.location;
+      const cp = cart.location;
+      if (Math.abs(cp.x - sp.x) + Math.abs(cp.y - sp.y) + Math.abs(cp.z - sp.z) > 4) {
+        cart.teleport({ x: sp.x, y: sp.y, z: sp.z });
+      }
+      seat.getComponent('minecraft:rideable')?.addRider(cart);
+    } catch { /* seat momentarily invalid */ }
+  }
 
   // Eject anything riding the cart that isn't the rider (possible only in the
   // brief window after a dismount).
@@ -587,6 +697,7 @@ function begin(player) {
   const poll = system.runInterval(() => {
     if (lifecycleGen !== gen) { system.clearRun(poll); return; } // superseded
     waited += 1;
+    if (waited === 40) say('§7Still generating the starting terrain...');
     const ready = chunkLoaded(startX, S.centerZ)
       && chunkLoaded(startX + cfg('CAMAHEAD'), S.centerZ);
     if (!ready && waited < 200) return;
@@ -636,13 +747,15 @@ function beginPhase2(startX) {
   // Pre-build past the rig position so the viewer starts on ready track.
   const preBudget = cfg('CAMAHEAD') + 32;
   for (let i = 0; i < preBudget; i++) {
-    if (!chunkLoaded(S.headX + 1, S.centerZ)) break;
+    if (!buildReady()) break;
     try { advance(); } catch { break; }
   }
 
-  // The camera rig: a real minecart glided along the smoothed path, the rider
-  // seated in it once (mount events flash the client's un-hideable dismount
-  // hint, so the keeper only ever re-mounts after a genuine dismount).
+  // The camera rig: seat (invisible custom entity, the mover) -> ride cart
+  // (real minecart, the seat's passenger, so it runs no physics of its own)
+  // -> rider. The player mounts once (mount events flash the client's
+  // un-hideable dismount hint, so the keeper only ever re-mounts after a
+  // genuine dismount).
   S.s2 = S.railY;
   const sy = camFollow() ?? S.railY;
   const rigPos = {
@@ -650,16 +763,10 @@ function beginPhase2(startX) {
     y: sy + CART_REST + cfg('CAMHEIGHT') / 10,
     z: S.centerZ + 0.5,
   };
-  let cart;
   try {
-    try {
-      cart = dim.spawnEntity('minecraft:minecart', rigPos, { initialRotation: -90 });
-    } catch {
-      cart = dim.spawnEntity('minecraft:minecart', rigPos);
-    }
-    cart.addTag(TAG_RIDE);
-    S.cartId = cart.id;
-    cart.getComponent('minecraft:rideable')?.addRider(player);
+    spawnRig(rigPos);
+    const cart = findCart();
+    cart?.getComponent('minecraft:rideable')?.addRider(player);
   } catch {
     // Rig chunk still not generated after the 50 s wait (or the player
     // portaled away mid-launch): give up cleanly instead of dying half-done.
@@ -689,16 +796,25 @@ function stop(silent) {
     try { rider.runCommand('effect @s clear'); } catch { /* none */ }
   }
   S.camActive = false;
-  const cart = findCart();
-  if (cart) {
-    try { cart.getComponent('minecraft:rideable')?.ejectRiders(); } catch { /* empty */ }
-    try { cart.remove(); } catch { /* already gone */ }
-  }
-  S.cartId = '';
+  // Remove EVERY rig piece wearing our tags (there should be one of each, but
+  // stale sessions may have left extras behind).
   if (dim) {
+    let pieces = [];
+    try {
+      pieces = [
+        ...dim.getEntities({ type: SEAT_TYPE, tags: [TAG_SEAT] }),
+        ...dim.getEntities({ type: 'minecraft:minecart', tags: [TAG_RIDE] }),
+      ];
+    } catch { /* entity type not registered: nothing to clean */ }
+    for (const e of pieces) {
+      try { e.getComponent('minecraft:rideable')?.ejectRiders(); } catch { /* empty */ }
+      try { e.remove(); } catch { /* already gone */ }
+    }
     runCmd(`tickingarea remove ${AREA_A}`);
     runCmd(`tickingarea remove ${AREA_B}`);
   }
+  S.cartId = '';
+  S.seatId = '';
   saveState(); // .autodone stays set: a stopped world never auto-restarts
   if (!silent) say('§7Ride stopped.');
 }
@@ -719,6 +835,54 @@ function autoStart() {
 }
 
 // --- Init + the tick driver ----------------------------------------------------
+
+// Startup self-test of the script<->command scoreboard bridge that the whole
+// hybrid design leans on. Two legs: (1) a score written via the native API
+// must be readable and writable by commands under the same fake-player name;
+// (2) the SHARED decide function must run via /function and answer through
+// the scoreboard. If either leg fails, terrain-following cannot work -- say
+// so loudly and specifically instead of silently building a flat line.
+// Only runs when no ride is active (it exercises the brain's live state,
+// snapshotting and restoring every score it touches).
+function bridgeTest() {
+  const touched = ['slope', 'flat', 'lastDir', 'target', 'railY', 'dir',
+    'diff', 'slope0', 'want', 'need', 'ndead', 'nOne', 'bt'];
+  const snap = {};
+  for (const k of touched) snap[k] = objective().getScore(P + k);
+
+  let legScores = false;
+  let legBrain = false;
+  try {
+    setScore('bt', 41);
+    runCmd(`scoreboard players add ${P}bt ir 1`);
+    legScores = getScore('bt', -1) === 42;
+
+    setScore('slope', 0);
+    setScore('flat', 99);
+    setScore('lastDir', 0);
+    setScore('target', 100);
+    setScore('railY', 90);
+    setScore('dir', 0);
+    runCmd(`function ${NS}/decide`);
+    legBrain = getScore('dir', 0) === 1; // 10-block climb wanted -> dir must be 1
+  } catch { /* reported below */ }
+
+  for (const k of touched) {
+    if (snap[k] === undefined) {
+      try { objective().removeParticipant(P + k); } catch { /* never existed */ }
+    } else {
+      setScore(k, snap[k]);
+    }
+  }
+
+  if (!legScores) {
+    say('§cSELF-TEST FAILED: script-written scores are not visible to commands. The ride cannot follow terrain on this version -- please report this along with your Minecraft version.');
+  } else if (!legBrain) {
+    say('§cSELF-TEST FAILED: the shared decide function did not answer (the track would stay flat). Check the Content Log for errors loading infinite_rail functions and report this.');
+  } else {
+    dbg('bridge self-test OK (scores + shared decide)');
+  }
+}
 
 function init() {
   dim = world.getDimension('overworld');
@@ -742,6 +906,7 @@ function init() {
   }
 
   loadState();
+  if (!S.started) bridgeTest();
   if (S.started) say('§7Ride resumed. Run §b/function infinite_rail/stop§7 to end it.');
   else say('§7Loaded. A fresh world starts the ride automatically; run §b/function infinite_rail/start§7 to (re)start it here.');
   inited = true;
@@ -787,27 +952,37 @@ system.runInterval(() => {
   // Per-tick driver, mirroring main.mcfunction's order:
   tickPace();                       // 1.  pace cart X (virtual)
   oceanCheck();                     // 1a. ocean speed-up
+  let seat = findSeat();
   let cart = findCart();
-  if (!cart) {
-    // The ride cart got lost (killed, unloaded corner case): re-summon it on
-    // the rig position -- the same self-healing job as Java's mount keepers.
-    const sy = camFollow();
-    if (sy !== undefined) {
-      try {
-        cart = dim.spawnEntity('minecraft:minecart', {
-          x: S.paceX + cfg('CAMAHEAD'),
-          y: sy + CART_REST + cfg('CAMHEIGHT') / 10,
-          z: S.centerZ + 0.5,
-        });
-        cart.addTag(TAG_RIDE);
-        S.cartId = cart.id;
-      } catch { /* rig chunk not loaded yet */ }
+  if (!seat || !cart) {
+    // A rig piece got lost (killed, or its chunk hasn't loaded back in after
+    // a rejoin). Wait a grace period before rebuilding the rig -- respawning
+    // instantly while the original was merely still loading is exactly what
+    // used to duplicate carts -- then re-summon on the rig position, the same
+    // self-healing job as Java's mount keepers.
+    S.rigMissing += 1;
+    if (S.rigMissing > 40) {
+      const sy = camFollow();
+      const rigX = S.paceX + cfg('CAMAHEAD');
+      if (sy !== undefined && chunkLoaded(rigX, S.centerZ)) {
+        try {
+          seat = spawnRig({
+            x: rigX,
+            y: sy + CART_REST + cfg('CAMHEIGHT') / 10,
+            z: S.centerZ + 0.5,
+          });
+          cart = findCart();
+          S.rigMissing = 0;
+        } catch { /* rig chunk not ready yet; retry next tick */ }
+      }
     }
+  } else {
+    S.rigMissing = 0;
   }
-  if (cart) {
-    keepers(cart);                  // 2-4. eject strangers, re-seat the rider
+  if (seat && cart) {
+    keepers(seat, cart);            // 2-4. mount chain, eject strangers, re-seat
     const sy = camFollow();         // 6.  the smoothed rail-line height
-    if (sy !== undefined) camMove(cart, sy);
+    if (sy !== undefined) camMove(seat, sy);
   }
   buildLoop();                      // 7.  extend the track
 

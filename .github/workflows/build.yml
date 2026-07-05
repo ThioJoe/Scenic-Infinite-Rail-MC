@@ -39,22 +39,35 @@ jobs:
       - name: Simulate the shared logic
         run: node tools/simulate.mjs
 
+      # Artifact names carry the run number so successive test builds are
+      # easy to tell apart (the number increments on failed runs too).
+
       # Downloading this artifact yields a zip that extracts to the
       # ready-to-use infinite_rail/ datapack FOLDER.
       - name: Upload Java datapack (folder)
         uses: actions/upload-artifact@v4
         with:
-          name: InfiniteRail-Java
+          name: InfiniteRail-Java-${{ github.run_number }}
           path: dist/java/
           if-no-files-found: error
 
-      # Downloading this artifact yields a zip containing the .mcpack file;
-      # extract once and double-click the .mcpack to import into Bedrock.
-      - name: Upload Bedrock pack (.mcpack)
+      # Downloading this artifact yields a zip containing the .mcaddon file
+      # (BP + RP); extract once and double-click the .mcaddon to import.
+      - name: Upload Bedrock pack (.mcaddon)
         uses: actions/upload-artifact@v4
         with:
-          name: InfiniteRail-Bedrock
-          path: dist/*.mcpack
+          name: InfiniteRail-Bedrock-${{ github.run_number }}
+          path: dist/*.mcaddon
+          if-no-files-found: error
+
+      # The unzipped Bedrock packs, for development testing: extract and drop
+      # InfiniteRail_BP / InfiniteRail_RP into com.mojang's
+      # development_behavior_packs / development_resource_packs.
+      - name: Upload Bedrock packs (folders, for development)
+        uses: actions/upload-artifact@v4
+        with:
+          name: InfiniteRail-Bedrock-Folder-${{ github.run_number }}
+          path: dist/bedrock/
           if-no-files-found: error
 
       - name: Attach packs to release
@@ -63,4 +76,4 @@ jobs:
         with:
           files: |
             dist/*.zip
-            dist/*.mcpack
+            dist/*.mcaddon

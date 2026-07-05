@@ -11,8 +11,10 @@ src/
                         start_event, end_event) and config (every tunable)
   java/                 the Java data pack, minus the shared files
                         (pack.mcmeta, data/, overlay_snake/)
-  bedrock/              the Bedrock behavior pack, minus the shared files
-                        (manifest.json, functions/, scripts/main.js)
+  bedrock/bp/           the Bedrock behavior pack, minus the shared files
+                        (manifest.json, functions/, scripts/, entities/)
+  bedrock/rp/           the Bedrock resource pack (the invisible camera-seat
+                        entity's client definition; nothing else)
 tools/
   build.mjs             assembles + validates + zips both packs (zero deps)
   simulate.mjs          interprets the emitted shared functions and asserts
@@ -35,13 +37,19 @@ Outputs, all under `dist/` (gitignored):
 | `dist/java/infinite_rail/` | Drop the folder into a world's `datapacks/` folder |
 | `dist/InfiniteRail-Java-v*.zip` | Or drag this zip onto the Data Packs screen |
 | `dist/bedrock/InfiniteRail_BP/` | The behavior pack as a folder (for `development_behavior_packs`) |
-| `dist/InfiniteRail-Bedrock-v*.mcpack` | Double-click to import into Bedrock |
+| `dist/bedrock/InfiniteRail_RP/` | The resource pack as a folder (for `development_resource_packs`) |
+| `dist/InfiniteRail-Bedrock-v*.mcaddon` | Double-click to import into Bedrock (BP + RP in one file) |
 
-GitHub Actions runs the same two commands on every push and uploads
-`InfiniteRail-Java` (the datapack folder) and `InfiniteRail-Bedrock` (the
-`.mcpack`) as artifacts; pushing a `v*` tag attaches the `.zip` + `.mcpack`
-to a GitHub release. The release version comes from `header.version` in
-`src/bedrock/manifest.json`.
+GitHub Actions runs the same two commands on every push and uploads three
+artifacts, each suffixed with the run number so successive test builds are
+easy to tell apart: `InfiniteRail-Java-N` (the datapack folder),
+`InfiniteRail-Bedrock-N` (the `.mcaddon`), and `InfiniteRail-Bedrock-Folder-N`
+(the unzipped BP + RP folders, for dropping straight into
+`development_behavior_packs` / `development_resource_packs` while testing).
+Pushing a `v*` tag attaches the `.zip` + `.mcaddon` to a GitHub release. The
+release version comes from `header.version` in `src/bedrock/bp/manifest.json`
+(the RP manifest and the BP's RP-dependency entry must carry the same
+version; the build enforces this).
 
 ## How sharing works (and its limits)
 
@@ -92,9 +100,10 @@ parallel-climb guarantees).
   dual-dialect subset; the lint will tell you if you don't.
 - **Changing how Java does something** (placement, camera, chunk plumbing):
   edit `src/java/data/infinite_rail/function/`.
-- **Changing how Bedrock does something**: edit `src/bedrock/scripts/main.js`
-  (almost everything lives there) or `src/bedrock/functions/` (gamerules and
-  the start/stop command bridges).
+- **Changing how Bedrock does something**: edit `src/bedrock/bp/scripts/main.js`
+  (almost everything lives there), `src/bedrock/bp/functions/` (gamerules and
+  the start/stop command bridges), or the seat entity's BP/RP definitions
+  (`src/bedrock/bp/entities/seat.json`, `src/bedrock/rp/`).
 - A file name must not exist in both `src/shared` and an edition folder —
   the build refuses to let one silently shadow the other.
 
@@ -103,7 +112,7 @@ parallel-climb guarantees).
 - **Java**: `src/java/pack.mcmeta` declares data-pack formats 82–107 with the
   `overlay_snake` overlay supplying snake_case gamerule files on 92+. Bump
   `max_format` (base + overlay) to extend support.
-- **Bedrock**: `src/bedrock/manifest.json` pins `@minecraft/server` `2.3.0`
+- **Bedrock**: `src/bedrock/bp/manifest.json` pins `@minecraft/server` `2.3.0`
   (the oldest stable module with every API the script uses — `getBiome` is
   the gate) and `min_engine_version` `[1, 21, 120]`. Raising both to the
   current retail pairing is safe whenever older clients stop mattering.

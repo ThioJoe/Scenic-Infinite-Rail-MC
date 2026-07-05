@@ -991,7 +991,7 @@ counterparts all live in `src/bedrock/scripts/main.js` (stable
 | Track history | storage `infinite_rail:track y` list + `cam_get` macro (NBT paths need literal indices) | a plain JS array (`trackY`), trimmed behind the ride and persisted (below) |
 | The build loop | `build_loop` ⇄ `build_step` bounded recursion (mcfunction has no loops) | a `while` loop with the same `#budget` / `#AHEAD` conditions |
 | Camera math | fixed-point milliblock scoreboard arithmetic (`cam_follow`/`cam_blend`/`cam_scan`/`cam_sample`) | the same construction in ordinary floating point (`camFollow()` / `lifted()`) |
-| Moving the rig | `ir_seat` item_display with `teleport_duration:1` + `cam_tp` macro (client-interpolated teleports) | per-tick **velocity drive** of the ride cart (`clearVelocity` + `applyImpulse`; Bedrock clients interpolate physics motion, not teleports), with a teleport fallback for drift |
+| Moving the rig | `ir_seat` item_display with `teleport_duration:1` + `cam_tp` macro (client-interpolated teleports) | `ir_seat` **custom entity** (this pack's BP+RP: invisible, no gravity, no collision) that the ride cart rides as a passenger, moved by per-tick **velocity drive** (`clearVelocity` + `applyImpulse`; Bedrock clients interpolate physics motion, not teleports), with a teleport fallback for drift |
 | The pace | hidden `ir_cart` on the physical rails + `ir_plug` + stall keeper + the minecart max-speed gamerule | a **virtual pace position** (`paceX`) advanced by scripted speed with smooth acceleration — no entity, no keepers, nothing visible behind the rider |
 | Ocean detection | `execute if biome ~ ~ ~ #minecraft:is_ocean` | `dimension.getBiome()` against an explicit ocean-id set (Bedrock has no biome tags) |
 | Chunk management | `forceload` macro corridor | two named `/tickingarea`s leapfrogging every 16 blocks, spanning from behind the rig to `#GENAHEAD` past the head so the ride cart's chunk always ticks (Bedrock caps: 10 areas × 100 chunks — the corridor uses 2 × ~78 with defaults) |
@@ -1001,14 +1001,23 @@ counterparts all live in `src/bedrock/scripts/main.js` (stable
 
 ### 11b. The Bedrock rig and camera
 
-The rider sits in a **real, visible minecart** (tag `ir_ride`), exactly one
-seat, mounted once per ride — occupied Bedrock carts can't be entered or scoop
-up mobs, which is what the Java plug hack existed to guarantee. The script
-computes the same smoothed height `sy` as Java (§7g, float port) and glides
-the cart toward `(paceX + #CAMAHEAD, sy + 0.062 + #CAMHEIGHT/10, centerZ +
-0.5)` by setting its velocity each tick; the client renders that as smooth
-motion, and the player's normal first-person camera rides along — **full
-native free-look with zero added latency**, the same experience as Java.
+The rig is the same three-piece rigid stack as Java's: an invisible **camera
+seat** carries a **real, visible minecart** (tag `ir_ride`), which carries the
+rider — mounted once per ride; occupied Bedrock carts can't be entered or
+scoop up mobs, which is what the Java plug hack existed to guarantee. On
+Bedrock the seat is a tiny custom entity (`infinite_rail:seat`, defined by
+this pack's BP with an invisible client definition in its RP): no gravity, no
+collision, rideable by minecarts. The cart being the seat's *passenger* is
+load-bearing — passengers run no physics of their own, so the engine's
+minecart logic (capture onto the powered rail in the cart's own block cell,
+gravity, ground contact) can never fight the script for control of the cart;
+that fight is exactly what made a directly-driven cart visibly bob up and
+down. The script computes the same smoothed height `sy` as Java (§7g, float
+port) and glides the seat toward `(paceX + #CAMAHEAD, sy + 0.062 +
+#CAMHEIGHT/10, centerZ + 0.5)` by setting its velocity each tick; the client
+renders that as smooth motion, and the player's normal first-person camera
+rides along — **full native free-look with zero added latency**, the same
+experience as Java.
 
 Why not the `/camera` (Camera API) rig by default? Bedrock's `minecraft:free`
 preset **does not follow look input** — the official camera-system docs state
@@ -1072,10 +1081,27 @@ which is unbounded by design.
   re-initializes lazily and resumes the ride from its persisted state. Editing
   `config.mcfunction` + `/reload` refreshes knobs mid-ride, same as Java.
 - **Terrain generation is asynchronous** behind `/tickingarea` (as it is
-  behind Java's `forceload`): the builder never places columns into
-  ungenerated chunks — it pauses and the pace holds (`paceX` is capped at
-  `headX − #CAMAHEAD − 8`) rather than letting the ride outrun the track, a
-  guard Java doesn't need thanks to its larger margins.
+  behind Java's `forceload`): the builder never decides a column until the
+  column *and its entire 48-block sample window* are loaded — deciding from
+  missing samples would freeze the rolling average and bake a permanently
+  flat line into the world. While the builder waits, the pace **eases off
+  smoothly** (the allowed speed shrinks with the remaining track buffer)
+  rather than letting the ride outrun the track, a guard Java doesn't need
+  thanks to its larger margins. If starvation persists, a one-time chat
+  warning points at `.DEBUGMODE 1`, which reports corridor-loading status on
+  every roll.
+- **Distribution is a single `.mcaddon`** (behavior pack + the small resource
+  pack holding the seat entity's invisible client definition); the BP's
+  manifest depends on the RP, so activating the BP pulls the RP in
+  automatically.
+- **A startup self-test** exercises the script↔command scoreboard bridge and
+  the shared `decide` function once per load (when no ride is active) and
+  reports loudly and specifically if either leg is broken, instead of letting
+  the ride degrade into a silent flat line.
+- **Rig integrity is self-healing**: duplicate seats/carts from rejoin races
+  are removed on sight, a missing rig piece gets a 2-second grace period (so
+  a merely-still-loading original isn't duplicated) before the rig is
+  rebuilt, and the ride freezes entirely while its rider is offline.
 - **Single scripted rider:** the ride belongs to the player who started it
   (or the first player, on auto-start); only that player is re-seated by the
   keeper. Leave the ride the sanctioned way — switch to creative or run

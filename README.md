@@ -9,8 +9,9 @@ forever.
 **100% vanilla, on both editions.** One codebase produces two packs:
 
 - **Java Edition** — a single data pack. No mods, no plugins, no resource pack.
-- **Bedrock Edition** — a single behavior pack using only the built-in Script
-  API. No experiments to enable, no resource pack, no third-party anything.
+- **Bedrock Edition** — one add-on (a behavior pack plus a tiny resource pack
+  that defines the invisible camera seat) using only the built-in Script API.
+  No experiments to enable, no third-party anything.
 
 Both share the same terrain-following algorithm — literally the same
 `.mcfunction` files for the decision logic (see `BUILDING.md`) — so the track
@@ -19,8 +20,9 @@ they lay and the ride they give are the same.
 ## Getting the packs
 
 Grab the latest build from the repository's **GitHub Actions artifacts**
-(`InfiniteRail-Java` is the ready-to-use datapack folder, `InfiniteRail-Bedrock`
-contains the `.mcpack`), or from a **Release** if one is published — or build
+(`InfiniteRail-Java-N` is the ready-to-use datapack folder,
+`InfiniteRail-Bedrock-N` contains the `.mcaddon`), or from a **Release** if
+one is published — or build
 both locally with `node tools/build.mjs` (see `BUILDING.md`).
 
 ## Java Edition
@@ -88,11 +90,13 @@ want to move around afterward.)
 
 ### Installation
 
-1. Double-click (or open) `InfiniteRail-Bedrock-v*.mcpack` — Minecraft imports
-   it automatically.
-2. Create a new world with **cheats ON is not required**, but recommended so
-   you can control the ride. In the world's **Behavior Packs** screen,
-   activate *Infinite Rail (Slow TV)*.
+1. Double-click (or open) `InfiniteRail-Bedrock-v*.mcaddon` — Minecraft
+   imports both halves (the behavior pack and its resource pack)
+   automatically.
+2. Create a new world — cheats are **not required**, but recommended so you
+   can control the ride. In the world's **Behavior Packs** screen, activate
+   *Infinite Rail (Slow TV)*; the resource pack is pulled in automatically as
+   its dependency.
 3. Enter the world. The ride starts by itself after a short countdown.
 
 Manual control (note the `/` instead of Java's `:`):
@@ -106,12 +110,15 @@ Press **F1** (or Hide GUI) for the full ambient experience on either edition.
 
 ### Bedrock-specific notes
 
-- **You keep native first-person free-look.** The ride cart is glided along
-  the smoothed path by the script's velocity control, so the camera is simply
-  your normal one. An optional cinematic mode (`.CAMMODE 1`, see Tuning) hands
-  the view to Bedrock's native camera system instead: the position is eased
-  along the path for extra glide, at the cost of your look input reaching the
-  camera a beat late.
+- **You keep native first-person free-look.** Your cart rides an invisible
+  scripted seat that is glided along the smoothed path (the same rig design
+  as Java), so the camera is simply your normal one. An optional cinematic
+  mode (`.CAMMODE 1`, see Tuning) hands the view to Bedrock's native camera
+  system instead: the position is eased along the path for extra glide, at
+  the cost of your look input reaching the camera a beat late.
+- **The ride eases off if world generation falls behind** and speeds back up
+  once terrain ahead is ready — it never builds a column before the terrain
+  it needs to scan exists, and never outruns the built track.
 - **A ride survives quitting and rejoining the world** mid-journey — the
   script saves its state continuously and resumes where it left off.
 - **The support block under the rail is visibly a block of redstone** when

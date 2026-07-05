@@ -9,10 +9,15 @@
 //    src/bedrock/**                     -> Bedrock Edition behavior pack
 //
 //  Outputs (all under dist/):
-//    dist/java/infinite_rail/                     ready-to-drop datapack folder
-//    dist/InfiniteRail-Java-v<version>.zip        drag-and-drop datapack zip
-//    dist/bedrock/InfiniteRail_BP/                behavior pack folder
-//    dist/InfiniteRail-Bedrock-v<version>.mcpack  double-click-to-import pack
+//    dist/java/infinite_rail/                       ready-to-drop datapack folder
+//    dist/InfiniteRail-Java-v<version>.zip          drag-and-drop datapack zip
+//    dist/bedrock/InfiniteRail_BP/                  behavior pack folder
+//    dist/bedrock/InfiniteRail_RP/                  resource pack folder (the
+//                                                   invisible seat entity)
+//    dist/InfiniteRail-Bedrock-v<version>.mcaddon   double-click-to-import
+//                                                   (BP+RP; the BP manifest
+//                                                   depends on the RP, so
+//                                                   activating one pulls both)
 //
 //  Shared .mcfunction files must parse on BOTH engines, so this script:
 //    1. lints them against a strict dual-dialect subset (scoreboard math,
@@ -40,17 +45,27 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC_SHARED = join(ROOT, 'src', 'shared', 'functions');
 const SRC_JAVA = join(ROOT, 'src', 'java');
-const SRC_BEDROCK = join(ROOT, 'src', 'bedrock');
+const SRC_BEDROCK_BP = join(ROOT, 'src', 'bedrock', 'bp');
+const SRC_BEDROCK_RP = join(ROOT, 'src', 'bedrock', 'rp');
 const DIST = join(ROOT, 'dist');
 const CHECK_ONLY = process.argv.includes('--check');
 
 const fail = (msg) => { console.error(`BUILD FAILED: ${msg}`); process.exit(1); };
 
 // ---------------------------------------------------------------------------
-// Version: single source of truth is the Bedrock manifest header version.
+// Version: single source of truth is the Bedrock BP manifest header version.
+// The RP version and the BP->RP dependency must stay in lockstep.
 // ---------------------------------------------------------------------------
-const manifest = JSON.parse(readFileSync(join(SRC_BEDROCK, 'manifest.json'), 'utf8'));
+const manifest = JSON.parse(readFileSync(join(SRC_BEDROCK_BP, 'manifest.json'), 'utf8'));
+const rpManifest = JSON.parse(readFileSync(join(SRC_BEDROCK_RP, 'manifest.json'), 'utf8'));
 const VERSION = manifest.header.version.join('.');
+if (rpManifest.header.version.join('.') !== VERSION) {
+  fail(`BP version ${VERSION} != RP version ${rpManifest.header.version.join('.')}`);
+}
+const rpDep = (manifest.dependencies ?? []).find((d) => d.uuid);
+if (!rpDep || rpDep.uuid !== rpManifest.header.uuid || rpDep.version.join('.') !== VERSION) {
+  fail('BP manifest must depend on the RP header uuid at the same version');
+}
 
 // ---------------------------------------------------------------------------
 // 1. Lint the shared functions against the dual-dialect subset.
@@ -118,8 +133,8 @@ for (const f of sharedFiles) {
   if (existsSync(join(SRC_JAVA, 'data', 'infinite_rail', 'function', f))) {
     fail(`${f} exists in both src/shared and src/java`);
   }
-  if (existsSync(join(SRC_BEDROCK, 'functions', 'infinite_rail', f))) {
-    fail(`${f} exists in both src/shared and src/bedrock`);
+  if (existsSync(join(SRC_BEDROCK_BP, 'functions', 'infinite_rail', f))) {
+    fail(`${f} exists in both src/shared and src/bedrock/bp`);
   }
 }
 
@@ -128,6 +143,7 @@ for (const f of sharedFiles) {
 // ---------------------------------------------------------------------------
 const JAVA_OUT = join(DIST, 'java', 'infinite_rail');
 const BEDROCK_OUT = join(DIST, 'bedrock', 'InfiniteRail_BP');
+const BEDROCK_RP_OUT = join(DIST, 'bedrock', 'InfiniteRail_RP');
 
 if (!CHECK_ONLY) {
   rmSync(DIST, { recursive: true, force: true });
@@ -145,7 +161,8 @@ if (!CHECK_ONLY) {
   // rewrite on their TEXT (the leading comment marker is preserved), so the
   // shipped Bedrock copies document Bedrock syntax -- a user reading the
   // Bedrock config sees ".HOVER", not the Java-only "#HOVER".
-  cpSync(SRC_BEDROCK, BEDROCK_OUT, { recursive: true });
+  cpSync(SRC_BEDROCK_BP, BEDROCK_OUT, { recursive: true });
+  cpSync(SRC_BEDROCK_RP, BEDROCK_RP_OUT, { recursive: true });
   mkdirSync(join(BEDROCK_OUT, 'functions', 'infinite_rail'), { recursive: true });
   const dotify = (s) => s.replaceAll(/(^|\s)#(?=[A-Za-z0-9_])/g, '$1.');
   for (const [f, content] of shared) {
@@ -234,11 +251,15 @@ if (CHECK_ONLY) {
 
 validatePack(JAVA_OUT, 'java');
 validatePack(BEDROCK_OUT, 'bedrock');
+for (const file of walk(BEDROCK_RP_OUT)) {
+  if (file.endsWith('.json')) validateJson(file);
+}
 
 // Sanity: the packs' entry metadata files must exist at their roots.
 if (!existsSync(join(JAVA_OUT, 'pack.mcmeta'))) fail('Java pack has no pack.mcmeta');
-if (!existsSync(join(BEDROCK_OUT, 'manifest.json'))) fail('Bedrock pack has no manifest.json');
-if (!existsSync(join(BEDROCK_OUT, 'scripts', 'main.js'))) fail('Bedrock pack has no scripts/main.js');
+if (!existsSync(join(BEDROCK_OUT, 'manifest.json'))) fail('Bedrock BP has no manifest.json');
+if (!existsSync(join(BEDROCK_OUT, 'scripts', 'main.js'))) fail('Bedrock BP has no scripts/main.js');
+if (!existsSync(join(BEDROCK_RP_OUT, 'manifest.json'))) fail('Bedrock RP has no manifest.json');
 
 // ---------------------------------------------------------------------------
 // 4. Zip writer (store + deflate, fixed timestamps for reproducible output).
@@ -316,12 +337,12 @@ function zipDirectory(srcDir, outFile) {
 }
 
 const javaZip = join(DIST, `InfiniteRail-Java-v${VERSION}.zip`);
-const bedrockPack = join(DIST, `InfiniteRail-Bedrock-v${VERSION}.mcpack`);
-zipDirectory(JAVA_OUT, javaZip);       // pack.mcmeta at zip root
-zipDirectory(BEDROCK_OUT, bedrockPack); // manifest.json at zip root
+const bedrockAddon = join(DIST, `InfiniteRail-Bedrock-v${VERSION}.mcaddon`);
+zipDirectory(JAVA_OUT, javaZip);                    // pack.mcmeta at zip root
+zipDirectory(join(DIST, 'bedrock'), bedrockAddon);  // BP + RP folders at zip root
 
 const count = (d) => [...walk(d)].length;
 console.log(`Infinite Rail v${VERSION}`);
 console.log(`  shared functions injected: ${sharedFiles.length} (${sharedFiles.map((f) => f.replace('.mcfunction', '')).join(', ')})`);
 console.log(`  Java pack:    ${relative(ROOT, JAVA_OUT)} (${count(JAVA_OUT)} files) -> ${relative(ROOT, javaZip)} (${statSync(javaZip).size} bytes)`);
-console.log(`  Bedrock pack: ${relative(ROOT, BEDROCK_OUT)} (${count(BEDROCK_OUT)} files) -> ${relative(ROOT, bedrockPack)} (${statSync(bedrockPack).size} bytes)`);
+console.log(`  Bedrock BP+RP: ${relative(ROOT, join(DIST, 'bedrock'))} (${count(join(DIST, 'bedrock'))} files) -> ${relative(ROOT, bedrockAddon)} (${statSync(bedrockAddon).size} bytes)`);

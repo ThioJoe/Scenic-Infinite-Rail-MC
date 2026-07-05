@@ -19,8 +19,8 @@
 //  cannot silently weaken or spuriously fail these checks.
 //
 //  It also checks the SHIPPED smooth-camera construction (imported from
-//  src/bedrock/scripts/cam_math.js, the module the Bedrock pack runs) for its
-//  core guarantees: never below the rail line, exact on settled flats,
+//  src/bedrock/bp/scripts/cam_math.js, the module the Bedrock pack runs) for
+//  its core guarantees: never below the rail line, exact on settled flats,
 //  parallel mid-climb.
 //
 //  Run after tools/build.mjs:  node tools/simulate.mjs
@@ -29,7 +29,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { camHeight } from '../src/bedrock/scripts/cam_math.js';
+import { camHeight } from '../src/bedrock/bp/scripts/cam_math.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const JAVA_FN = join(ROOT, 'dist', 'java', 'infinite_rail', 'data', 'infinite_rail', 'function');
