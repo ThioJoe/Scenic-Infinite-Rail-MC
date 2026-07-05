@@ -102,7 +102,7 @@ scoreboard players set #CAMMODE ir 0
 # values sink the cart ENTITY into the track blocks, where it suffocates.
 # Tune live (takes effect instantly):
 #   /scoreboard players set #CARTYOFF ir -1
-scoreboard players set #CARTYOFF ir 0
+scoreboard players set #CARTYOFF ir 12
 
 
 # --- Auto-start -------------------------------------------------------------
