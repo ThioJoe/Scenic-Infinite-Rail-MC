@@ -987,14 +987,14 @@ counterparts all live in `src/bedrock/scripts/main.js` (stable
 
 | Job | Java mechanism (kept) | Bedrock mechanism (replaces it) |
 | --- | --- | --- |
-| Heightmap sampling | `ir_probe` marker + `execute positioned over motion_blocking_no_leaves` | `dimension.getTopmostBlock()` + a short walk down past leaves/foliage (liquids count, so oceans read as sea level) |
+| Heightmap sampling | `ir_probe` marker + `execute positioned over motion_blocking_no_leaves` | `dimension.getTopmostBlock()` + a short walk down past leaves/foliage + a climb back up any liquid column — Bedrock's topmost-block probe **skips liquids**, so an ocean read lands on the sea *floor*; the climb restores Java's liquids-count-as-surface semantics, so oceans read as sea level and get bridged instead of dived into. Reads are memoized per column (the sliding window re-samples each X twelve times) |
 | Track history | storage `infinite_rail:track y` list + `cam_get` macro (NBT paths need literal indices) | a plain JS array (`trackY`), trimmed behind the ride and persisted (below) |
 | The build loop | `build_loop` ⇄ `build_step` bounded recursion (mcfunction has no loops) | a `while` loop with the same `#budget` / `#AHEAD` conditions |
 | Camera math | fixed-point milliblock scoreboard arithmetic (`cam_follow`/`cam_blend`/`cam_scan`/`cam_sample`) | the same construction in ordinary floating point (`camFollow()` / `lifted()`) |
 | Moving the rig | `ir_seat` item_display with `teleport_duration:1` + `cam_tp` macro (client-interpolated teleports) | `ir_seat` **custom entity** (this pack's BP+RP: invisible, no gravity, no collision) that the ride cart rides as a passenger, moved by per-tick **velocity drive** (`clearVelocity` + `applyImpulse`; Bedrock clients interpolate physics motion, not teleports), with a teleport fallback for drift |
 | The pace | hidden `ir_cart` on the physical rails + `ir_plug` + stall keeper + the minecart max-speed gamerule | a **virtual pace position** (`paceX`) advanced by scripted speed with smooth acceleration — no entity, no keepers, nothing visible behind the rider |
 | Ocean detection | `execute if biome ~ ~ ~ #minecraft:is_ocean` | `dimension.getBiome()` against an explicit ocean-id set (Bedrock has no biome tags) |
-| Chunk management | `forceload` macro corridor | four long-lived 128-block `/tickingarea` tiles reaching ~380–500 blocks past the head; each tile survives ~500 blocks of travel because Bedrock's asynchronous generator gets nothing done inside short-lived areas (caps: 10 areas × 100 chunks — 4 × 24 used) |
+| Chunk management | `forceload` macro corridor | an invisible **chunk scout** entity carrying vanilla's `minecraft:tick_world` component (radius 6 chunks = a 96-block ticking bubble, `never_despawn` — the ender dragon's own chunk loader), gliding ~90 blocks ahead of the rig as a *mobile ticking area*. `/tickingarea` is unusable for this job: it neither generates new terrain nor pre-loads it (measured in-game — a 470-block corridor of areas contributed zero loaded chunks) |
 | Column placement | `place_flat/up/down` + `carve` macro + `support` | `fillBlocks` + `setBlockPermutation` (`golden_rail` `rail_direction` 1/2/3, `redstone_block`, `light_block_11`) |
 | Start/stop entry | `/function infinite_rail:start` | `/function infinite_rail/start` — a one-line function bridging into the script via `/scriptevent` |
 | World tuning | `setup_world` (camelCase) + overlay (snake_case) | `setup_world` (Bedrock's lowercase gamerule names) — a third small file, same rules |
@@ -1080,17 +1080,36 @@ which is unbounded by design.
 - **`/reload` reloads both functions and scripts** on Bedrock; the script
   re-initializes lazily and resumes the ride from its persisted state. Editing
   `config.mcfunction` + `/reload` refreshes knobs mid-ride, same as Java.
-- **Terrain generation is asynchronous** behind `/tickingarea` (much more so
-  than Java's `forceload`): the builder never decides a column until the
-  column *and its entire 48-block sample window* are loaded — deciding from
-  missing samples would freeze the rolling average and bake a permanently
-  flat line into the world. While the builder waits, the pace **eases off
-  smoothly** (the allowed speed shrinks with the remaining track buffer)
-  rather than letting the ride outrun the track, a guard Java doesn't need
-  thanks to its larger margins. If starvation persists, a one-time chat
-  warning points at debug mode (`/function infinite_rail/debug`), which
-  reports the generated frontier and the algorithm's live numbers
-  (`badSamples`, `avg`, `railY`) on every corridor roll.
+- **Only players generate terrain on Bedrock.** There is no working
+  equivalent of Java's `forceload`-driven generation: `/tickingarea` keeps
+  already-active chunks ticking but generates and pre-loads *nothing* (two
+  corridor designs built on it failed identically — the builder crawled
+  along the rider's own simulation bubble, building in bursts right in
+  front of the cart). The pack's answer is the **chunk scout**
+  (`infinite_rail:scout`): an invisible entity whose vanilla
+  `minecraft:tick_world` component makes it a mobile 6-chunk ticking area.
+  It glides ahead of the rig — stepping only onto ground whose chunk is
+  already open, so it can never strand itself — and between the rider's
+  bubble and the scout's, the corridor from the rig to ~`#AHEAD` blocks
+  past the pace stays loaded and script-readable. How far terrain actually
+  *generates* ahead is governed by the rider's **render distance** (the
+  scout can only hold open what the engine has generated), so a higher
+  render distance directly lengthens the ready track ahead of the viewer.
+- **The builder tolerates a lagging frontier.** A column needs only its own
+  chunk plus a one-chunk margin (`BUILD_MARGIN`, 17 blocks — at least 4 of
+  the 12 window samples) loaded to build; missing far samples fall back to
+  the rolling average *individually* (`badSamples` in the debug line). The
+  guard exists to prevent deciding columns with **zero** real samples
+  (which would freeze the average and bake a flat line into the world) —
+  requiring the entire 48-block window, as the port originally did, pinned
+  the head ~49 blocks behind the frontier and caused the bursty,
+  build-only-when-close behavior. While the builder is starved anyway, the
+  pace **eases off smoothly** (the allowed speed shrinks with the remaining
+  track buffer) rather than letting the ride outrun the track. If
+  starvation persists, a one-time chat warning points at debug mode
+  (`/function infinite_rail/debug`), which reports the loaded frontier, the
+  scout's lead over the head, and the algorithm's live numbers
+  (`badSamples`, `avg`, `railY`) every 16 blocks.
 - **The scoreboard bridge self-heals.** The startup self-test verifies that
   API-written scores are visible to commands; if a version splits the two
   scoreboards, the script switches to a command-based bridge (inputs via
@@ -1098,17 +1117,19 @@ which is unbounded by design.
   successCount probes) and says so. In that mode live `.KNOB` tweaks read as
   config defaults.
 - **Distribution is a single `.mcaddon`** (behavior pack + the small resource
-  pack holding the seat entity's invisible client definition); the BP's
-  manifest depends on the RP, so activating the BP pulls the RP in
-  automatically.
+  pack holding the invisible client definitions of the seat and scout
+  entities); the BP's manifest depends on the RP, so activating the BP pulls
+  the RP in automatically.
 - **A startup self-test** exercises the script↔command scoreboard bridge and
   the shared `decide` function once per load (when no ride is active) and
   reports loudly and specifically if either leg is broken, instead of letting
   the ride degrade into a silent flat line.
-- **Rig integrity is self-healing**: duplicate seats/carts from rejoin races
-  are removed on sight, a missing rig piece gets a 2-second grace period (so
-  a merely-still-loading original isn't duplicated) before the rig is
-  rebuilt, and the ride freezes entirely while its rider is offline.
+- **Rig integrity is self-healing**: duplicate seats/carts/scouts from rejoin
+  races are removed on sight, a missing rig piece gets a 2-second grace
+  period (so a merely-still-loading original isn't duplicated) before the
+  rig is rebuilt, a missing scout is respawned at the rig (the one spot the
+  rider guarantees is loaded) and walks itself back to its post, and the
+  ride freezes entirely while its rider is offline.
 - **Single scripted rider:** the ride belongs to the player who started it
   (or the first player, on auto-start); only that player is re-seated by the
   keeper. Leave the ride the sanctioned way — switch to creative or run

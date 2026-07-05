@@ -122,9 +122,17 @@ Press **F1** (or Hide GUI) for the full ambient experience on either edition.
   mode (`.CAMMODE 1`, see Tuning) hands the view to Bedrock's native camera
   system instead: the position is eased along the path for extra glide, at
   the cost of your look input reaching the camera a beat late.
-- **The ride eases off if world generation falls behind** and speeds back up
-  once terrain ahead is ready — it never builds a column before the terrain
-  it needs to scan exists, and never outruns the built track.
+- **An invisible "chunk scout" keeps terrain open far ahead.** Bedrock only
+  generates terrain around players (`/tickingarea` can't do it), so the pack
+  summons a tiny invisible entity carrying the vanilla `minecraft:tick_world`
+  component — a mobile ticking area, the same mechanism the ender dragon
+  uses — that glides ~90 blocks ahead of you and keeps the build corridor
+  loaded for the track builder. **A higher video render distance directly
+  lengthens how far ahead the track can be built**, because render distance
+  is what makes the engine generate the terrain the scout then holds open.
+- **The ride eases off if world generation still falls behind** and speeds
+  back up once terrain ahead is ready — it never builds a column before the
+  terrain under it exists, and never outruns the built track.
 - **A ride survives quitting and rejoining the world** mid-journey — the
   script saves its state continuously and resumes where it left off.
 - **The support block under the rail is visibly a block of redstone** when
@@ -211,12 +219,13 @@ Press **F1** (or Hide GUI) for the full ambient experience on either edition.
   (On Java this rides on the **Minecart Improvements** max-speed gamerule,
   which the pack enables itself; on Bedrock the script drives the cart speed
   directly. Set `#OCEANSPEED` to 0 to turn the speed-up off.)
-- **Forced generation ahead, aggressive unloading behind** — the pack keeps
-  terrain generated `#GENAHEAD` blocks ahead of the track head so the scanner
-  always has real heightmap data (Java: rolling `forceload`s; Bedrock: rolling
-  ticking areas), and releases the corridor behind. World spawn and your
-  respawn point roll forward with the ride, so nothing stays loaded behind
-  you.
+- **Terrain kept ready ahead, aggressive unloading behind** — the pack keeps
+  the corridor ahead of the track head loaded so the scanner has real
+  heightmap data (Java: rolling `forceload`s that generate `#GENAHEAD` blocks
+  ahead; Bedrock: the invisible chunk-scout entity holding a mobile ticking
+  area open ahead of the ride), and releases everything behind. World spawn
+  and your respawn point roll forward with the ride, so nothing stays loaded
+  behind you.
 - **Spectator constraints** — you're switched to Adventure mode with max
   Resistance and Saturation, so you can look around freely but can't break the
   track, get hurt, or starve, with true invulnerability from damage gamerules.
@@ -345,10 +354,13 @@ averages that profile over a window centered on the rig, all in fixed-point
 milliblock scoreboard math.
 
 On Bedrock, the same jobs run in `scripts/main.js` on the stable Script API:
-`getTopmostBlock()` replaces the probe-marker heightmap trick, a plain
-JavaScript array replaces the command-storage profile list, ordinary
-floating-point math replaces the milliblock arithmetic, velocity-driven
-motion replaces the interpolated-teleport seat, and a virtual pace position
-replaces the hidden pace cart entirely. The slope decisions themselves — the
-event model — are the **same shared `.mcfunction` files** on both editions,
-talking to each engine through two scoreboard integers.
+`getTopmostBlock()` (plus a climb back up liquid columns, which the Bedrock
+probe skips) replaces the probe-marker heightmap trick, a plain JavaScript
+array replaces the command-storage profile list, ordinary floating-point math
+replaces the milliblock arithmetic, velocity-driven motion replaces the
+interpolated-teleport seat, a virtual pace position replaces the hidden pace
+cart entirely, and an invisible **chunk scout** (an entity carrying vanilla's
+`minecraft:tick_world` component — a mobile ticking area) replaces the
+`forceload` corridor. The slope decisions themselves — the event model — are
+the **same shared `.mcfunction` files** on both editions, talking to each
+engine through two scoreboard integers.

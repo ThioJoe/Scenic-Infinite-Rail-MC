@@ -13,8 +13,9 @@ src/
                         (pack.mcmeta, data/, overlay_snake/)
   bedrock/bp/           the Bedrock behavior pack, minus the shared files
                         (manifest.json, functions/, scripts/, entities/)
-  bedrock/rp/           the Bedrock resource pack (the invisible camera-seat
-                        entity's client definition; nothing else)
+  bedrock/rp/           the Bedrock resource pack (the invisible client
+                        definitions of the camera-seat and chunk-scout
+                        entities; nothing else)
 tools/
   build.mjs             assembles + validates + zips both packs (zero deps)
   simulate.mjs          interprets the emitted shared functions and asserts
@@ -102,8 +103,8 @@ parallel-climb guarantees).
   edit `src/java/data/infinite_rail/function/`.
 - **Changing how Bedrock does something**: edit `src/bedrock/bp/scripts/main.js`
   (almost everything lives there), `src/bedrock/bp/functions/` (gamerules and
-  the start/stop command bridges), or the seat entity's BP/RP definitions
-  (`src/bedrock/bp/entities/seat.json`, `src/bedrock/rp/`).
+  the start/stop command bridges), or the seat/scout entities' BP/RP
+  definitions (`src/bedrock/bp/entities/*.json`, `src/bedrock/rp/`).
 - A file name must not exist in both `src/shared` and an edition folder —
   the build refuses to let one silently shadow the other.
 

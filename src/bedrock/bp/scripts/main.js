@@ -12,8 +12,10 @@
 //    Java jank (why it existed)                ->  Bedrock native replacement
 //    -------------------------------------------------------------------------
 //    ir_probe marker + "positioned over"       ->  dimension.getTopmostBlock()
-//      (only way to read heightmaps into
-//       scoreboards)
+//      (only way to read heightmaps into           + walk down past foliage +
+//       scoreboards)                               climb back up liquid columns
+//                                                  (Bedrock's topmost probe
+//                                                  skips liquids entirely)
 //    storage infinite_rail:track y + cam_get   ->  plain JS array (trackY),
 //      macro (only array vanilla Java has)         trimmed + persisted
 //    build_loop <-> build_step recursion       ->  a JS while loop
@@ -32,8 +34,13 @@
 //      (only way to get real rail pace and         advanced by scripted speed
 //       drive it via the max-speed gamerule)       with smooth acceleration
 //    "execute if biome" + chunk counters       ->  dimension.getBiome()
-//    forceload macro                           ->  /tickingarea (two leapfrog
-//                                                  named areas)
+//    forceload macro                           ->  an invisible SCOUT entity
+//                                                  (minecraft:tick_world, this
+//                                                  pack's BP+RP) gliding ahead
+//                                                  of the ride as a mobile
+//                                                  ticking area; /tickingarea
+//                                                  can neither generate nor
+//                                                  pre-load new terrain
 //
 //  The per-column pipeline is IDENTICAL to Java's advance.mcfunction:
 //    1. sampleWindow() -> average surface of the next 48 blocks (12 samples,
@@ -74,16 +81,25 @@ const TAG_SEAT = 'ir_seat';
 // engine fighting the script over the cart was what made the ride bob
 // vertically. The script only ever moves the seat.
 const SEAT_TYPE = 'infinite_rail:seat';
-// The generation corridor: four long-lived 128-block ticking-area tiles that
-// advance one at a time. Bedrock generates ticking-area terrain slowly and
-// asynchronously, so areas must live a long time (each tile survives ~500
-// blocks of travel) and reach far ahead (~380-500 blocks past the head) --
-// the old design of one big area re-created every 16 blocks never gave the
-// generator time to finish anything.
-const TILE = 128;
-const TILE_NAMES = ['ir_t0', 'ir_t1', 'ir_t2', 'ir_t3'];
-// Legacy area names from older versions of this pack, removed on cleanup.
-const LEGACY_AREAS = ['ir_area_a', 'ir_area_b'];
+// The chunk SCOUT -- a custom entity whose minecraft:tick_world component
+// (radius 6 chunks = a 96-block ticking bubble, never_despawn) makes it a
+// MOBILE TICKING AREA. It glides ahead of the rig, keeping the server-side
+// loaded zone extended over terrain the rider's render distance generates,
+// so the builder can read and place blocks far ahead of the cart. Command
+// ticking areas can NOT do this job: /tickingarea neither generates new
+// terrain nor loads it ahead of the generation frontier -- measured
+// in-game, a 470-block corridor of them contributed zero loaded chunks and
+// the builder crawled along the rider's own simulation bubble instead.
+const SCOUT_TYPE = 'infinite_rail:scout';
+const TAG_SCOUT = 'ir_scout';
+const SCOUT_REACH = 96;  // tick_world radius 6 chunks, in blocks
+const SCOUT_STEP = 8;    // max blocks/tick the scout glides
+const SCOUT_Y = 180;     // cruising altitude (irrelevant to chunk ticking)
+// How far past the head buildReady() requires loaded chunks (the first third
+// of the 48-block sample window; the rest may lag and fall back per-sample).
+const BUILD_MARGIN = 17;
+// Ticking-area names from older versions of this pack, removed on cleanup.
+const LEGACY_AREAS = ['ir_area_a', 'ir_area_b', 'ir_t0', 'ir_t1', 'ir_t2', 'ir_t3'];
 const PREFIX = '§6[Infinite Rail]§r ';
 const DBG = '§3[IR debug]§r ';
 
@@ -161,7 +177,9 @@ const S = {
   startTimer: 0,   // auto-start countdown (ticks with a player present)
   cartId: '',      // entity id of the ride cart (rediscovered by tag if stale)
   seatId: '',      // entity id of the camera seat (rediscovered by tag if stale)
+  scoutId: '',     // entity id of the chunk scout (rediscovered by tag if stale)
   rigMissing: 0,   // consecutive ticks the rig has been missing (respawn grace)
+  scoutMissing: 0, // consecutive ticks the scout has been missing (respawn grace)
   camActive: false, // whether the optional Camera API mode is currently applied
   teleportFallback: false, // set if applyImpulse is unavailable on the seat
 };
@@ -277,6 +295,12 @@ function findSeat() {
   return seat;
 }
 
+function findScout() {
+  const scout = findTagged(SCOUT_TYPE, TAG_SCOUT, S.scoutId);
+  if (scout) S.scoutId = scout.id;
+  return scout;
+}
+
 function chunkLoaded(x, z) {
   // getBlock is documented to return undefined for unloaded chunks, which
   // makes it the most portable "is this column ready" probe.
@@ -341,30 +365,76 @@ function loadState() {
 
 // --- Terrain sampling ----------------------------------------------------------
 // The Bedrock-native replacement for the ir_probe marker + "execute positioned
-// over motion_blocking_no_leaves" trick: getTopmostBlock, then walk down past
-// anything that wouldn't register on Java's motion_blocking_no_leaves heightmap
-// (leaves and collision-less foliage; liquids DO count, so oceans read as sea
-// level and get bridged). Returns the Y one above the surface block -- the same
-// convention as the Java heightmap -- or undefined for void/unloaded reads.
+// over motion_blocking_no_leaves" trick, in three moves:
+//   1. dimension.getTopmostBlock() -- which on current Bedrock SKIPS LIQUIDS
+//      entirely: over an ocean it answers the sea FLOOR, not the surface;
+//   2. a climb back UP to the true top of the column (the liquid surface,
+//      when there is one) -- Java's heightmap counts liquid surfaces as
+//      terrain, which is what makes oceans read as sea level and get
+//      bridged instead of dived into;
+//   3. a short walk DOWN past anything Java's motion_blocking_no_leaves
+//      heightmap would also ignore (leaves, collision-less foliage).
+// Returns the Y one above the (possibly liquid) surface -- the same convention
+// as the Java heightmap -- or undefined for void/unloaded reads.
+
+// One ride samples every X twelve times (the 12-sample window slides one block
+// per column), and the ocean climb makes a deep-water sample cost tens of
+// block reads -- so completed reads are memoized per column until the head
+// passes them (pruned in rollChunks, reset by begin).
+const surfMemo = new Map();
 
 function surfaceY(x, z) {
+  if (z === S.centerZ && surfMemo.has(x)) return surfMemo.get(x);
   let block;
   try { block = dim.getTopmostBlock({ x, z }); } catch { return undefined; }
+
+  // getTopmostBlock SKIPS LIQUIDS on current Bedrock: over an ocean it
+  // answers the sea FLOOR (measured in-game: avg=34 across a y=62 ocean, and
+  // the rail dived to the seabed accordingly). Climb back up to the true top
+  // of the column first -- everything stacked above the topmost non-liquid
+  // block can only be the liquid column and its waterlogged flora, so "not
+  // air" is the whole test. On dry land the block above is air and this is a
+  // single wasted read.
+  if (block) {
+    try {
+      for (let up = 0; up < 128; up++) {
+        const above = dim.getBlock({ x, y: block.y + 1, z });
+        if (!above || above.isAir === true || above.typeId === 'minecraft:air') break;
+        if (above.isAir === undefined && above.typeId === undefined) break; // API blind here: don't climb into the sky
+        block = above;
+      }
+    } catch { /* top of the column is unloaded: keep what we have */ }
+  }
+
   for (let i = 0; block && i < 48; i++) {
     const id = block.typeId ?? '';
+    let surf;
     if (id === 'minecraft:water' || id === 'minecraft:flowing_water' || block.isLiquid === true) {
-      return block.y + 1;
+      // A liquid surface counts as terrain, exactly like Java's heightmap --
+      // this is what makes oceans read as sea level and get bridged.
+      surf = block.y + 1;
+    } else if (id.includes('leaves') || block.isSolid === false) {
+      // Skip what Java's motion_blocking_no_leaves skips: leaves, and blocks
+      // the engine reports as explicitly NON-solid (foliage, snow layers).
+      // The comparisons are deliberately against literal true/false: if
+      // isSolid / isLiquid are unavailable on this module version they read
+      // undefined, and the block is ACCEPTED as surface -- a flower
+      // miscounted as ground costs a block of noise (well inside #DEADBAND),
+      // whereas skipping everything would freeze the terrain average and
+      // flatline the whole ride.
+      // Step down with getBlock, NOT getTopmostBlock(pos, y-1) -- the latter
+      // can get stuck returning the same block, which turned every
+      // foliage-covered column into an undefined read.
+      try { block = dim.getBlock({ x, y: block.y - 1, z }); } catch { return undefined; }
+      continue;
+    } else {
+      surf = block.y + 1;
     }
-    // Skip what Java's motion_blocking_no_leaves skips: leaves, and blocks the
-    // engine reports as explicitly NON-solid (foliage, snow layers). The
-    // comparisons are deliberately against literal true/false: if isSolid /
-    // isLiquid are unavailable on this module version they read undefined, and
-    // the block is ACCEPTED as surface -- a flower miscounted as ground costs
-    // a block of noise (well inside #DEADBAND), whereas skipping everything
-    // would freeze the terrain average and flatline the whole ride.
-    const skip = id.includes('leaves') || block.isSolid === false;
-    if (!skip) return block.y + 1;
-    try { block = dim.getTopmostBlock({ x, z }, block.y - 1); } catch { return undefined; }
+    if (z === S.centerZ) {
+      surfMemo.set(x, surf);
+      if (surfMemo.size > 4096) surfMemo.clear(); // backstop; rollChunks prunes
+    }
+    return surf;
   }
   return undefined;
 }
@@ -448,14 +518,18 @@ function advance() {
   if (S.headX >= S.nextLoad) rollChunks();
 }
 
-// A column may only be built once its OWN chunk and its entire 48-block
-// sample window are loaded/generated. This is the load-bearing guard for
-// terrain-following: deciding a column while the lookahead is unloaded would
-// read every sample as "no data", leave the rolling average frozen, and bake
-// a permanently flat line into the world. Better to pause and keep the data
-// honest -- the pace cap already slows the ride while the head waits.
+// A column may only be built once its OWN chunk and a one-chunk margin ahead
+// (BUILD_MARGIN blocks -- the first third of the sample window, at least 4 of
+// the 12 samples) are loaded. The REST of the 48-block window is allowed to
+// lag: sampleWindow falls back to the rolling average per missing sample, so
+// the average keeps following the terrain it can see instead of freezing --
+// which is the failure this guard exists to prevent (deciding columns with
+// ZERO real samples bakes a permanently flat line into the world). Requiring
+// the entire window here, as this guard originally did, pinned the head to
+// the generation frontier minus 49 blocks and made the track appear in
+// stop-and-go bursts right in front of the rider.
 function buildReady() {
-  for (let off = 1; off <= 49; off += 16) {
+  for (let off = 1; off <= BUILD_MARGIN; off += 16) {
     if (!chunkLoaded(S.headX + off, S.centerZ)) return false;
   }
   return true;
@@ -475,13 +549,13 @@ function buildLoop() {
     built = true;
   }
   // If the builder is starved for terrain while the track buffer is running
-  // low, say so once -- the likeliest cause is ticking areas not generating
-  // chunks ahead (the ride then follows the player's own chunk loading).
+  // low, say so once -- the likeliest causes are a missing scout (outdated
+  // packs) or a low render distance capping how far terrain generates.
   if (!built && S.headX - Math.floor(S.paceX) < ahead - 64) {
     stallTicks += 1;
     if (stallTicks === 200 && !stallWarned) {
       stallWarned = true;
-      say('§eTerrain ahead is generating slowly; the ride will ease off until it catches up. Set §b.DEBUGMODE§e to 1 for corridor status.');
+      say('§eTerrain ahead is generating slowly; the ride will ease off until it catches up. A higher render distance generates terrain further ahead. Run §b/function infinite_rail/debug§e for chunk-loading status.');
     }
   } else {
     stallTicks = 0;
@@ -489,66 +563,102 @@ function buildLoop() {
 }
 
 // --- Chunk management ----------------------------------------------------------
-// roll_chunks/forceload: keep a generation corridor ahead of the head and roll
-// the world spawn + respawn points forward with the ride.
+// roll_chunks/forceload: keep terrain open ahead of the head and roll the
+// world spawn + respawn points forward with the ride.
 //
-// The corridor is four 128-block ticking-area TILES covering consecutive
-// segments from just behind the head to ~380-500 blocks ahead of it. Tiles
-// advance one at a time (the rearmost is re-created at the front when the
-// head crosses a segment boundary), so each area lives for ~500 blocks of
-// travel -- Bedrock's asynchronous generator needs long-lived, far-ahead
-// requests; short-lived areas get destroyed before they finish generating
-// anything. Each tile is 8x3 = 24 chunks, four tiles = 96 ticked chunks,
-// comfortably inside Bedrock's caps (10 areas, 100 chunks each). Nothing is
-// spent backward: the rider sits at the rig, so their own simulation distance
-// keeps the rig's chunks loaded.
+// Bedrock reality (measured in-game, and the reason two earlier /tickingarea
+// corridor designs never worked): NOTHING server-side generates or pre-loads
+// terrain except a player. /tickingarea keeps already-active chunks ticking
+// but contributes zero new ones, so a track builder gated on loaded chunks
+// crawls along the leading edge of the rider's own simulation bubble --
+// building in bursts right in front of the cart.
+//
+// What DOES work is the vanilla minecraft:tick_world entity component (the
+// ender dragon's chunk loader): an entity carrying it is a mobile ticking
+// area, radius up to 6 chunks, active regardless of player distance. The
+// SCOUT is this pack's invisible carrier. It glides up to scoutTargetX()
+// ahead of the ride, stepping only onto ground whose chunk is already open
+// (its own bubble requests the next chunks; the rider's render distance
+// generates them), so between the rider's bubble and the scout's the whole
+// corridor from the rig to ~#AHEAD blocks ahead of the pace stays readable.
 
-let tilesBase = null; // segment index of the rearmost tile, or null if unplaced
-
-const tileSeg = (x) => Math.floor(x / TILE);
-
-function placeTile(seg) {
-  const name = TILE_NAMES[((seg % TILE_NAMES.length) + TILE_NAMES.length) % TILE_NAMES.length];
-  const x0 = seg * TILE;
-  runCmd(`tickingarea remove ${name}`);
-  return runCmd(`tickingarea add ${x0} 0 ${S.centerZ - 8} ${x0 + TILE - 1} 0 ${S.centerZ + 8} ${name}`);
+// The scout's post: far enough ahead that its bubble covers the last chunk
+// the builder needs (head at paceX + #AHEAD, probed to +BUILD_MARGIN, +8
+// slack), but never behind the rig.
+function scoutTargetX() {
+  const lead = Math.max(16, cfg('AHEAD') - cfg('CAMAHEAD') + BUILD_MARGIN + 8 - SCOUT_REACH);
+  return S.paceX + cfg('CAMAHEAD') + lead;
 }
 
-function removeCorridor() {
-  for (const name of [...TILE_NAMES, ...LEGACY_AREAS]) runCmd(`tickingarea remove ${name}`);
-  tilesBase = null;
-}
-
-function ensureCorridor() {
-  const first = tileSeg(S.headX - 16);
-  if (tilesBase === null || Math.abs(first - tilesBase) > TILE_NAMES.length * 2) {
-    // Fresh placement (ride start, resume, or a discontinuous jump).
-    for (let s = first; s < first + TILE_NAMES.length; s++) placeTile(s);
-    tilesBase = first;
-  } else {
-    while (tilesBase < first) {
-      // Recycle the rearmost tile to the new front segment.
-      placeTile(tilesBase + TILE_NAMES.length);
-      tilesBase += 1;
+// Per-tick scout keeper + mover, same self-healing pattern as the rig: a
+// missing scout (killed, or its chunk not restored yet after a rejoin) gets
+// a grace period, then is respawned at the rig -- the one place the rider
+// guarantees is loaded -- and walks itself back east to its post.
+function tickScout() {
+  let scout = findScout();
+  if (!scout) {
+    S.scoutMissing += 1;
+    if (S.scoutMissing > 40) {
+      const rigX = S.paceX + cfg('CAMAHEAD');
+      if (chunkLoaded(rigX, S.centerZ)) {
+        try {
+          scout = dim.spawnEntity(SCOUT_TYPE, { x: rigX, y: SCOUT_Y, z: S.centerZ + 0.5 });
+          scout.addTag(TAG_SCOUT);
+          S.scoutId = scout.id;
+          S.scoutMissing = 0;
+        } catch { /* scout type unavailable (outdated BP): ride on without it */ }
+      }
     }
+    if (!scout) return;
+  } else {
+    S.scoutMissing = 0;
   }
+
+  const x = scout.location.x;
+  let step = scoutTargetX() - x;
+  if (step > SCOUT_STEP) step = SCOUT_STEP;
+  else if (step < -SCOUT_STEP) step = -SCOUT_STEP;
+  const nx = x + step;
+  if (!chunkLoaded(Math.floor(nx), S.centerZ)) {
+    // The next chunk isn't generated yet: hold this frontier -- the bubble
+    // is already asking for it. (Backward onto unloaded ground can only
+    // mean the scout is stranded way off post, e.g. after a resume: snap
+    // it home to the rig instead.)
+    if (step < 0) {
+      const rigX = S.paceX + cfg('CAMAHEAD');
+      if (chunkLoaded(rigX, S.centerZ)) {
+        try { scout.teleport({ x: rigX, y: SCOUT_Y, z: S.centerZ + 0.5 }); } catch { /* retry */ }
+      }
+    }
+    return;
+  }
+  try { scout.teleport({ x: nx, y: SCOUT_Y, z: S.centerZ + 0.5 }); } catch { /* retry next tick */ }
+}
+
+// Ticking areas created by older versions of this pack would otherwise sit in
+// the world save forever; sweep them whenever a ride starts or stops.
+function clearLegacyAreas() {
+  for (const name of LEGACY_AREAS) runCmd(`tickingarea remove ${name}`);
 }
 
 function rollChunks() {
   const x = S.headX, y = S.railY, z = S.centerZ;
-  ensureCorridor();
   runCmd(`setworldspawn ${x} ${y + 1} ${z}`);
   runCmd(`spawnpoint @a ${x} ${y + 1} ${z}`);
   S.nextLoad += 16;
+  // Drop surface-probe memo entries the head has passed.
+  for (const k of surfMemo.keys()) if (k < x) surfMemo.delete(k);
   if (debugOn()) {
-    // The contiguous generated frontier ahead of the head, plus the terrain
-    // algorithm's live numbers -- together these say at a glance whether
-    // generation keeps up AND whether the elevation logic is getting data
-    // (badSamples 12/12 means the surface probe is returning nothing).
-    const reach = (tilesBase + TILE_NAMES.length) * TILE - 1 - x;
+    // The contiguous loaded frontier past the head, the scout's lead on the
+    // head, and the terrain algorithm's live numbers -- at a glance: is the
+    // scout keeping chunks open ahead (the frontier should track it), and is
+    // the elevation logic getting data (badSamples 12/12 = probe broken).
     let frontier = 0;
-    while (frontier < reach && chunkLoaded(x + frontier + 16, z)) frontier += 16;
-    dbg(`x=${x}: generated §f+${frontier}§7 of +${reach} requested | badSamples=§f${S.lastBad}§7/12 avg=§f${S.avg}§7 railY=§f${S.railY}§7 bridge=${bridgeMode}`);
+    while (frontier < 512 && chunkLoaded(x + frontier + 16, z)) frontier += 16;
+    const scout = findScout();
+    const scoutAt = scout ? Math.round(scout.location.x - x) : null;
+    const scoutTxt = scoutAt === null ? '§cMISSING§7' : `§f${scoutAt >= 0 ? '+' : ''}${scoutAt}§7`;
+    dbg(`x=${x}: loaded §f+${frontier}§7 scout=${scoutTxt} | badSamples=§f${S.lastBad}§7/12 avg=§f${S.avg}§7 railY=§f${S.railY}§7 bridge=${bridgeMode}`);
   }
 }
 
@@ -796,9 +906,19 @@ function begin(player) {
   S.centerZ = Math.floor(player.location.z);
   S.headX = startX;
   S.nextLoad = startX + 16;
+  surfMemo.clear();
 
-  removeCorridor();
-  ensureCorridor();
+  clearLegacyAreas();
+  // The scout starts at the player (a guaranteed-loaded chunk) and walks
+  // itself east from there; its ticking bubble immediately covers the start
+  // corridor -- including the rig position the launch poller waits on.
+  try {
+    const sc = dim.spawnEntity(SCOUT_TYPE, { x: startX + 0.5, y: SCOUT_Y, z: S.centerZ + 0.5 });
+    sc.addTag(TAG_SCOUT);
+    S.scoutId = sc.id;
+  } catch (e) {
+    say(`§eCould not summon the chunk scout (${e}). The ride still works, but the track will build much less far ahead -- make sure BOTH Infinite Rail packs are installed and up to date.`);
+  }
 
   S.paceSpeed = 0;
   S.targetSpeed = cfg('MAXSPEED') / 20;
@@ -827,13 +947,15 @@ function begin(player) {
   }, 5);
 }
 
-// A launch that cannot finish must clean up after itself: remove the ticking
-// areas it created and persist the state it already mutated (autodone stays
+// A launch that cannot finish must clean up after itself: remove the scout
+// it summoned and persist the state it already mutated (autodone stays
 // latched, started stays false), so nothing is leaked and a fresh start
 // command works. Java's begin() is synchronous and cannot abort half-way.
 function abortLaunch(reason) {
   say(`§cRide start aborted: ${reason}`);
-  removeCorridor();
+  const scout = findScout();
+  if (scout) { try { scout.remove(); } catch { /* already gone */ } }
+  S.scoutId = '';
   saveState();
 }
 
@@ -921,23 +1043,27 @@ function stop(silent) {
   }
   S.camActive = false;
   // Remove EVERY rig piece wearing our tags (there should be one of each, but
-  // stale sessions may have left extras behind).
+  // stale sessions may have left extras behind). Each type is collected under
+  // its own guard so one unregistered type (e.g. an outdated BP without the
+  // scout) can't abort the whole sweep.
   if (dim) {
-    let pieces = [];
-    try {
-      pieces = [
-        ...dim.getEntities({ type: SEAT_TYPE, tags: [TAG_SEAT] }),
-        ...dim.getEntities({ type: 'minecraft:minecart', tags: [TAG_RIDE] }),
-      ];
-    } catch { /* entity type not registered: nothing to clean */ }
+    const collect = (type, tag) => {
+      try { return dim.getEntities({ type, tags: [tag] }); } catch { return []; }
+    };
+    const pieces = [
+      ...collect(SEAT_TYPE, TAG_SEAT),
+      ...collect('minecraft:minecart', TAG_RIDE),
+      ...collect(SCOUT_TYPE, TAG_SCOUT),
+    ];
     for (const e of pieces) {
       try { e.getComponent('minecraft:rideable')?.ejectRiders(); } catch { /* empty */ }
       try { e.remove(); } catch { /* already gone */ }
     }
-    removeCorridor();
+    clearLegacyAreas();
   }
   S.cartId = '';
   S.seatId = '';
+  S.scoutId = '';
   saveState(); // .autodone stays set: a stopped world never auto-restarts
   if (!silent) say('§7Ride stopped.');
 }
@@ -1121,6 +1247,7 @@ function tick() {
   // Per-tick driver, mirroring main.mcfunction's order:
   tickPace();                       // 1.  pace cart X (virtual)
   oceanCheck();                     // 1a. ocean speed-up
+  tickScout();                      // 1b. keep terrain open ahead of the head
   let seat = findSeat();
   let cart = findCart();
   if (!seat || !cart) {
