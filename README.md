@@ -116,9 +116,10 @@ Press **F1** (or Hide GUI) for the full ambient experience on either edition.
 
 ### Bedrock-specific notes
 
-- **You keep native first-person free-look.** Your cart rides an invisible
-  scripted seat that is glided along the smoothed path (the same rig design
-  as Java), so the camera is simply your normal one. An optional cinematic
+- **You keep native first-person free-look.** You ride an invisible scripted
+  seat glided along the smoothed path, and the minecart visual is glided in
+  perfect lockstep beside it (same idea as Java's rig, restructured for
+  Bedrock), so the camera is simply your normal one. An optional cinematic
   mode (`.CAMMODE 1`, see Tuning) hands the view to Bedrock's native camera
   system instead: the position is eased along the path for extra glide, at
   the cost of your look input reaching the camera a beat late.
@@ -145,6 +146,13 @@ Press **F1** (or Hide GUI) for the full ambient experience on either edition.
   terrain under it exists, and never outruns the built track.
 - **A ride survives quitting and rejoining the world** mid-journey — the
   script saves its state continuously and resumes where it left off.
+- **Your cart is a custom entity wearing the vanilla minecart's look** —
+  a real minecart's rendering tilts 45° whenever it sits in a block cell
+  containing an ascending rail (even off the rails), which made the cart
+  flicker at slope entries/exits. The custom cart uses a re-based copy of
+  the vanilla minecart geometry with the vanilla texture, so it looks
+  exactly the same but stays perfectly level always — and it can't play
+  rolling sounds or bounce.
 - **The support under each rail is a custom "Track Support" block** — it
   renders with the vanilla smooth-stone texture but produces full redstone
   power (the `minecraft:redstone_producer` block component), so it powers
@@ -170,8 +178,9 @@ Press **F1** (or Hide GUI) for the full ambient experience on either edition.
   keepers guarantee the ride never ends: if the cart ever stalls it is
   re-boosted, and if the rider ever dismounts they are put straight back on
   the ride.
-- **Butter-smooth camera (the ride rig)** — you sit in a real minecart, but
-  it isn't riding the rails: your cart glides *off* the rails along a
+- **Butter-smooth camera (the ride rig)** — you sit in a minecart (a real
+  one on Java; on Bedrock a pixel-identical stand-in — see the Bedrock
+  notes), but it isn't riding the rails: your cart glides *off* the rails along a
   **smoothed path computed from the track's own recorded profile**. Because
   the pack builds the track, it knows every slope in advance: climbs are
   literally *descents played in reverse* — the camera lifts off before the
@@ -287,6 +296,7 @@ file, which are therefore your permanent defaults.
 | `#CAMLIFT`     | 20      | Climb float (tenths): height above the rail while climbing          |
 | `#CAMAHEAD`    | 64      | How far the viewer rides ahead of the (hidden/virtual) pace cart    |
 | `#CAMMODE`     | 0       | **Bedrock only**: 0 = native free-look rig, 1 = eased cinematic cam |
+| `#CARTYOFF`    | 0       | **Bedrock only**: fine-tune for the cart visual's height, tenths of a block (the pack's re-based cart model sits correctly at 0; keep within ~-3..3 -- big negative values sink the cart entity into the track and it suffocates) |
 | `#AUTOSTART`   | 1       | 1 = ride starts itself in a fresh world; 0 = manual start           |
 | `#MAXSPEED`    | 8       | Default ride speed in blocks/s (Java: minecart max-speed gamerule)  |
 | `#OCEANSPEED`  | 32      | Ride speed over open ocean (0 = disable the ocean speed-up)         |

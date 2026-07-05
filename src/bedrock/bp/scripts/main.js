@@ -74,13 +74,30 @@ const P = '.'; // fake-player prefix ('#' on Java; '.' survives Bedrock's parser
 const TAG_RIDE = 'ir_ride';
 const TAG_SEAT = 'ir_seat';
 // The invisible camera seat -- a custom entity from this pack's BP+RP pair
-// (no gravity, no collision, rideable by minecarts). The ride cart is its
-// permanent PASSENGER, exactly like Java's item_display seat: passengers run
-// no physics of their own, so the cart can never be captured by the powered
-// rails under it, dragged by gravity, or bounced by ground contact -- the
-// engine fighting the script over the cart was what made the ride bob
-// vertically. The script only ever moves the seat.
+// (no gravity, no collision, two rider seats). The cart prop AND the player
+// are its SIBLING passengers: passengers run no physics of their own, so
+// the cart can never be captured by the powered rails under it, dragged by
+// gravity, or bounced by ground contact -- and because the two are seated
+// side by side rather than stacked, re-seating one can never eject the
+// other. The script only ever moves the seat.
 const SEAT_TYPE = 'infinite_rail:seat';
+// The RIDE CART the player sits in -- a custom entity that RENDERS as a
+// vanilla minecart (the RP client definition reuses geometry.minecart and
+// its texture) but carries none of the minecart's client-side behavior.
+// This matters because Bedrock clients tilt a real minecart's model 45
+// degrees whenever it occupies a block cell containing an ascending rail --
+// even as a physics-free passenger -- and the rig glides right along the
+// track line, so at slope entries/exits a real ride cart visibly flickered
+// between tilted and flat. The custom cart is pure geometry: it can never
+// tilt, bounce, or play rolling sounds. (Its type_family includes
+// "minecart" so the seat's rideable filter accepts it unchanged; a vanilla
+// minecart is still used as a fallback when the BP is outdated.)
+const CART_TYPE = 'infinite_rail:cart';
+// Custom entities render their geometry at plain body yaw (the vanilla
+// minecart RENDERER adds its own quarter-turn, which is why the old vanilla
+// ride cart spawned at -90). geometry.minecart's long axis runs along X at
+// yaw 0 -- aligned with the eastbound track.
+const CART_YAW = 0;
 // The chunk SCOUT -- a custom entity whose minecraft:tick_world component
 // (radius 6 chunks = a 96-block ticking bubble, never_despawn) makes it a
 // MOBILE TICKING AREA. It glides ahead of the rig, keeping the server-side
@@ -134,10 +151,10 @@ const HIST_PERSIST = 1024;
 // .HOVER ir 8" tweaks work mid-ride exactly like Java.
 const CONFIG_DEFAULTS = {
   HOVER: 2, TUNNEL: 6, CAMHEIGHT: 0, CAMBLEND: 6, CAMSMOOTH: 6, CAMLIFT: 20,
-  CAMAHEAD: 64, CAMMODE: 0, AUTOSTART: 1, MAXSPEED: 8, OCEANSPEED: 32,
-  OCEANCHUNKS: 6, LANDCHUNKS: 4, DEADBAND: 3, SAMEGAP: 25, TURNGAP: 40,
-  UPCLAMP: 150, DOWNCLAMP: 50, AHEAD: 224, GENAHEAD: 192, MAXTICK: 15,
-  DEBUGMODE: 0,
+  CAMAHEAD: 64, CAMMODE: 0, CARTYOFF: 0, AUTOSTART: 1, MAXSPEED: 8,
+  OCEANSPEED: 32, OCEANCHUNKS: 6, LANDCHUNKS: 4, DEADBAND: 3, SAMEGAP: 25,
+  TURNGAP: 40, UPCLAMP: 150, DOWNCLAMP: 50, AHEAD: 224, GENAHEAD: 192,
+  MAXTICK: 15, DEBUGMODE: 0,
 };
 
 // The vanilla ocean biomes (Bedrock has no biome tags, so #minecraft:is_ocean
@@ -277,11 +294,17 @@ function findRider() {
 // Find the one live entity wearing our tag, REMOVING any duplicates: rejoin
 // races (a replacement spawned before the original's chunk loaded back in)
 // and stale sessions can leave extras behind, and an untracked cart would
-// keep drifting around the line forever.
-function findTagged(type, tag, preferId) {
+// keep drifting around the line forever. type may be null to match the tag
+// across entity types (the ride cart can be the custom type or the vanilla
+// fallback); preferType breaks ties in favor of the modern type when both
+// generations are present after an upgrade.
+function findTagged(type, tag, preferId, preferType) {
   let tagged;
-  try { tagged = dim.getEntities({ type, tags: [tag] }); } catch { return undefined; }
+  try {
+    tagged = dim.getEntities(type ? { type, tags: [tag] } : { tags: [tag] });
+  } catch { return undefined; }
   const keep = tagged.find((e) => e.id === preferId && e.isValid)
+    ?? (preferType ? tagged.find((e) => e.typeId === preferType && e.isValid) : undefined)
     ?? tagged.find((e) => e.isValid);
   for (const e of tagged) {
     if (e !== keep) {
@@ -293,7 +316,7 @@ function findTagged(type, tag, preferId) {
 }
 
 function findCart() {
-  const cart = findTagged('minecraft:minecart', TAG_RIDE, S.cartId);
+  const cart = findTagged(null, TAG_RIDE, S.cartId, CART_TYPE);
   if (cart) S.cartId = cart.id;
   return cart;
 }
@@ -698,7 +721,11 @@ function rollChunks() {
     let scoutAt = null;
     try { if (scout) scoutAt = Math.round(scout.location.x - x); } catch { /* stale handle */ }
     const scoutTxt = scoutAt === null ? '§cMISSING§7' : `§f${scoutAt >= 0 ? '+' : ''}${scoutAt}§7`;
-    dbg(`x=${x}: loaded §f+${frontier}§7 scout=${scoutTxt} | badSamples=§f${S.lastBad}§7/12 avg=§f${S.avg}§7 railY=§f${S.railY}§7 bridge=${bridgeMode}`);
+    // ops = rig operations since the previous roll line (16 blocks of
+    // travel): mounts/ejects/corrective teleports. All zeros while a
+    // problem is audible or visible = the script is NOT doing it.
+    dbg(`x=${x}: loaded §f+${frontier}§7 scout=${scoutTxt} | badSamples=§f${S.lastBad}§7/12 avg=§f${S.avg}§7 railY=§f${S.railY}§7 ops=§fm${ops.mount}/e${ops.eject}/t${ops.tp}§7 drive=${S.teleportFallback ? '§ctp§7' : 'imp'} bridge=${bridgeMode}`);
+    ops.mount = 0; ops.eject = 0; ops.tp = 0;
   }
 }
 
@@ -789,31 +816,69 @@ function camFollow() {
   return r.sy;
 }
 
-// cam_move: fly the rig -- the seat, and with it the cart riding it and the
-// player riding the cart -- to CAMAHEAD blocks east of the pace position at
-// the smoothed height. The seat is driven by velocity: Bedrock clients
-// interpolate physics motion smoothly, where per-tick teleports strobe at
-// 20 fps; and because the seat has no gravity or collision, the commanded
-// motion is exactly the motion that happens (nothing fights the control
-// loop). A drift catch teleports it back if anything knocks it far off.
-function camMove(seat, sy) {
+// cam_move: fly the rig to CAMAHEAD blocks east of the pace position at the
+// smoothed height. The rig's two visible-motion pieces are driven the SAME
+// way but INDEPENDENTLY: the seat (carrying the player, the ride's only
+// mount) and the cart prop, which is NOT mounted on anything -- it is pure
+// scenery glided in lockstep by this function. Entity passengers proved
+// unkeepable on Bedrock (the engine ejected the seated cart within ticks,
+// parking it over the rider's head, and every mount-state query
+// under-reports), so the script simply owns the cart's motion outright.
+// Both entities are driven by velocity: Bedrock clients interpolate physics
+// motion smoothly, where per-tick teleports strobe at 20 fps; and because
+// neither has gravity or collision, the commanded motion is exactly the
+// motion that happens. A drift catch teleports a piece back if anything
+// knocks it far off.
+// Rig-operation counters, printed (and reset) on every debug roll line:
+// while a problem is audible/visible, these say definitively whether the
+// script is performing mounts / ejects / corrective teleports, or idle.
+const ops = { mount: 0, eject: 0, tp: 0 };
+let lastOpAt = -1e9;
+function dbgOp(msg) {
+  if (tickN - lastOpAt < 20) return; // at most one op line per second
+  lastOpAt = tickN;
+  dbg(msg);
+}
+
+function glide(ent, target) {
+  let pos;
+  try { pos = ent.location; } catch { return; }
+  const d = { x: target.x - pos.x, y: target.y - pos.y, z: target.z - pos.z };
+  const drift = Math.abs(d.x) + Math.abs(d.y) + Math.abs(d.z);
+  if (drift > 4 || S.teleportFallback) {
+    ops.tp += 1;
+    try { ent.teleport(target, { keepVelocity: false }); } catch { /* unloaded */ }
+  } else {
+    try {
+      ent.clearVelocity();
+      ent.applyImpulse(d);
+    } catch {
+      if (!S.teleportFallback) {
+        S.teleportFallback = true; // impulse unsupported: teleport from now on
+        dbg('impulse drive unavailable -- switching to teleport drive (less smooth)');
+      }
+    }
+  }
+}
+
+function camMove(seat, cart, sy) {
   const target = {
     x: S.paceX + cfg('CAMAHEAD'),
     y: sy + CART_REST + cfg('CAMHEIGHT') / 10,
     z: S.centerZ + 0.5,
   };
-  const pos = seat.location;
-  const d = { x: target.x - pos.x, y: target.y - pos.y, z: target.z - pos.z };
-  const drift = Math.abs(d.x) + Math.abs(d.y) + Math.abs(d.z);
-  if (drift > 4 || S.teleportFallback) {
-    try { seat.teleport(target, { keepVelocity: false }); } catch { /* unloaded */ }
-  } else {
-    try {
-      seat.clearVelocity();
-      seat.applyImpulse(d);
-    } catch {
-      S.teleportFallback = true; // applyImpulse unsupported here: teleport from now on
-    }
+  glide(seat, target);
+  if (cart) {
+    // The vanilla minecart geometry draws one block above a custom
+    // entity's position (it expects the engine's internal renderer), so
+    // the pack ships a re-based copy (geometry.ir_cart, all cubes shifted
+    // down 16px -- measured in-game). .CARTYOFF (tenths of a block)
+    // remains as a small fine-tune; large offsets would sink the cart
+    // ENTITY into the track blocks, where it suffocates. The
+    // vanilla-minecart fallback renders true and gets no offset.
+    let cy = target.y;
+    try { if (cart.typeId === CART_TYPE) cy += cfg('CARTYOFF') / 10; } catch { /* stale */ }
+    glide(cart, { x: target.x, y: cy, z: target.z });
   }
 
   // Optional native Camera API mode (.CAMMODE 1): an eased minecraft:free
@@ -836,8 +901,9 @@ function camMove(seat, sy) {
   }
 }
 
-// Spawn the two-piece rig at a position: the invisible seat and the ride cart
-// mounted on it. Returns the seat (the mover), or throws if the chunk isn't
+// Spawn the two-piece rig at a position: the invisible seat (which the
+// player will ride) and the unmounted cart prop that camMove glides along
+// with it. Returns the seat (the mover), or throws if the chunk isn't
 // ready. Any prior rig pieces are removed first so this can never duplicate.
 function spawnRig(pos) {
   const oldSeat = findSeat();
@@ -853,65 +919,111 @@ function spawnRig(pos) {
 
   let cart;
   try {
-    cart = dim.spawnEntity('minecraft:minecart', pos, { initialRotation: -90 });
+    cart = dim.spawnEntity(CART_TYPE, pos, { initialRotation: CART_YAW });
   } catch {
-    cart = dim.spawnEntity('minecraft:minecart', pos);
+    // Outdated BP without the custom cart: a real minecart still works, it
+    // just shows the client's rail-tilt flicker on slope entries/exits.
+    try {
+      cart = dim.spawnEntity('minecraft:minecart', pos, { initialRotation: -90 });
+    } catch {
+      cart = dim.spawnEntity('minecraft:minecart', pos);
+    }
   }
   cart.addTag(TAG_RIDE);
   S.cartId = cart.id;
-
-  seat.getComponent('minecraft:rideable')?.addRider(cart);
   return seat;
 }
 
 // --- Keepers ---------------------------------------------------------------
 // main.mcfunction's per-tick guards, minus everything the virtual pace cart
-// made obsolete (plug, stall re-boost, pace-cart ejections). The ride cart
-// holds exactly one seat, so while the rider is aboard nothing else can enter
-// it and it can't scoop up mobs.
+// and the unmounted cart prop made obsolete (plug, stall re-boost, pace-cart
+// ejections, cart re-seating -- camMove owns the cart's motion outright).
+//
+// The one mount in the whole rig is the player on the seat, and its state is
+// judged POSITIONALLY, never via mount-state APIs: the passenger's
+// 'minecraft:riding' component and the vehicle's rider list both
+// under-report on Bedrock, and treating "can't see it" as "not riding" made
+// earlier keepers re-mount the seated rig every tick -- each spurious
+// re-mount ejects and re-seats passengers (pose flicker, mount-sound spam).
+// A seated player is pinned to the seat while the rig glides east at
+// cruising speed, so a genuine dismount shows up as distance from the seat
+// that keeps growing tick after tick; only that sustained streak triggers a
+// re-mount.
+const ASTRAY_TICKS = 4; // consecutive too-far ticks before a re-mount
+let riderAstray = 0;
 
-function keepers(seat, cart) {
+// Mount the ride's player onto the seat via the /ride COMMAND, not the
+// scripting addRider() API. Every mount in this saga went through
+// addRider, and the client's link state kept coming out flaky (phantom
+// footstep/walking sounds while visibly seated, pose resyncing on a manual
+// Ctrl press) -- /ride is the long-established command path and
+// teleport_rider brings the player to the seat as part of the same
+// operation. Falls back to addRider if the command is unavailable.
+function mountRider() {
+  ops.mount += 1;
+  const r = runCmd(`ride "${S.riderName}" start_riding @e[type=${SEAT_TYPE},tag=${TAG_SEAT},c=1] teleport_rider`);
+  if ((r?.successCount ?? 0) > 0) return true;
+  try {
+    const seat = findSeat();
+    const rider = findRider();
+    if (seat && rider) {
+      seat.getComponent('minecraft:rideable')?.addRider(rider);
+      return true;
+    }
+  } catch { /* seat momentarily invalid */ }
+  return false;
+}
+
+function keepers(seat) {
+  const seatRideable = seat.getComponent('minecraft:rideable');
+  if (!seatRideable) return;
+  let sp;
+  try { sp = seat.location; } catch { return; }
+  const distToSeat = (loc) =>
+    Math.abs(loc.x - sp.x) + Math.abs(loc.y - sp.y) + Math.abs(loc.z - sp.z);
+
+  // Purity sweep: the seat carries exactly this ride's player (matched by
+  // NAME -- the most stable identity across handles). Best-effort -- if the
+  // rider list under-reports, nothing breaks; this is never used as a
+  // mount-state check.
+  try {
+    for (const r of seatRideable.getRiders()) {
+      let spare = false;
+      try { spare = r.typeId === 'minecraft:player' && r.name === S.riderName; } catch { /* stale */ }
+      if (spare) continue;
+      try {
+        seatRideable.ejectRider(r);
+        ops.eject += 1;
+        dbgOp(`keeper: ejected a stray ${r.typeId ?? 'entity'} from the seat`);
+      } catch { /* already off */ }
+    }
+  } catch { /* rider list unavailable */ }
+
   const rider = findRider();
-  const rideable = cart.getComponent('minecraft:rideable');
-  if (!rideable) return;
-
-  // Keeper: the ride cart must always be the seat's passenger -- that is what
-  // exempts it from its own minecart physics (rail capture, gravity, ground
-  // bounce). Re-mount it if anything ever separates the two.
-  if (!cart.getComponent('minecraft:riding')) {
-    try {
-      const sp = seat.location;
-      const cp = cart.location;
-      if (Math.abs(cp.x - sp.x) + Math.abs(cp.y - sp.y) + Math.abs(cp.z - sp.z) > 4) {
-        cart.teleport({ x: sp.x, y: sp.y, z: sp.z });
-      }
-      seat.getComponent('minecraft:rideable')?.addRider(cart);
-    } catch { /* seat momentarily invalid */ }
-  }
-
-  // Eject anything riding the cart that isn't the rider (possible only in the
-  // brief window after a dismount).
-  for (const r of rideable.getRiders()) {
-    if (r.typeId !== 'minecraft:player') rideable.ejectRider(r);
-  }
-
   if (!rider) return;
 
-  // Re-mount a dismounted rider (sneak-dismounts, rejoins). Like Java, only
-  // adventure-mode players are recaptured -- switching to creative is the
-  // sanctioned way to leave the ride and wander off. A rider who ended up far
-  // from the cart (e.g. respawned at the rolled spawnpoint after a rejoin) is
-  // brought back to it first; players may be teleported freely while not
-  // riding, and a normal sneak-dismount lands well inside the threshold.
-  if (rider.getGameMode() === GameMode.Adventure && !rider.getComponent('minecraft:riding')) {
-    try {
-      const c = cart.location;
-      const p = rider.location;
-      if (Math.abs(p.x - c.x) + Math.abs(p.y - c.y) + Math.abs(p.z - c.z) > 8) {
-        rider.teleport({ x: c.x, y: c.y + 1, z: c.z });
+  // Rider keeper (sneak-dismounts, rejoins): positional rule -- the seated
+  // offset is 0.35, so anything under the threshold is "aboard". Like Java,
+  // only adventure-mode players are recaptured -- switching to creative is
+  // the sanctioned way to leave the ride and wander off. /ride's
+  // teleport_rider brings a far-away rider (respawned at the rolled
+  // spawnpoint) back to the rig as part of the mount.
+  if (rider.getGameMode() === GameMode.Adventure) {
+    let riderFar = true;
+    let d = -1;
+    try { d = distToSeat(rider.location); riderFar = d > 2.5; } catch { /* treat as far */ }
+    if (riderFar) {
+      riderAstray += 1;
+      if (riderAstray >= ASTRAY_TICKS) {
+        riderAstray = 0;
+        mountRider();
+        dbgOp(`keeper: re-seated the rider (was ${d < 0 ? '?' : d.toFixed(1)} blocks off)`);
       }
-      rideable.addRider(rider);
-    } catch { /* different dimension etc. */ }
+    } else {
+      riderAstray = 0;
+    }
+  } else {
+    riderAstray = 0;
   }
 
   // Keep the rider's inventory empty: hides the held item/arm (Bedrock has no
@@ -1036,11 +1148,14 @@ function beginPhase2(startX) {
     try { advance(); } catch { break; }
   }
 
-  // The camera rig: seat (invisible custom entity, the mover) -> ride cart
-  // (real minecart, the seat's passenger, so it runs no physics of its own)
-  // -> rider. The player mounts once (mount events flash the client's
-  // un-hideable dismount hint, so the keeper only ever re-mounts after a
-  // genuine dismount).
+  // The camera rig: the invisible seat (the mover) carries the cart prop
+  // and the player as SIBLING passengers -- cart in seat 0 (offset zero),
+  // player in seat 1 (0.35 up, sitting in the cart visual). Siblings, not
+  // a stack: re-seating one can then never eject the other, which is what
+  // turned the old seat->cart->player chain into a per-tick mount war
+  // whenever mount state misread. The player mounts once (mount events
+  // flash the client's un-hideable dismount hint, so the keeper only ever
+  // re-mounts after a genuine, positionally-confirmed dismount).
   S.s2 = S.railY;
   const sy = camFollow() ?? S.railY;
   const rigPos = {
@@ -1050,8 +1165,7 @@ function beginPhase2(startX) {
   };
   try {
     spawnRig(rigPos);
-    const cart = findCart();
-    cart?.getComponent('minecraft:rideable')?.addRider(player);
+    mountRider();
   } catch (e) {
     // Rig chunk still not generated after the 50 s wait, the player portaled
     // away mid-launch, or the seat entity is unavailable: give up cleanly
@@ -1092,7 +1206,8 @@ function stop(silent) {
     };
     const pieces = [
       ...collect(SEAT_TYPE, TAG_SEAT),
-      ...collect('minecraft:minecart', TAG_RIDE),
+      ...collect(CART_TYPE, TAG_RIDE),
+      ...collect('minecraft:minecart', TAG_RIDE), // vanilla fallback / pre-1.0.6 rides
       ...collect(SCOUT_TYPE, TAG_SCOUT),
     ];
     for (const e of pieces) {
@@ -1331,9 +1446,9 @@ function tick() {
     S.rigMissing = 0;
   }
   if (seat && cart) {
-    keepers(seat, cart);            // 2-4. mount chain, eject strangers, re-seat
+    keepers(seat);                  // 2-4. eject strangers, re-seat the rider
     const sy = camFollow();         // 6.  the smoothed rail-line height
-    if (sy !== undefined) camMove(seat, sy);
+    if (sy !== undefined) camMove(seat, cart, sy); // glide seat + cart prop
   }
   buildLoop();                      // 7.  extend the track
 

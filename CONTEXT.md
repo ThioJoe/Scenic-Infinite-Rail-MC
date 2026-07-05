@@ -154,6 +154,7 @@ fake players. Grouped by role:
 | `#CAMLIFT`   | Climb float / crest budget, in **tenths of a block**: how high the camera rides above the rail line while climbing, and how early it reaches the summit level. |
 | `#CAMAHEAD`  | How many blocks the rig (viewer) rides ahead of the hidden pace cart. Keep ≥ ~40 below `#AHEAD`. |
 | `#CAMMODE`   | **Bedrock-only** (inert on Java): `0` = native free-look rig, `1` = eased cinematic camera via Bedrock's camera system (§11). |
+| `#CARTYOFF`  | **Bedrock-only** (inert on Java): fine-tune for the minecart visual's height, in tenths of a block (negative = lower). The base correction is baked into the pack's re-based model copy (`geometry.ir_cart`, 16px down -- vanilla's cart geometry draws a block high outside the engine's internal renderer), so keep this small: a large negative offset sinks the cart *entity* into the track blocks, where it suffocates. Live-tunable mid-ride. |
 | `#AUTOSTART` | `1` = the ride auto-starts for the first player in a fresh world; `0` = manual start only. |
 | `#DEADBAND`  | Minimum `|target − railY|` before a slope change is even considered (hysteresis vs. terrain noise). |
 | `#SAMEGAP`   | Minimum flat columns between two elevation changes **in the same direction**. |
@@ -1001,13 +1002,35 @@ counterparts all live in `src/bedrock/scripts/main.js` (stable
 
 ### 11b. The Bedrock rig and camera
 
-The rig is the same three-piece rigid stack as Java's: an invisible **camera
-seat** carries a **real, visible minecart** (tag `ir_ride`), which carries the
-rider — mounted once per ride; occupied Bedrock carts can't be entered or
-scoop up mobs, which is what the Java plug hack existed to guarantee. On
-Bedrock the seat is a tiny custom entity (`infinite_rail:seat`, defined by
-this pack's BP with an invisible client definition in its RP): no gravity, no
-collision, rideable by minecarts. The cart being the seat's *passenger* is
+The rig is three pieces like Java's, but with **exactly one mount in the
+whole system**: the rider sits on the invisible **camera seat** (seat offset
+0.35 up), and the **minecart-look cart prop** (tag `ir_ride`) is *not
+mounted on anything* — `cam_move` glides seat and cart **independently, in
+lockstep**, with the same velocity drive toward the same target each tick.
+Java stacks seat → cart → player instead; Bedrock cannot, for two hard-won
+reasons: mount *state* is not reliably queryable there (the
+`minecraft:riding` component and `rideable.getRiders()` both under-report,
+which turned a "re-mount if unseated" keeper into a per-tick mount war —
+pose flicker, mount-sound spam), and the engine proved unwilling to keep an
+*entity* passenger seated at all — the cart kept being ejected within ticks
+of a successful `addRider` and parked at the dismount spot above the rider's
+head. Player-on-seat is the one mount Bedrock keeps stable, so it is the
+only one used. The seat is a tiny custom entity (`infinite_rail:seat`: no
+gravity, no collision, one player seat). The **cart is a custom entity too**
+(`infinite_rail:cart`): its client definition uses a re-based copy of the
+vanilla minecart geometry (`geometry.ir_cart` — every cube shifted 16px
+down, because the vanilla model draws a block high outside the engine's
+internal minecart renderer) with the vanilla minecart texture, so it looks
+like a real cart, but it carries none of the minecart's client-side
+behavior — which matters
+because Bedrock clients tilt a *real* minecart's model 45° whenever it
+occupies a block cell containing an ascending rail, even off-rail; the rig
+glides right along the track line, so at slope entries/exits a real ride
+cart visibly flickered between tilted and flat. The prop has **no
+`rideable` component and no `health`** — nothing can ever enter it, and
+Bedrock's mount-health HUD (which showed as rows of hearts over the food
+bar for a 100-HP vehicle) never appears. A vanilla minecart remains the
+spawn fallback for an outdated BP. The cart being the seat's *passenger* is
 load-bearing — passengers run no physics of their own, so the engine's
 minecart logic (capture onto the powered rail in the cart's own block cell,
 gravity, ground contact) can never fight the script for control of the cart;
@@ -1029,13 +1052,20 @@ onto `minecraft:free` at eye height above the cart, eased ~0.15 s Linear per
 tick for extra positional glide, rotation passed through from the player.
 `#CAMMODE 0` (default) keeps the native camera.
 
-Keepers (the Bedrock subset of §7f): non-player riders are ejected from the
-ride cart; a dismounted adventure-mode rider is re-seated; the cart is
-re-summoned on the rig position if it ever goes missing; the rider's inventory
-is cleared every tick (this is also what keeps the hand empty — Bedrock's
-`/hud` has no `hand` element). The plug, stall re-boost, and pace-cart
-ejections have no Bedrock equivalent because the virtual pace made them
-obsolete.
+Keepers (the Bedrock subset of §7f): strangers are ejected from the seat; a
+dismounted adventure-mode rider is re-seated; the rig is re-summoned if it
+ever goes missing; the rider's inventory is cleared every tick (this is
+also what keeps the hand empty — Bedrock's `/hud` has no `hand` element).
+**The rider re-mount decision is positional, never API-queried**: a seated
+player is pinned to the seat while the rig glides east at cruising speed,
+so a genuine dismount shows up as distance from the seat that keeps growing
+tick after tick — only a sustained streak (`ASTRAY_TICKS`) triggers a
+re-mount. The riding component and the rider list both under-report on
+Bedrock, and re-mounting an already-seated passenger re-fires the mount
+(the pose-flicker war described above), so neither is ever trusted for
+mount state. The cart prop needs no keeper at all — `cam_move` owns its
+motion. The plug, stall re-boost, and pace-cart ejections have no Bedrock
+equivalent because the virtual pace made them obsolete.
 
 ### 11c. Speed without the gamerule
 

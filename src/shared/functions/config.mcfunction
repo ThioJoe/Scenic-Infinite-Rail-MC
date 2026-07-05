@@ -95,6 +95,15 @@ scoreboard players set #CAMAHEAD ir 64
 #       input reaching the camera a beat (~0.15s) late.
 scoreboard players set #CAMMODE ir 0
 
+# BEDROCK EDITION ONLY (ignored on Java). Fine-tune for the minecart
+# VISUAL's height, in TENTHS of a block (negative = draw it lower). The
+# pack's cart model is already re-based to sit correctly at 0, so this is
+# purely for taste -- keep it small (within about -3..3). Large negative
+# values sink the cart ENTITY into the track blocks, where it suffocates.
+# Tune live (takes effect instantly):
+#   /scoreboard players set #CARTYOFF ir -1
+scoreboard players set #CARTYOFF ir 0
+
 
 # --- Auto-start -------------------------------------------------------------
 

@@ -20,9 +20,14 @@
         "is_pushable_by_piston": false
       },
       "minecraft:damage_sensor": {
-        "triggers": {
-          "deals_damage": false
-        }
+        "triggers": [
+          {
+            "on_damage": {
+              "filters": {}
+            },
+            "deals_damage": "no"
+          }
+        ]
       },
       "minecraft:knockback_resistance": {
         "value": 1.0

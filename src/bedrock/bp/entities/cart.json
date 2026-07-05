@@ -2,7 +2,7 @@
   "format_version": "1.21.50",
   "minecraft:entity": {
     "description": {
-      "identifier": "infinite_rail:seat",
+      "identifier": "infinite_rail:cart",
       "is_spawnable": false,
       "is_summonable": true
     },
@@ -29,21 +29,16 @@
           }
         ]
       },
+      "minecraft:health": {
+        "value": 1000,
+        "max": 1000
+      },
       "minecraft:knockback_resistance": {
         "value": 1.0
       },
       "minecraft:persistent": {},
       "minecraft:type_family": {
-        "family": ["inanimate", "ir_seat_family"]
-      },
-      "minecraft:rideable": {
-        "seat_count": 1,
-        "family_types": ["player"],
-        "seats": [
-          {
-            "position": [0.0, 0.35, 0.0]
-          }
-        ]
+        "family": ["inanimate", "minecart", "ir_cart_family"]
       }
     }
   }

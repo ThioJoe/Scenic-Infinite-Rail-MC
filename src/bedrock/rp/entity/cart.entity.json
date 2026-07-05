@@ -1,0 +1,18 @@
+{
+  "format_version": "1.10.0",
+  "minecraft:client_entity": {
+    "description": {
+      "identifier": "infinite_rail:cart",
+      "materials": {
+        "default": "entity_alphatest"
+      },
+      "textures": {
+        "default": "textures/entity/minecart"
+      },
+      "geometry": {
+        "default": "geometry.ir_cart"
+      },
+      "render_controllers": ["controller.render.default"]
+    }
+  }
+}
