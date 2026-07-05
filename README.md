@@ -178,7 +178,8 @@ Press **F1** (or Hide GUI) for the full ambient experience on either edition.
   naturally spawn mobs around adventure-mode players, which made the ride
   eerily lifeless; survival keeps the scenery populated with animals *and*
   monsters. You're still untouchable (infinite Resistance 255, all damage
-  gamerules off, mob griefing off), your inventory is kept empty, and
+  gamerules off, mob griefing off), your inventory is kept empty (apart
+  from the Settings book), and
   nothing can enter the rig — the mobs are strictly décor. (Java keeps
   adventure mode; its mob spawning doesn't care about game mode.)
 - **There is no hidden pace cart behind you** — Bedrock's port computes the
@@ -221,7 +222,8 @@ Press **F1** (or Hide GUI) for the full ambient experience on either edition.
   into the view (Java's hidden pace cart is permanently occupied by an
   invisible "plug" entity for the same reason). Your inventory is also
   continuously cleared to hide held items and prevent you from picking
-  anything up.
+  anything up — everything except the **Settings** book in the last hotbar
+  slot, the mode-menu opener (see [Ride modes](#ride-modes)).
 - **Auto-start** — in a fresh world the ride begins automatically for the
   first player to appear, after a 5-second countdown to ensure chunks are
   loaded. It only auto-starts once per world: stopping with the stop command
@@ -312,9 +314,26 @@ Java commands shown; Bedrock is identical with `/` instead of `:` (e.g.
 | ---- | ------ | ------------ |
 | Rain | `/function infinite_rail:mode_rain_on` / `..._off` | Permanent rain: freezes the weather cycle and starts rain, so it can never time out. Off clears the sky and resumes the vanilla cycle. |
 | Night | `/function infinite_rail:mode_night_on` / `..._off` | Endless night: freezes the daylight cycle at midnight, moon at its peak. Off sets morning and resumes the cycle. |
-| Torches | `/function infinite_rail:mode_torches_on` / `..._off` | Scatters torches along **new** track as it is built — random spots 2–`#TORCHRANGE` blocks left/right of the line (default 8), about one per `#TORCHODDS`% of columns (default 10). |
-| Sky | `/function infinite_rail:mode_sky_on` / `..._off` | High-altitude cruise: one long 45° climb to `#SKYY` (default 200 — just above the clouds), then dead-level flight at `#SKYSPEED` (default 32). Off glides the line back down onto the terrain. |
+| Torches | `/function infinite_rail:mode_torches_on` / `..._off` | Scatters torches along **new** track as it is built — random spots 2–`#TORCHRANGE` blocks left/right of the line (default 32), about one per `#TORCHODDS`% of columns (default 35). |
+| Sky | `/function infinite_rail:mode_sky_on` / `..._off` | High-altitude cruise: one long 45° climb to `#SKYY` (default 180), then dead-level flight at `#SKYSPEED` (default 18). Off glides the line back down onto the terrain. |
 | — | `/function infinite_rail:modes` | Prints which modes are currently on. |
+
+**The Settings book — the in-game menu.** During a ride you always carry a
+book named **Settings** in the last hotbar slot; select it and use it
+(right-click / hold) to flip all of the above without typing anything:
+
+- **Java** opens it as a written book with clickable **[On] / [Off]** links
+  for each mode, plus a **[Current modes]** line that prints the live states
+  to chat. Book clicks run the commands *as you*, with your permission
+  level — so they need cheats (operator) to work, exactly like typing the
+  mode commands yourself.
+- **Bedrock** opens a native pop-up form with a toggle switch per mode
+  (pre-set to the current states) and an **Apply** button. The script drives
+  it, so no permissions are involved.
+
+The book can't be lost — the inventory keeper pins it back every tick (and
+on Bedrock the slot is locked) — and `stop` takes it back when the ride
+ends.
 
 Details worth knowing:
 
@@ -322,7 +341,7 @@ Details worth knowing:
   water, lava, ice, snow layers or lily pads — and in forests they land on
   the ground *under* the canopy, not on the treetops. Track already behind
   you is unaffected; toggling off leaves existing torches standing. How far
-  they scatter is `#TORCHRANGE` (default 8): each torch rolls a random
+  they scatter is `#TORCHRANGE` (default 32): each torch rolls a random
   distance from 2 up to that many blocks off the centerline. Values above 8
   make Java widen its rolling forceload corridor so the wider band stays
   loaded and generated (a few more chunks in memory while the mode is on);
@@ -391,11 +410,11 @@ file, which are therefore your permanent defaults.
 | `#MAXSPEED`    | 8       | Default ride speed in blocks/s (Java: minecart max-speed gamerule)  |
 | `#OCEANSPEED`  | 32      | Ride speed over open ocean (0 = disable the ocean speed-up)         |
 | `#OCEANCHUNKS` | 6       | Consecutive ocean chunks before speeding up to `#OCEANSPEED`        |
-| `#LANDCHUNKS`  | 4       | Consecutive non-ocean chunks before reverting to `#MAXSPEED`        |
-| `#SKYY`        | 200     | Sky mode: the fixed cruising altitude (see [Ride modes](#ride-modes)) |
-| `#SKYSPEED`    | 32      | Sky mode: cruising speed in blocks/s while the mode is on           |
-| `#TORCHODDS`   | 10      | Torch mode: % chance per new column of planting a torch beside it   |
-| `#TORCHRANGE`  | 8       | Torch mode: farthest a torch lands from the centerline (2–48 blocks) |
+| `#LANDCHUNKS`  | 3       | Consecutive non-ocean chunks before reverting to `#MAXSPEED`        |
+| `#SKYY`        | 180     | Sky mode: the fixed cruising altitude (see [Ride modes](#ride-modes)) |
+| `#SKYSPEED`    | 18      | Sky mode: cruising speed in blocks/s while the mode is on           |
+| `#TORCHODDS`   | 35      | Torch mode: % chance per new column of planting a torch beside it   |
+| `#TORCHRANGE`  | 32      | Torch mode: farthest a torch lands from the centerline (2–48 blocks) |
 | `#DEADBAND`    | 2       | Min. height difference before a climb/descent is triggered          |
 | `#SAMEGAP`     | 40      | Min. flat blocks before sloping again in the **same** direction     |
 | `#TURNGAP`     | 40      | Min. flat blocks before **reversing** direction                     |

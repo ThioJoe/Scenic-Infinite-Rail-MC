@@ -63,7 +63,12 @@
 //  section 7g for the algorithm itself.
 // =============================================================================
 
-import { world, system, BlockPermutation, BlockVolume, EasingType, GameMode } from '@minecraft/server';
+import { world, system, BlockPermutation, BlockVolume, EasingType, GameMode, ItemStack, ItemLockMode } from '@minecraft/server';
+// The native pop-up used by the Settings book's mode menu. Safe as a static
+// import: the manifest declares the @minecraft/server-ui 2.0.0 dependency
+// (stable well before this pack's 1.21.120 floor), so the module is always
+// provided wherever the pack loads at all.
+import { ModalFormData } from '@minecraft/server-ui';
 import { camHeight } from './cam_math.js';
 // The vegetation the carve spares -- the SAME source file that generates
 // Java's #infinite_rail:keep block tag (src/shared/vegetation.js; the build
@@ -134,6 +139,26 @@ const LEGACY_AREAS = ['ir_area_a', 'ir_area_b', 'ir_t0', 'ir_t1', 'ir_t2', 'ir_t
 const PREFIX = '§6[Infinite Rail]§r ';
 const DBG = '§3[IR debug]§r ';
 
+// The SETTINGS BOOK -- the mode-menu opener. A plain book (no vanilla use
+// action of its own), pinned into the rider's last hotbar slot by the
+// inventory keeper; "using" it (right-click / hold) fires itemUse and opens
+// the native mode menu (showMenu). Java's twin is a clickable written book
+// (give_menu.mcfunction) since Java has no native forms. Identified by
+// type + name so a random picked-up book could never open menus.
+const SETTINGS_SLOT = 8; // last hotbar slot, matching Java's hotbar.8
+const SETTINGS_ITEM = 'minecraft:book';
+const SETTINGS_NAME = '§6Settings';
+
+function makeSettingsItem() {
+  const item = new ItemStack(SETTINGS_ITEM, 1);
+  item.nameTag = SETTINGS_NAME;
+  item.setLore(['§7Use to open the', '§7ride mode menu']);
+  // Pinned in place: the slot lock stops it being moved, dropped or tossed
+  // (the keeper would restore it anyway, but this avoids the flicker).
+  item.lockMode = ItemLockMode.slot;
+  return item;
+}
+
 // How fast the virtual pace position eases between speed targets, in
 // blocks/second per tick. Java gets its acceleration for free from powered-rail
 // physics; this reproduces a similar gentle ramp (8 -> 32 blocks/s in ~3 s).
@@ -157,10 +182,10 @@ const HIST_PERSIST = 1024;
 const CONFIG_DEFAULTS = {
   HOVER: 2, TUNNEL: 6, CAMHEIGHT: 0, CAMBLEND: 6, CAMSMOOTH: 6, CAMLIFT: 20,
   CAMAHEAD: 64, CAMMODE: 0, CARTYOFF: 12, HIDEHAND: 1, AUTOSTART: 1,
-  MAXSPEED: 8, OCEANSPEED: 32, OCEANCHUNKS: 6, LANDCHUNKS: 4, DEADBAND: 2,
+  MAXSPEED: 8, OCEANSPEED: 32, OCEANCHUNKS: 6, LANDCHUNKS: 3, DEADBAND: 2,
   SAMEGAP: 40, TURNGAP: 40, SLOPECLEAR: 8, UPCLAMP: 250, DOWNCLAMP: 20,
   AHEAD: 224, GENAHEAD: 192, MAXTICK: 15, DEBUGMODE: 0,
-  SKYY: 200, SKYSPEED: 32, TORCHODDS: 10, TORCHRANGE: 8,
+  SKYY: 180, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 32,
 };
 
 // The vanilla ocean biomes (Bedrock has no biome tags, so #minecraft:is_ocean
@@ -306,6 +331,38 @@ function modeOn(name) {
   const v = (runCmd(`execute if score ${P}${name} ir matches 1 run scoreboard players add ${P}probe ir 1`)?.successCount ?? 0) > 0;
   modeCache.set(name, { at: tickN, v });
   return v;
+}
+
+// The native mode menu (@minecraft/server-ui), opened by using the Settings
+// book: one ModalFormData with a toggle per ride mode, pre-checked from the
+// live scores, applied on submit by running the same mode_* function files
+// the chat commands use -- so the menu, the commands and Java behave
+// identically, tellraw feedback included. Only actual changes run anything.
+function showMenu(player) {
+  const current = {
+    rain: modeOn('RAINMODE'),
+    night: modeOn('NIGHTMODE'),
+    torches: modeOn('TORCHMODE'),
+    sky: modeOn('SKYMODE'),
+  };
+  const form = new ModalFormData()
+    .title('Infinite Rail Settings')
+    .toggle('Rain (permanent rain)', { defaultValue: current.rain })
+    .toggle('Night (frozen at midnight)', { defaultValue: current.night })
+    .toggle('Torches (scattered along new track)', { defaultValue: current.torches })
+    .toggle('Sky (high-altitude cruise)', { defaultValue: current.sky })
+    .submitButton('Apply');
+  form.show(player).then((r) => {
+    if (r.canceled || !r.formValues) return;
+    const [rain, night, torches, sky] = r.formValues;
+    const apply = (was, wanted, fn) => {
+      if (was !== !!wanted) runCmd(`function ${NS}/mode_${fn}_${wanted ? 'on' : 'off'}`);
+    };
+    apply(current.rain, rain, 'rain');
+    apply(current.night, night, 'night');
+    apply(current.torches, torches, 'torches');
+    apply(current.sky, sky, 'sky');
+  }).catch((e) => reportError('settings menu', e));
 }
 
 function findRider() {
@@ -1175,11 +1232,20 @@ function keepers(seat) {
     riderAstray = 0;
   }
 
-  // Keep the rider's inventory empty: hides the held item (so hide-hand
-  // below has nothing left to show) and stops item pickup.
+  // Keep the rider's inventory empty -- except the pinned Settings book,
+  // the mode-menu opener -- hiding held items and stopping item pickup.
   try {
     const inv = rider.getComponent('minecraft:inventory')?.container;
-    if (inv && inv.emptySlotsCount < inv.size) inv.clearAll();
+    if (inv) {
+      for (let i = 0; i < inv.size; i++) {
+        if (i === SETTINGS_SLOT) continue;
+        if (inv.getItem(i)) inv.setItem(i, undefined);
+      }
+      const cur = inv.getItem(SETTINGS_SLOT);
+      if (!cur || cur.typeId !== SETTINGS_ITEM || cur.nameTag !== SETTINGS_NAME) {
+        inv.setItem(SETTINGS_SLOT, makeSettingsItem());
+      }
+    }
   } catch { /* container busy */ }
 
   // Hide-hand (.HIDEHAND, the automatic "Hide Hand" video setting): Bedrock's
@@ -1371,6 +1437,14 @@ function stop(silent) {
   if (rider) {
     try { rider.camera.clear(); } catch { /* not set */ }
     try { rider.runCommand('effect @s clear'); } catch { /* none */ }
+    // Take the Settings book (the mode-menu item) back -- the ride is over.
+    try {
+      const inv = rider.getComponent('minecraft:inventory')?.container;
+      const cur = inv?.getItem(SETTINGS_SLOT);
+      if (cur && cur.typeId === SETTINGS_ITEM && cur.nameTag === SETTINGS_NAME) {
+        inv.setItem(SETTINGS_SLOT, undefined);
+      }
+    } catch { /* inventory unavailable */ }
   }
   S.camActive = false;
   // Remove EVERY rig piece wearing our tags (there should be one of each, but
@@ -1570,6 +1644,22 @@ system.afterEvents.scriptEventReceive.subscribe((ev) => {
     reportError('start/stop command', e);
   }
 }, { namespaces: [NS] });
+
+// The Settings book: using it (right-click / hold) opens the native mode
+// menu. itemUse fires for a plain book because it has no vanilla use action
+// competing for the interaction; matched by type + name + rider so nothing
+// else can trigger it.
+world.afterEvents.itemUse.subscribe((ev) => {
+  try {
+    if (!inited || !S.started) return;
+    const item = ev.itemStack;
+    if (!item || item.typeId !== SETTINGS_ITEM || item.nameTag !== SETTINGS_NAME) return;
+    if (ev.source?.typeId !== 'minecraft:player' || ev.source.name !== S.riderName) return;
+    showMenu(ev.source);
+  } catch (e) {
+    reportError('settings menu', e);
+  }
+});
 
 system.runInterval(() => {
   tickN += 1;

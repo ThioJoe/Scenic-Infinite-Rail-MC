@@ -22,8 +22,12 @@ execute as @a[gamemode=adventure] unless data entity @s RootVehicle run ride @s 
 # Keeper: prevent the ride cart from visually tilting due to the minecart_improvements experiment.
 execute as @e[type=minecart,tag=ir_ride,limit=1] run data modify entity @s Rotation[1] set value 0.0f
 
-# Keeper: keep the player's inventory empty to hide held items and prevent picking things up.
+# Keeper: keep the player's inventory empty to hide held items and prevent
+# picking things up -- then hand the Settings book straight back into the
+# last hotbar slot (the clear wipes it each tick, give_menu re-pins it; net
+# effect: the book is always there and nothing else ever accumulates).
 clear @a[gamemode=adventure]
+execute as @a[gamemode=adventure] run function infinite_rail:give_menu
 
 # Keepers: plug on the pace cart, ride cart on the seat. Non-player
 # passengers expose no vehicle tag to query, so the mount attempt itself is

@@ -502,8 +502,9 @@ Callers copy `rule` from `infinite_rail:names` and set `v` to `"true"`/
 `mode_night_on/off` (§6.9).
 
 **`function/stop.mcfunction`**
-Ends the ride: `#started=0`, clears effects from and dismounts adventure
-players, kills `ir_cart`, `ir_ride`, `ir_seat`, `ir_plug` and both markers,
+Ends the ride: `#started=0`, clears effects from adventure players, takes
+back the Settings book (`clear … minecraft:written_book`), dismounts them,
+kills `ir_cart`, `ir_ride`, `ir_seat`, `ir_plug` and both markers,
 clears all forceloads.
 `#autodone` stays `1`, so a stopped world never auto-restarts. **The built
 track (blocks + `ir_disp` displays) is intentionally left in the world.**
@@ -809,7 +810,8 @@ storage `infinite_rail:cam`.
 ### 6.9 Ride modes
 
 Optional flavors toggled by chat command (`/function infinite_rail:mode_*`),
-one `_on`/`_off` pair each. They are **independent switches, not a mutually
+one `_on`/`_off` pair each — or through the **Settings book**, the in-game
+menu item pinned into the rider's hotbar (`give_menu`, below). They are **independent switches, not a mutually
 exclusive mode select** — any combination stacks — and they are **state, not
 config**: the toggles live in the `#RAINMODE`/`#NIGHTMODE`/`#TORCHMODE`/
 `#SKYMODE` scores (§4.1), seeded by the shared `modes_init` and untouched by
@@ -877,6 +879,21 @@ above `#SKYY` is punched through like any rise the rail can't out-climb.
 **`function/modes.mcfunction`**
 Status printout: one `tellraw` line with all four toggle scores.
 
+**`function/give_menu.mcfunction`** — *the Settings book (the mode menu)*
+Pins a written book titled **"Settings"** into the rider's last hotbar slot
+(`item replace … hotbar.8`). Its one page is a 1.21.5+-format SNBT text
+component: `[On]`/`[Off]` links per mode plus a `[Current modes]` line, each
+a `click_event:{action:"run_command",command:"function infinite_rail:…"}`
+(no leading slash; the page root is an empty `{text:""}` so its style can't
+inherit into the children). `main` calls it for every adventure player
+**right after the per-tick inventory clear** — the clear wipes the book,
+`give_menu` re-pins it, so at every tick boundary the book exists and
+nothing else ever accumulates; `stop` takes it back. Book clicks run the
+command **as the clicking player with their permission level**, so the menu
+needs cheats (operator) to actually work — the same requirement as typing
+the mode commands. (Bedrock's menu is a native `@minecraft/server-ui` form
+driven by the script instead — §11a/§11e — with no permission concern.)
+
 *(Bedrock: rain/night are the same commands with Bedrock's stable lowercase
 gamerule names; sky/torches only flip the score and `scripts/main.js` does the
 native work — see §11a.)*
@@ -942,7 +959,7 @@ pace cart that isn't the plug is ejected, as is anything riding the ride cart
 that isn't a player; a dismounted rider is re-mounted into the ride cart; the
 plug and the ride cart are re-mounted onto their perches (unconditional
 attempts that fail silently while already seated); and if the pace cart's
-eastward speed ever drops near zero it's re-boosted to `0.5`. The ride cart's pitch is locked horizontally, and the player's inventory is cleared every tick. Combined with
+eastward speed ever drops near zero it's re-boosted to `0.5`. The ride cart's pitch is locked horizontally, and the player's inventory is cleared every tick — then the **Settings book** (the mode-menu item, §6.9) is handed straight back into the last hotbar slot by `give_menu`, so the book is always there and nothing else ever accumulates. Combined with
 the always-powered rails, the ride can never stop — and because both carts
 always carry a passenger, neither can be entered by right-click or scoop up
 passing mobs.
@@ -1083,10 +1100,10 @@ edits — it re-runs the copy already in memory.
 Current defaults in `config.mcfunction`: `#HOVER 2`, `#TUNNEL 6`,
 `#CAMHEIGHT 0`, `#CAMBLEND 6`, `#CAMSMOOTH 6`, `#CAMLIFT 20`, `#CAMAHEAD 64`,
 `#CAMMODE 0`, `#CARTYOFF 12`, `#HIDEHAND 1`, `#AUTOSTART 1`, `#MAXSPEED 8`,
-`#OCEANSPEED 32`, `#OCEANCHUNKS 6`, `#LANDCHUNKS 4`, `#DEADBAND 2`,
+`#OCEANSPEED 32`, `#OCEANCHUNKS 6`, `#LANDCHUNKS 3`, `#DEADBAND 2`,
 `#SAMEGAP 40`, `#TURNGAP 40`, `#SLOPECLEAR 8`, `#UPCLAMP 250`,
 `#DOWNCLAMP 20`, `#AHEAD 224`, `#GENAHEAD 192`, `#MAXTICK 15`, `#DEBUGMODE 0`,
-`#SKYY 200`, `#SKYSPEED 32`, `#TORCHODDS 10`, `#TORCHRANGE 8`. (These are tuned to taste and change often;
+`#SKYY 180`, `#SKYSPEED 18`, `#TORCHODDS 35`, `#TORCHRANGE 32`. (These are tuned to taste and change often;
 the algorithm works across a wide range. The gaps and deadband are far lower
 than the pre-camera 50/50/4 because the profile-driven camera erases slope
 corners entirely, so frequent small elevation changes are now visually free.
@@ -1182,7 +1199,7 @@ corners entirely, so frequent small elevation changes are now visually free.
                         │        ├─ #cartX read                        ├─ (track-history append)
                         │        │                                     ├─ (if #TORCHMODE) place_torch ─ torch_at (macro) ─ torch_try
                         │        ├─ ocean_check ─ speed_up / speed_down ─ set_speed (macro)
-                        │        ├─ (keepers, inline)                  └─ roll_chunks ─ forceload_here ─ forceload (macro)
+                        │        ├─ (keepers + give_menu, inline)      └─ roll_chunks ─ forceload_here ─ forceload (macro)
                         │        └─ cam_follow ─┬─ cam_blend ⇄ cam_scan ⇄ cam_sample ─ cam_get (macro)
                         │                       └─ cam_move ─ cam_tp (macro)
                         └─ (auto-start, once per world) start
@@ -1270,6 +1287,7 @@ counterparts all live in `src/bedrock/scripts/main.js` (stable
 | Ride modes: rain / night (§6.9) | `set_rule` macro + version-picked names from `names.mcfunction` | plain lowercase gamerule literals in the `mode_*` function files (Bedrock's names are stable) — no script involvement |
 | Ride modes: sky speed & ocean pause | `sky_speed` at toggle/begin + an early `return` in `ocean_check` | `tickPace()` asserts `.SKYSPEED` every tick while `.SKYMODE` is on (and resets the ocean state on the toggle-off transition); `oceanCheck()` returns early — both read the score through the same bridge as the brain flags, so cmd-bridge worlds keep working |
 | Ride modes: torch scatter | `place_torch`/`torch_at`/`torch_try` (`/random` rolls + a macro'd Z offset + `positioned over` heightmap + `setblock … keep`), with `forceload_here` widening the corridor to `#TORCHRANGE` | `maybeTorch()` (Math.random + the surface probe + per-cell air/solid checks), called from `advance()` — the scout bubble already covers ±96 blocks, so no corridor change |
+| Ride modes: the Settings menu | a **written book** pinned by `give_menu` after each per-tick inventory clear — clickable `[On]`/`[Off]` `click_event`s that run the mode functions as the clicking player (needs operator) | a plain named book pinned by the inventory keeper (slot-locked); using it fires `itemUse` and the script shows a native `@minecraft/server-ui` **ModalForm** of toggles pre-set from the live scores, applying only actual changes by running the same `mode_*` files |
 | World tuning | `setup_world` (camelCase) + overlay (snake_case) | `setup_world` (Bedrock's lowercase gamerule names) — a third small file, same rules |
 
 ### 11b. The Bedrock rig and camera
@@ -1486,3 +1504,13 @@ which is unbounded by design.
   ocean counters on the sky-off transition, and plants torch-mode torches
   from `maybeTorch()` in the column builder. Rain/night use Bedrock's stable
   lowercase gamerule names directly in the function files.
+- **The Settings book opens a native form.** The inventory keeper pins a
+  plain book named "Settings" (slot-locked via `ItemLockMode.slot`) into the
+  last hotbar slot instead of clearing that slot; using it fires
+  `world.afterEvents.itemUse`, matched by item type + name + rider, and the
+  script shows a `@minecraft/server-ui` **ModalFormData** — one toggle per
+  mode pre-set from the live scores, an Apply button, and only actual
+  changes run their `mode_*` function (so the tellraw feedback matches the
+  chat commands exactly). The BP manifest therefore depends on
+  `@minecraft/server-ui` `2.0.0` (stable long before the pack's 1.21.120
+  floor). `stop` removes the book.

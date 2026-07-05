@@ -135,5 +135,7 @@ carve-mode contract, camera floor/flats/parallel-climb guarantees).
   `max_format` (base + overlay) to extend support.
 - **Bedrock**: `src/bedrock/bp/manifest.json` pins `@minecraft/server` `2.3.0`
   (the oldest stable module with every API the script uses — `getBiome` is
-  the gate) and `min_engine_version` `[1, 21, 120]`. Raising both to the
-  current retail pairing is safe whenever older clients stop mattering.
+  the gate), `@minecraft/server-ui` `2.0.0` (the settings-menu forms; stable
+  well before the engine floor) and `min_engine_version` `[1, 21, 120]`.
+  Raising them to the current retail pairing is safe whenever older clients
+  stop mattering.

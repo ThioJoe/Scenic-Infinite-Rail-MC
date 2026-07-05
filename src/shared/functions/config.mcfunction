@@ -108,8 +108,9 @@ scoreboard players set #CARTYOFF ir 12
 # arm automatically, like turning on the "Hide Hand" video setting, for a
 # clean cinematic view. Bedrock's /hud command has no element for the hand,
 # so this uses the one vanilla mechanism that reaches it: an invisibility
-# effect on the rider -- the inventory keeper already guarantees nothing is
-# held, so nothing renders at all. Side effect: your own body is also hidden
+# effect on the rider -- the inventory keeper keeps everything except the
+# Settings book (the mode-menu item) out of your hands, so normally nothing
+# renders at all. Side effect: your own body is also hidden
 # in third-person / F5 view (the cart still shows). 0 = leave the arm
 # visible. Live-tunable mid-ride (takes effect within a second).
 # (Java has no equivalent mechanism; the Java rider keeps their arm.)
