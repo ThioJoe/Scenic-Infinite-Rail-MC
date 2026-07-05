@@ -65,6 +65,11 @@
 
 import { world, system, BlockPermutation, BlockVolume, EasingType, GameMode } from '@minecraft/server';
 import { camHeight } from './cam_math.js';
+// The vegetation the carve spares -- the SAME source file that generates
+// Java's #infinite_rail:keep block tag (src/shared/vegetation.js; the build
+// copies it in here). Bedrock commands have no block tags, so the
+// classification runs at runtime instead.
+import { isVegetation } from './vegetation.js';
 
 // --- Constants ---------------------------------------------------------------
 
@@ -151,10 +156,10 @@ const HIST_PERSIST = 1024;
 // .HOVER ir 8" tweaks work mid-ride exactly like Java.
 const CONFIG_DEFAULTS = {
   HOVER: 2, TUNNEL: 6, CAMHEIGHT: 0, CAMBLEND: 6, CAMSMOOTH: 6, CAMLIFT: 20,
-  CAMAHEAD: 64, CAMMODE: 0, CARTYOFF: 0, AUTOSTART: 1, MAXSPEED: 8,
-  OCEANSPEED: 32, OCEANCHUNKS: 6, LANDCHUNKS: 4, DEADBAND: 3, SAMEGAP: 25,
-  TURNGAP: 40, UPCLAMP: 150, DOWNCLAMP: 50, AHEAD: 224, GENAHEAD: 192,
-  MAXTICK: 15, DEBUGMODE: 0,
+  CAMAHEAD: 64, CAMMODE: 0, CARTYOFF: 0, HIDEHAND: 1, AUTOSTART: 1,
+  MAXSPEED: 8, OCEANSPEED: 32, OCEANCHUNKS: 6, LANDCHUNKS: 4, DEADBAND: 3,
+  SAMEGAP: 25, TURNGAP: 40, SLOPECLEAR: 8, UPCLAMP: 150, DOWNCLAMP: 50,
+  AHEAD: 224, GENAHEAD: 192, MAXTICK: 15, DEBUGMODE: 0,
 };
 
 // The vanilla ocean biomes (Bedrock has no biome tags, so #minecraft:is_ocean
@@ -359,6 +364,12 @@ function brainGetDir() {
   return -1;
 }
 
+// Read one of the brain's 0/1 answers (the carve-mode flags #veg / #retro).
+function brainGetFlag(name) {
+  if (bridgeMode === 'api') return getScore(name, 0) === 1;
+  return (runCmd(`execute if score ${P}${name} ir matches 1 run scoreboard players add ${P}probe ir 1`)?.successCount ?? 0) > 0;
+}
+
 // --- Persistence ---------------------------------------------------------------
 // Java keeps everything in the scoreboard / command storage, which the save
 // file persists for free. The scoreboard half (the shared brain's state) still
@@ -515,16 +526,66 @@ function sampleWindow() {
 // disguise -- one block, no entity. Falls back to a bare redstone block if
 // the custom block is unavailable (outdated behavior pack).
 
-function placeColumn(x, y, dir) {
+// Clear one cell UNLESS it holds natural vegetation (the shared
+// vegetation.js classification -- Java's carve_layer does the same per-cell
+// test against the generated #infinite_rail:keep block tag). Air is left
+// untouched so open ground costs one read and zero writes.
+function clearSoft(x, y, z) {
+  try {
+    const b = dim.getBlock({ x, y, z });
+    if (!b || b.isAir === true) return;
+    if (isVegetation(b.typeId ?? '')) return;
+    dim.setBlockType({ x, y, z }, 'minecraft:air');
+  } catch { /* border chunk: the loop heals it on a later pass-through */ }
+}
+
+// The carve is VEGETATION-SPARING, mirroring Java's carve/carve_layer cell
+// rules exactly (the shared brain decides WHICH columns may spare -- veg):
+//   - center, rail cell + 1 above: ALWAYS cleared (cart + rider pass here)
+//   - center, >= 2 above the rail: one unconditional fill when veg is false
+//     (slope columns and the #SLOPECLEAR buffer around them -- the camera
+//     floats above the rail line there), per-cell vegetation-sparing when
+//     veg is true
+//   - left and right: ALWAYS vegetation-sparing, at every height
+// Terrain (stone, dirt, ...) is never spared, so tunnels are unchanged.
+function placeColumn(x, y, dir, veg) {
   const z = S.centerZ;
   const carveH = dir === 0 ? cfg('TUNNEL') : cfg('TUNNEL') + 1; // #TUNNELUP
   dim.fillBlocks(
-    new BlockVolume({ x, y, z: z - 1 }, { x, y: y + carveH, z: z + 1 }),
+    new BlockVolume({ x, y, z }, { x, y: y + 1, z }),
     AIR, { ignoreChunkBoundErrors: true },
   );
+  if (!veg && carveH >= 2) {
+    dim.fillBlocks(
+      new BlockVolume({ x, y: y + 2, z }, { x, y: y + carveH, z }),
+      AIR, { ignoreChunkBoundErrors: true },
+    );
+  }
+  for (let dy = 0; dy <= carveH; dy++) {
+    clearSoft(x, y + dy, z - 1);
+    clearSoft(x, y + dy, z + 1);
+    if (veg && dy >= 2) clearSoft(x, y + dy, z);
+  }
   dim.setBlockPermutation({ x, y: y - 1, z }, SUPPORT);
   dim.setBlockPermutation({ x, y, z }, dir === 0 ? RAIL_FLAT : dir === 1 ? RAIL_UP : RAIL_DOWN);
   dim.setBlockType({ x, y: y + 3, z }, LIGHT_BLOCK);
+}
+
+// A slope just started (the shared start_event raised #retro): retroactively
+// clear the FULL center bore over the last #SLOPECLEAR columns -- the camera
+// lifts off the rail line before the slope arrives, so vegetation spared
+// over those (flat, same-elevation) columns must go after all. Vertical
+// only: the cells left and right of the track keep their plants. Java's
+// retro_clear/retro_fill is the same fill, clamped the same way.
+function retroClear(headX) {
+  const k = Math.min(cfg('SLOPECLEAR'), headX - S.trackBase);
+  const h = cfg('TUNNEL');
+  if (k < 0 || h < 2) return;
+  dim.fillBlocks(
+    new BlockVolume({ x: headX - k, y: S.railY + 2, z: S.centerZ },
+      { x: headX, y: S.railY + h, z: S.centerZ }),
+    AIR, { ignoreChunkBoundErrors: true },
+  );
 }
 
 // --- The build loop ------------------------------------------------------------
@@ -543,16 +604,24 @@ function advance() {
   brainSet('railY', S.railY);
   dim.runCommand(`function ${NS}/decide`);
   const dir = brainGetDir();
+  // The brain's carve-mode answers (see decide/start_event in src/shared):
+  // veg = this column may spare vegetation; retro = a slope just started, so
+  // the columns behind the head lose their spared center bore after all.
+  const veg = brainGetFlag('veg');
+  if (brainGetFlag('retro')) {
+    retroClear(S.headX);
+    brainSet('retro', 0);
+  }
 
   const colX = S.headX + 1;
   if (dir === -1) {
-    S.railY -= 1;                    // descend: the rail sits one lower,
-    placeColumn(colX, S.railY, -1);  // sloping up toward the west behind it
+    S.railY -= 1;                        // descend: the rail sits one lower,
+    placeColumn(colX, S.railY, -1, veg); // sloping up toward the west behind it
   } else if (dir === 1) {
-    placeColumn(colX, S.railY, 1);   // climb: ascending rail at the current
-    S.railY += 1;                    // level, then the line steps up
+    placeColumn(colX, S.railY, 1, veg);  // climb: ascending rail at the current
+    S.railY += 1;                        // level, then the line steps up
   } else {
-    placeColumn(colX, S.railY, 0);
+    placeColumn(colX, S.railY, 0, veg);
   }
   S.headX = colX;
 
@@ -952,6 +1021,14 @@ function spawnRig(pos) {
 const ASTRAY_TICKS = 4; // consecutive too-far ticks before a re-mount
 let riderAstray = 0;
 
+// Is this player still "on the ride" for keeper purposes? Rides now run in
+// SURVIVAL (adventure suppresses Bedrock's natural mob spawning), but
+// adventure is still accepted so rides saved by older pack versions resume
+// seamlessly. Switching to creative remains the sanctioned way to leave.
+function ridingMode(gm) {
+  return gm === GameMode.Survival || gm === GameMode.Adventure;
+}
+
 // Mount the ride's player onto the seat via the /ride COMMAND, not the
 // scripting addRider() API. Every mount in this saga went through
 // addRider, and the client's link state kept coming out flaky (phantom
@@ -1003,12 +1080,12 @@ function keepers(seat) {
   if (!rider) return;
 
   // Rider keeper (sneak-dismounts, rejoins): positional rule -- the seated
-  // offset is 0.35, so anything under the threshold is "aboard". Like Java,
-  // only adventure-mode players are recaptured -- switching to creative is
+  // offset is 0.35, so anything under the threshold is "aboard". Only
+  // survival/adventure players are recaptured -- switching to creative is
   // the sanctioned way to leave the ride and wander off. /ride's
   // teleport_rider brings a far-away rider (respawned at the rolled
   // spawnpoint) back to the rig as part of the mount.
-  if (rider.getGameMode() === GameMode.Adventure) {
+  if (ridingMode(rider.getGameMode())) {
     let riderFar = true;
     let d = -1;
     try { d = distToSeat(rider.location); riderFar = d > 2.5; } catch { /* treat as far */ }
@@ -1026,12 +1103,28 @@ function keepers(seat) {
     riderAstray = 0;
   }
 
-  // Keep the rider's inventory empty: hides the held item/arm (Bedrock has no
-  // /hud hand element -- hide_hand's job lands here) and stops item pickup.
+  // Keep the rider's inventory empty: hides the held item (so hide-hand
+  // below has nothing left to show) and stops item pickup.
   try {
     const inv = rider.getComponent('minecraft:inventory')?.container;
     if (inv && inv.emptySlotsCount < inv.size) inv.clearAll();
   } catch { /* container busy */ }
+
+  // Hide-hand (.HIDEHAND, the automatic "Hide Hand" video setting): Bedrock's
+  // /hud command has no element for the first-person arm, but the
+  // invisibility effect removes it -- and with the inventory kept empty,
+  // nothing renders at all. Re-asserted once a second so the knob is
+  // live-tunable; stop() clears it with the other effects. (Side effect: the
+  // rider's body is also hidden in third-person/F5 -- documented trade-off.)
+  if (tickN % 20 === 0) {
+    try {
+      if (cfg('HIDEHAND') === 1) {
+        rider.addEffect('minecraft:invisibility', 600, { amplifier: 0, showParticles: false });
+      } else if (rider.getEffect('minecraft:invisibility')) {
+        rider.removeEffect('minecraft:invisibility');
+      }
+    } catch { /* effect API momentarily unavailable */ }
+  }
 }
 
 // --- Lifecycle ---------------------------------------------------------------
@@ -1129,13 +1222,17 @@ function beginPhase2(startX) {
   brainSet('flat', 99);
   brainSet('lastDir', 0);
   brainSet('railY', S.railY);
+  // Fresh carve-mode state (see decide): no slope buffer, no pending retro.
+  brainSet('vclear', 0);
+  brainSet('retro', 0);
 
   // Track history: one rail-Y per column; the camera's whole map of the path.
   S.trackY = [S.railY];
   S.trackBase = startX;
 
-  // First column + the virtual pace cart parked on it.
-  try { placeColumn(startX, S.railY, 0); } catch { /* still generating; loop heals it */ }
+  // First column + the virtual pace cart parked on it (full clear: no decide
+  // has run yet, matching Java's begin, where #veg starts at 0).
+  try { placeColumn(startX, S.railY, 0, false); } catch { /* still generating; loop heals it */ }
   S.paceX = startX + 0.5;
   S.lastChunk = Math.floor((S.paceX + cfg('CAMAHEAD')) / 16);
   S.oceanRun = 0;
@@ -1174,9 +1271,17 @@ function beginPhase2(startX) {
     return;
   }
 
-  // Spectator constraints: look freely, break nothing, feel nothing.
+  // Spectator constraints: look freely, feel nothing. SURVIVAL, not
+  // adventure: Bedrock does not naturally spawn mobs around adventure-mode
+  // players, which made the whole ride eerily lifeless -- survival keeps the
+  // world populated (animals AND hostiles; they can't hurt the rider through
+  // Resistance 255 + the damage gamerules, can't grief through mobGriefing
+  // false, and can't enter the rig). Breaking blocks stays a non-issue: the
+  // inventory keeper leaves nothing to place or swing, and the ride glides
+  // past faster than anything could be punched out. (Java keeps adventure --
+  // its spawning doesn't care about game mode.)
   try {
-    player.runCommand('gamemode adventure @s');
+    player.runCommand('gamemode survival @s');
     player.runCommand('effect @s resistance infinite 255 true');
     player.runCommand('effect @s saturation infinite 0 true');
   } catch { /* effects are belt-and-suspenders on top of the damage gamerules */ }
@@ -1434,7 +1539,7 @@ function tick() {
         // the rig position -- their presence loads the chunk, and the next
         // ticks respawn the rig and re-seat them.
         const rider = findRider();
-        if (rider && rider.getGameMode() === GameMode.Adventure
+        if (rider && ridingMode(rider.getGameMode())
           && !rider.getComponent('minecraft:riding')) {
           try {
             rider.teleport({ x: rigX, y: sy + 2, z: S.centerZ + 0.5 });

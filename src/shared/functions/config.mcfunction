@@ -104,6 +104,17 @@ scoreboard players set #CAMMODE ir 0
 #   /scoreboard players set #CARTYOFF ir -1
 scoreboard players set #CARTYOFF ir 12
 
+# BEDROCK EDITION ONLY (ignored on Java). 1 = hide the rider's first-person
+# arm automatically, like turning on the "Hide Hand" video setting, for a
+# clean cinematic view. Bedrock's /hud command has no element for the hand,
+# so this uses the one vanilla mechanism that reaches it: an invisibility
+# effect on the rider -- the inventory keeper already guarantees nothing is
+# held, so nothing renders at all. Side effect: your own body is also hidden
+# in third-person / F5 view (the cart still shows). 0 = leave the arm
+# visible. Live-tunable mid-ride (takes effect within a second).
+# (Java has no equivalent mechanism; the Java rider keeps their arm.)
+scoreboard players set #HIDEHAND ir 1
+
 
 # --- Auto-start -------------------------------------------------------------
 
@@ -161,6 +172,25 @@ scoreboard players set #SAMEGAP ir 25
 # Higher = no quick up-then-down bobbing; small bumps get tunneled through and
 # small dips get bridged across.
 scoreboard players set #TURNGAP ir 40
+
+
+# --- Track clearing / vegetation sparing ------------------------------------
+# The carve spares natural vegetation (trees, leaves, giant mushrooms, bamboo,
+# plants, sugar cane, ...) outside the critical envelope: the rail cell and
+# the cell above it are always cleared for the cart and rider, but to the LEFT
+# and RIGHT of the track, and 2+ blocks ABOVE it, plants survive -- the ride
+# brushes through forests instead of mowing a square canyon through them.
+# Terrain (stone, dirt, sand, ...) still carves at full height everywhere, so
+# tunnels are unchanged.
+
+# The one exception is around slopes: the camera floats up to #CAMLIFT above
+# the rail line entering, riding and leaving a climb/descent, so overhanging
+# leaves there would brush the rider's face. Slope columns therefore always
+# carve their full center bore, and so do this many columns just BEFORE and
+# AFTER each slope (vertically only -- left/right stay vegetation-sparing).
+# Cover at least the camera's lift-off run (roughly #CAMBLEND/2 + #CAMLIFT/10
+# + 2 blocks) and keep it <= #SAMEGAP. 0 = only the slope columns themselves.
+scoreboard players set #SLOPECLEAR ir 8
 
 
 # --- Terrain-smoothing sensitivity -----------------------------------------

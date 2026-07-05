@@ -128,6 +128,12 @@ A single **column** therefore looks like this vertically (flat case):
 Consecutive columns differ in X by 1. On slopes they also differ in Y by 1,
 producing a 45° "corner-to-corner" line of ascending rails (see §7c).
 
+The carve is **vegetation-sparing** (§7i): only the rail cell and the cell
+above it (center) are cleared unconditionally; the side cells and the center
+cells ≥ 2 above the rail leave natural vegetation standing (terrain always
+carves). Slope columns and the `#SLOPECLEAR` columns around them clear their
+full center bore regardless.
+
 ---
 
 ## 4. Shared state
@@ -155,10 +161,12 @@ fake players. Grouped by role:
 | `#CAMAHEAD`  | How many blocks the rig (viewer) rides ahead of the hidden pace cart. Keep ≥ ~40 below `#AHEAD`. |
 | `#CAMMODE`   | **Bedrock-only** (inert on Java): `0` = native free-look rig, `1` = eased cinematic camera via Bedrock's camera system (§11). |
 | `#CARTYOFF`  | **Bedrock-only** (inert on Java): fine-tune for the minecart visual's height, in tenths of a block (negative = lower). The base correction is baked into the pack's re-based model copy (`geometry.ir_cart`, 16px down -- vanilla's cart geometry draws a block high outside the engine's internal renderer), so keep this small: a large negative offset sinks the cart *entity* into the track blocks, where it suffocates. Live-tunable mid-ride. |
+| `#HIDEHAND`  | **Bedrock-only** (inert on Java): `1` = hide the rider's first-person arm automatically (the "Hide Hand" video setting's job). `/hud` has no hand element, so this is done with an invisibility effect on the rider, re-asserted once a second by the keeper — the rider's body is hidden in third-person/F5 too. `0` = leave the arm visible. |
 | `#AUTOSTART` | `1` = the ride auto-starts for the first player in a fresh world; `0` = manual start only. |
 | `#DEADBAND`  | Minimum `|target − railY|` before a slope change is even considered (hysteresis vs. terrain noise). |
 | `#SAMEGAP`   | Minimum flat columns between two elevation changes **in the same direction**. |
 | `#TURNGAP`   | Minimum flat columns before the rail may **reverse** direction. |
+| `#SLOPECLEAR`| How many columns just **before and after** every slope get their full-height center clear even through vegetation (§7i) — the camera floats above the rail line around slopes. Vertical only; the cells left/right of the track always spare plants. Keep ≥ the camera's lift-off run (~`#CAMBLEND/2 + #CAMLIFT/10 + 2`) and ≤ `#SAMEGAP`. |
 | `#UPCLAMP`   | Max a single heightmap sample may pull the rolling average **up** per column. |
 | `#DOWNCLAMP` | Max a single heightmap sample may pull the rolling average **down** per column. |
 | `#AHEAD`     | How far (blocks) ahead of the **cart** the rails are kept built. |
@@ -221,6 +229,11 @@ fake players. Grouped by role:
 | `#j`,`#cb`,`#tj`,`#tsum`,`#tn` | `cam_blend` loop state: blend offset, sample base column, one `lifted()` value, running sum/count. |
 | `#k`,`#si`,`#sj`,`#ya`,`#yb`,`#sm`,`#t2` | `cam_scan`/`cam_sample` state: scan offset, clamped indices, the two column heights, the interpolated sample, scratch (also reused by `cam_move`). |
 | `#fmx`,`#l0`,`#linem`,`#ly` | One sample's forward max and its rail line (milli), the rail line at the rig (milli), `cam_get` output. |
+| `#veg`      | This column's carve mode, computed by the shared `decide` (§7i): `1` = the bore may spare vegetation outside the critical envelope, `0` = full center clear (slope columns and the `#SLOPECLEAR` buffer after an event). |
+| `#vclear`   | Countdown of full-clear columns remaining after an event ends (armed to `#SLOPECLEAR` by `end_event`, decremented per flat column by `decide`). |
+| `#retro`    | `1` = a slope just started (raised by the shared `start_event`); the edition's builder retro-clears the center bore of the last `#SLOPECLEAR` columns and resets it to `0`. |
+| `#ch`,`#cy` | Carve state: this column's bore height (`#TUNNEL`/`#TUNNELUP`, set by the `place_*` caller) and `carve_layer`'s climbing layer index. |
+| `#rk`,`#rt` | `retro_clear` scratch: the clamped retro span and the columns-built count it is clamped against. |
 
 ### 4.2 Entities (all tagged, so selectors are unambiguous)
 
@@ -244,7 +257,7 @@ fake players. Grouped by role:
 | `infinite_rail:track`| `y`(list of int) | The **track history**: one rail-Y per built column, appended by `advance` (and once by `begin`); index = world X − `#trackBase`. The camera's entire knowledge of the path. Grows ~4 bytes/column for the life of a ride; reset by `begin`. |
 | `infinite_rail:cami` | `i`(int) | Macro argument for `cam_get` (the history index to read). |
 | `infinite_rail:speed`| `rule`(string), `v`(int) | Macro args for `set_speed`: the version-correct gamerule name (`rule`, detected once at load) and the value to set (`v`). |
-| `infinite_rail:carve`| `h`(int) | Macro argument for `carve` (the clearance-bore height above the rail). |
+| `infinite_rail:carve`| `h`(int), `k`(int) | Macro arguments for the carve fills: the clearance-bore height above the rail (`carve_center`, `retro_fill`) and the retro-clear span behind the head (`retro_fill` only). |
 
 ---
 
@@ -298,6 +311,8 @@ advance (per column)
    1. sample_window ─► #avg (rolling average of the next 48 blocks' surface)
    2. #target = #avg + #HOVER
    3. decide ─► #dir (-1/0/1)  [event model; may call consider_start]
+      (decide also sets #veg, this column's carve mode — §7i)
+   3b. if #retro (a slope just started): retro_clear the center bore behind the head
    4. move ir_head and place the column (place_flat / place_up / place_down ─► support)
    5. every 16 blocks: roll_chunks (forceload ahead, unload behind, move spawn)
 
@@ -351,8 +366,9 @@ knobs without stopping it, and a stopped world stays stopped.
 **`function/config.mcfunction`** *(shared source: `src/shared/functions/`)*
 The single file a user edits — and the same source file the Bedrock port runs,
 modulo the two mechanical dialect rewrites of §11a. Sets every tunable score (`#HOVER`, `#TUNNEL`,
-`#CAMHEIGHT`, `#CAMSMOOTH`, `#AUTOSTART`, `#MAXSPEED`, `#OCEANSPEED`,
-`#OCEANCHUNKS`, `#LANDCHUNKS`, `#DEADBAND`, `#SAMEGAP`, `#TURNGAP`, `#UPCLAMP`,
+`#CAMHEIGHT`, `#CAMSMOOTH`, `#HIDEHAND`, `#AUTOSTART`, `#MAXSPEED`, `#OCEANSPEED`,
+`#OCEANCHUNKS`, `#LANDCHUNKS`, `#DEADBAND`, `#SAMEGAP`, `#TURNGAP`,
+`#SLOPECLEAR`, `#UPCLAMP`,
 `#DOWNCLAMP`, `#AHEAD`, `#GENAHEAD`, `#MAXTICK`) with heavily-commented
 explanations. Called by `load` (which then derives `#TUNNELUP`). Its header
 documents how to apply edits (`/reload`) and that running `config` by itself
@@ -517,7 +533,10 @@ per-tick `#budget` is exhausted. (Recursion depth is capped by `#MAXTICK`.)
 Builds **one** column (see §7 for the algorithms it drives):
 1. Zero `#sum`, run `sample_window` at the head, compute `#avg = #sum / #C12`.
 2. `#target = #avg + #HOVER`.
-3. `decide` → sets `#dir` (−1/0/1).
+3. `decide` → sets `#dir` (−1/0/1) and `#veg` (this column's carve mode, §7i).
+3b. If `#retro` is 1 (the shared `start_event` raised it: a slope starts on
+   this column), run `retro_clear` at the head — the full-height center
+   clear of the last `#SLOPECLEAR` columns — then reset `#retro` to 0.
 4. Move the head and place the column, per `#dir`:
    - `#dir 0`: `tp head ~1 ~ ~`; `place_flat`.
    - `#dir -1`: `tp head ~1 ~-1 ~`; `place_down`; `#railY −= 1`.
@@ -576,17 +595,20 @@ All three run positioned at the head; the head is already at this column's
 (which lays the redstone block *under* the rail), then the rail, then the light —
 because the track hovers above the ground, so the cell under the rail is air and
 the rail would pop off if placed before its support existed. The carve height is
-configurable (`#TUNNEL`), so all three delegate the `fill` to the `carve` macro.
+configurable (`#TUNNEL`), and the carve is **vegetation-sparing** (§7i).
 
 **`function/place_flat.mcfunction`**
-Stores `#TUNNEL` into `infinite_rail:carve h` and runs `carve` (3 wide ×
-`#TUNNEL+1` cells tall — the rail cell plus `#TUNNEL` above); `support`;
-`powered_rail[shape=east_west,powered=true]` at `~`; `light[level=11]` at `~3`.
+Sets the carve height (`#TUNNEL`) into both the `#ch` score (the per-cell
+walk) and storage `infinite_rail:carve h` (the full-clear fill macro), runs
+`carve` (3 wide × `#TUNNEL+1` cells tall — the rail cell plus `#TUNNEL`
+above); `support`; `powered_rail[shape=east_west,powered=true]` at `~`;
+`light[level=11]` at `~3`.
 
 **`function/place_up.mcfunction`**
 Climbing column. Same as flat but carves with `#TUNNELUP` (= `#TUNNEL+1`, one
 block of extra headroom as the cart rises) and places
-`powered_rail[shape=ascending_east,powered=true]`.
+`powered_rail[shape=ascending_east,powered=true]`. (Slope columns always
+full-clear their center bore: `decide` sets `#veg` 0 on them.)
 
 **`function/place_down.mcfunction`**
 Descending column. Carves with `#TUNNELUP`; places
@@ -594,11 +616,46 @@ Descending column. Carves with `#TUNNELUP`; places
 head down first, the rail sits one lower and slopes up toward the west behind it,
 which is the same physical staircase as a climb viewed the other way.)
 
-**`function/carve.mcfunction`** *(a function macro)*
-`$fill ~ ~ ~-1 ~ ~$(h) ~1 minecraft:air` — carves the 3-wide clearance bore up
-to `$(h)` blocks above the rail. `fill` needs literal coordinates, so the
-configurable height arrives as a macro arg (storage `infinite_rail:carve h`, set
-by the caller to `#TUNNEL` for flat columns or `#TUNNELUP` for slopes).
+**`function/carve.mcfunction`**
+The vegetation-sparing clearance bore (§7i), positioned at the head. Always
+clears the **critical envelope** — the rail cell and the cell above it,
+center only — with one literal `fill`. If `#veg` is 0 (slope / slope-buffer
+column) it clears the rest of the center bore in one `carve_center` fill;
+then it walks the bore per-cell with `carve_layer` (`#cy` 0 → `#ch`).
+
+**`function/carve_center.mcfunction`** *(a function macro)*
+`$fill ~ ~2 ~ ~ ~$(h) ~ minecraft:air` — the full center clear above the
+envelope for `#veg 0` columns. `fill` needs literal coordinates, so the
+height arrives as a macro arg (storage `infinite_rail:carve h`, set by the
+`place_*` caller to `#TUNNEL` or `#TUNNELUP`).
+
+**`function/carve_layer.mcfunction`** *(recursive)*
+One horizontal slice per call, climbing `positioned ~ ~1 ~` from the rail
+cell to `#ch` above it. Each cell is set to air **unless** it matches the
+`#infinite_rail:keep` block tag (the vegetation list, generated by the build
+from the shared `vegetation.js`): the two side cells always get the sparing
+test, the center cell only in veg mode (`#veg` 1) and only from 2 above the
+rail up (the envelope below was already cleared).
+
+**`function/retro_clear.mcfunction`**
+Runs from `advance` when the shared `start_event` raises `#retro` (a slope
+begins this column): computes the span `#rk = min(#SLOPECLEAR, columns built
+this ride)` — so it can never reach behind the start point — stores `k`/`h`
+and delegates to `retro_fill`. Positioned at the head, which still sits on
+the last **built** column.
+
+**`function/retro_fill.mcfunction`** *(a function macro)*
+`$fill ~-$(k) ~2 ~ ~ ~$(h) ~ minecraft:air` — the retroactive full-height
+center clear over the flat columns just before a slope (they were carved
+vegetation-sparing, but the camera lifts off the rail line early — §7g).
+Vertical only: the side cells keep their plants.
+
+**`data/infinite_rail/tags/block/keep.json`** *(generated by the build)*
+The `#infinite_rail:keep` block tag — everything the carve spares. Not a
+source file: `tools/build.mjs` emits it from `src/shared/vegetation.js`, the
+single vegetation list both editions share (§11a). Every entry is
+`"required": false`, so a future block rename degrades to "that plant gets
+carved again" instead of breaking tag loading.
 
 **`function/support.mcfunction`**
 Lays the power+disguise under the rail (shared by all three place functions):
@@ -836,6 +893,48 @@ control, this needs the world's **Minecart Improvements** feature enabled;
 without it the speed writes are no-ops and the ride cruises at vanilla pace
 throughout.
 
+### 7i. Vegetation-sparing clearing
+The clearance bore no longer flattens everything in its 3×(`#TUNNEL`+1) box.
+Per cell, the rules are:
+
+- **Critical envelope — always cleared:** the rail cell and the cell above
+  it, center only (the cart and rider pass through here), plus everything
+  the column *places* (support below, rail, light at rail+3).
+- **Vegetation-sparing — everywhere else:** the side cells (Z−1/Z+1, every
+  height) and the center cells ≥ 2 above the rail are cleared **unless**
+  they hold natural vegetation — tree trunks, leaves, giant mushrooms,
+  bamboo, sugar cane, flowers, vines, crops, water plants… Terrain (stone,
+  dirt, sand) is never spared, so tunnels bore exactly as before; the ride
+  just brushes *through* forests instead of mowing a square canyon.
+- **The slope exception — full center clear:** the camera floats up to
+  `#CAMLIFT` above the rail line entering, riding and leaving slopes (§7g),
+  so overhead vegetation there would brush the rider. Slope columns, and
+  `#SLOPECLEAR` flat columns on **each side** of every slope, clear their
+  full center bore unconditionally. Vertical only — the side cells spare
+  vegetation even there.
+
+The **which-columns logic is shared** (it lives in the same shared
+`.mcfunction` brain both editions run): `decide` computes `#veg` per column
+(0 on slope columns, and while `#vclear` — armed to `#SLOPECLEAR` by
+`end_event` — counts down after a slope), and `start_event` raises `#retro`,
+telling the edition's builder to retroactively full-clear the center bore of
+the `#SLOPECLEAR` columns *before* the slope (they were already built when
+the slope was decided). `tools/simulate.mjs` asserts the `#veg`/`#retro`
+contract on both emitted copies.
+
+The **what-is-vegetation list is shared too**: `src/shared/vegetation.js` is
+the single source of truth. The build turns it into Java's
+`#infinite_rail:keep` block tag (tested per cell by `carve_layer` with
+`execute unless block … #infinite_rail:keep`) and copies it into the Bedrock
+pack, where `placeColumn()` calls its `isVegetation()` on each cell's typeId
+(Bedrock commands have no block tags). Only the per-edition "how" differs;
+the policy is written once.
+
+Two deliberate consequences: a tree trunk dead on the centerline keeps its
+crown (the envelope punches a 2-block gap through it, plus the light cell at
+rail+3), and spared leaves with no log left in range decay naturally —
+that's vanilla behavior, not a bug.
+
 ---
 
 ## 8. Tuning
@@ -850,8 +949,9 @@ edits — it re-runs the copy already in memory.
 
 Current defaults in `config.mcfunction`: `#HOVER 2`, `#TUNNEL 6`,
 `#CAMHEIGHT 0`, `#CAMBLEND 6`, `#CAMSMOOTH 6`, `#CAMLIFT 20`, `#CAMAHEAD 64`,
-`#CAMMODE 0`, `#AUTOSTART 1`, `#MAXSPEED 8`, `#OCEANSPEED 32`, `#OCEANCHUNKS 6`,
-`#LANDCHUNKS 4`, `#DEADBAND 3`, `#SAMEGAP 25`, `#TURNGAP 40`, `#UPCLAMP 150`,
+`#CAMMODE 0`, `#HIDEHAND 1`, `#AUTOSTART 1`, `#MAXSPEED 8`, `#OCEANSPEED 32`,
+`#OCEANCHUNKS 6`, `#LANDCHUNKS 4`, `#DEADBAND 3`, `#SAMEGAP 25`, `#TURNGAP 40`,
+`#SLOPECLEAR 8`, `#UPCLAMP 150`,
 `#DOWNCLAMP 50`, `#AHEAD 224`, `#GENAHEAD 192`, `#MAXTICK 15`, `#DEBUGMODE 0`. (These are tuned to taste and change often;
 the algorithm works across a wide range. The gaps and deadband are far lower
 than the pre-camera 50/50/4 because the profile-driven camera erases slope
@@ -914,10 +1014,15 @@ corners entirely, so frequent small elevation changes are now visually free.
   unknown gamerule would abort the function, so the wrong name is never emitted).
   If a speed change still doesn't take, set `#DEBUGMODE 1` — it prints the speed
   being set and the pace cart's real `Motion[0]×100` each chunk.
-- **The rider's hand is hidden by inventory clearing.** There is no way to
-  hide the first-person arm itself on either edition (Bedrock's `/hud` has no
-  `hand` element); both editions keep the rider's inventory empty every tick
-  instead, so nothing is ever held.
+- **The rider's held item is hidden by inventory clearing; the arm itself
+  differs by edition.** Both editions keep the rider's inventory empty every
+  tick, so nothing is ever held. On **Bedrock** the bare arm is then hidden
+  too (`#HIDEHAND`, default on): `/hud` has no `hand` element, so the pack
+  applies an invisibility effect to the rider — the one vanilla mechanism
+  that reaches the first-person arm — at the cost of the rider's body also
+  being invisible in third-person/F5. On **Java** there is no mechanism at
+  all (no `/hud`, and invisibility doesn't hide Java's first-person arm), so
+  the Java rider keeps their empty arm.
 
 ---
 
@@ -929,7 +1034,9 @@ corners entirely, so frequent small elevation changes are now visually free.
 #minecraft:tick ─ tick ─┬─ main ─┬─ build_loop ⇄ build_step ─ advance ─┬─ sample_window
                         │        │                                     ├─ decide ─ consider_start ─ start_event
                         │        │                                     │                 └─ (decide also calls) end_event
-                        │        │                                     ├─ place_flat / place_up / place_down ─┬─ carve (macro)
+                        │        │                                     ├─ (if #retro) retro_clear ─ retro_fill (macro)
+                        │        │                                     ├─ place_flat / place_up / place_down ─┬─ carve ─┬─ carve_center (macro)
+                        │        │                                     │                                      │         └─ carve_layer (recursive)
                         │        │                                     │                                      └─ support
                         │        ├─ #cartX read                        ├─ (track-history append)
                         │        ├─ ocean_check ─ speed_up / speed_down ─ set_speed (macro)
@@ -972,6 +1079,19 @@ shared files, so the slope-shaping behavior of the two editions cannot drift
 apart. `tools/simulate.mjs` enforces this in CI by interpreting both emitted
 copies over synthetic terrains and failing if their decisions ever differ.
 
+The carve-mode logic rides along in the same shared files: `decide` computes
+`#veg` (may this column spare vegetation? — §7i), `end_event` arms the
+`#vclear` after-slope buffer, and `start_event` raises `#retro` (the
+before-slope retro-clear request), so the two editions cannot disagree about
+*which* columns clear what. And a **second shared artifact** joins the
+functions: `src/shared/vegetation.js`, the single list of what counts as
+vegetation. The build emits Java's `#infinite_rail:keep` block tag from it
+and copies it into the Bedrock pack as `scripts/vegetation.js` — Java tests
+cells against the tag in commands, Bedrock calls `isVegetation()` in script,
+but the policy is written once (block tags don't exist in Bedrock commands,
+so a fully shared *function file* is impossible for this part; the table of
+categories carries both editions' spellings side by side instead).
+
 Two mechanical rewrites are applied to the Bedrock copies at build time (the
 entire dialect delta): `function infinite_rail:name` → `function
 infinite_rail/name` (Bedrock addresses functions by folder path), and `#NAME` →
@@ -996,7 +1116,7 @@ counterparts all live in `src/bedrock/scripts/main.js` (stable
 | The pace | hidden `ir_cart` on the physical rails + `ir_plug` + stall keeper + the minecart max-speed gamerule | a **virtual pace position** (`paceX`) advanced by scripted speed with smooth acceleration — no entity, no keepers, nothing visible behind the rider |
 | Ocean detection | `execute if biome ~ ~ ~ #minecraft:is_ocean` | `dimension.getBiome()` against an explicit ocean-id set (Bedrock has no biome tags) |
 | Chunk management | `forceload` macro corridor | an invisible **chunk scout** entity carrying vanilla's `minecraft:tick_world` component (radius 6 chunks = a 96-block ticking bubble, `never_despawn` — the ender dragon's own chunk loader), gliding ahead of the rig as a *mobile ticking area*. Its post is derived from `#AHEAD` so the bubble covers a full-gap head's **entire 48-block sample window** (~120 blocks ahead of the rig at defaults), capped so the bubble always overlaps the rider's own simulation bubble (no coverage hole the head couldn't cross). `/tickingarea` is unusable for this job: it neither generates new terrain nor pre-loads it (measured in-game — a 470-block corridor of areas contributed zero loaded chunks) |
-| Column placement | `place_flat/up/down` + `carve` macro + `support` | `fillBlocks` + `setBlockPermutation` (`golden_rail` `rail_direction` 1/2/3, the custom `infinite_rail:support` power block, `light_block_11`) |
+| Column placement | `place_flat/up/down` + the vegetation-sparing `carve`/`carve_layer` (per-cell `unless block … #infinite_rail:keep`) + `support` | `fillBlocks` + per-cell `isVegetation()` checks (from the shared `vegetation.js`) + `setBlockPermutation` (`golden_rail` `rail_direction` 1/2/3, the custom `infinite_rail:support` power block, `light_block_11`) |
 | Start/stop entry | `/function infinite_rail:start` | `/function infinite_rail/start` — a one-line function bridging into the script via `/scriptevent` |
 | World tuning | `setup_world` (camelCase) + overlay (snake_case) | `setup_world` (Bedrock's lowercase gamerule names) — a third small file, same rules |
 
@@ -1053,9 +1173,13 @@ tick for extra positional glide, rotation passed through from the player.
 `#CAMMODE 0` (default) keeps the native camera.
 
 Keepers (the Bedrock subset of §7f): strangers are ejected from the seat; a
-dismounted adventure-mode rider is re-seated; the rig is re-summoned if it
-ever goes missing; the rider's inventory is cleared every tick (this is
-also what keeps the hand empty — Bedrock's `/hud` has no `hand` element).
+dismounted rider (survival mode, or adventure from a pre-survival save) is
+re-seated; the rig is re-summoned if it ever goes missing; the rider's
+inventory is cleared every tick (so nothing is ever held); and while
+`#HIDEHAND` is on, an invisibility effect on the rider is re-asserted once a
+second — Bedrock's `/hud` has no `hand` element, and invisibility is the
+one vanilla mechanism that removes the first-person arm (the trade-off: the
+rider's body is hidden in third-person/F5 too).
 **The rider re-mount decision is positional, never API-queried**: a seated
 player is pinned to the seat while the rig glides east at cruising speed,
 so a genuine dismount shows up as distance from the seat that keeps growing
@@ -1184,6 +1308,19 @@ which is unbounded by design.
   rig is rebuilt, a missing scout is respawned at the rig (the one spot the
   rider guarantees is loaded) and walks itself back to its post, and the
   ride freezes entirely while its rider is offline.
+- **The rider is in survival mode, not adventure.** Bedrock does not
+  naturally spawn mobs around adventure-mode players (Java's spawning
+  ignores game mode), which left the whole ride lifeless — no animals, no
+  monsters. Survival restores normal spawning; the rider stays untouchable
+  through Resistance 255 + the damage gamerules, `mobGriefing false`
+  protects the track, the per-tick inventory clear leaves nothing to place
+  or swing, and neither rig piece can be entered. Old saves whose rider is
+  still in adventure resume fine (the keeper accepts both modes).
+- **The first-person arm is hidden via invisibility** (`#HIDEHAND`, default
+  on): `/hud` cannot touch the hand, so the keeper keeps an invisibility
+  effect on the rider — with the inventory always empty, nothing renders.
+  Costs the rider's own third-person/F5 body; set `#HIDEHAND 0` to opt out.
+  `stop` clears it with the other effects.
 - **Single scripted rider:** the ride belongs to the player who started it
   (or the first player, on auto-start); only that player is re-seated by the
   keeper. Leave the ride the sanctioned way — switch to creative or run

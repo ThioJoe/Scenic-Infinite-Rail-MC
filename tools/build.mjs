@@ -41,6 +41,7 @@ import {
 } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { javaKeepTagValues } from '../src/shared/vegetation.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC_SHARED = join(ROOT, 'src', 'shared', 'functions');
@@ -154,6 +155,13 @@ if (!CHECK_ONLY) {
   for (const [f, content] of shared) {
     writeFileSync(join(JAVA_OUT, 'data', 'infinite_rail', 'function', f), content);
   }
+  // The vegetation the carve spares (single source of truth for BOTH
+  // editions: src/shared/vegetation.js). Java gets it as the
+  // #infinite_rail:keep block tag, which carve_layer tests per cell.
+  const keepDir = join(JAVA_OUT, 'data', 'infinite_rail', 'tags', 'block');
+  mkdirSync(keepDir, { recursive: true });
+  writeFileSync(join(keepDir, 'keep.json'),
+    `${JSON.stringify({ values: javaKeepTagValues() }, null, 2)}\n`);
 
   // Bedrock: copy the edition tree, then inject the shared functions with the
   // two mechanical dialect rewrites (namespace colon -> folder slash; '#'
@@ -163,6 +171,11 @@ if (!CHECK_ONLY) {
   // Bedrock config sees ".HOVER", not the Java-only "#HOVER".
   cpSync(SRC_BEDROCK_BP, BEDROCK_OUT, { recursive: true });
   cpSync(SRC_BEDROCK_RP, BEDROCK_RP_OUT, { recursive: true });
+  // Bedrock gets the same vegetation source as a script module: main.js
+  // imports isVegetation() from './vegetation.js' at runtime (Bedrock
+  // commands have no block tags, so the classification runs in the script).
+  cpSync(join(ROOT, 'src', 'shared', 'vegetation.js'),
+    join(BEDROCK_OUT, 'scripts', 'vegetation.js'));
   mkdirSync(join(BEDROCK_OUT, 'functions', 'infinite_rail'), { recursive: true });
   const dotify = (s) => s.replaceAll(/(^|\s)#(?=[A-Za-z0-9_])/g, '$1.');
   for (const [f, content] of shared) {

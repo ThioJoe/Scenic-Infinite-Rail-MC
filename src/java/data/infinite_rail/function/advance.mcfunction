@@ -14,6 +14,15 @@ scoreboard players operation #target ir += #HOVER ir
 # --- 3. Decide this column's slope: -1, 0, or +1 (event model) ---
 function infinite_rail:decide
 
+# --- 3b. If a slope just started, retro-clear the center bore behind it ---
+# The shared start_event raises #retro when this column begins a climb or
+# descent; the columns just BEFORE it were carved vegetation-sparing, but the
+# camera lifts off the rail line early, so their full center bore is cleared
+# after the fact (vertical only -- the sides keep their plants). The head has
+# not moved yet, so it still marks the last built column.
+execute if score #retro ir matches 1 at @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:retro_clear
+scoreboard players set #retro ir 0
+
 # --- 4. Move the head to the new column and build it ---
 # Flat: same elevation, straight rail (bridges over gaps / tunnels through rises).
 execute if score #dir ir matches 0 as @e[type=marker,tag=ir_head,limit=1] at @s run tp @s ~1 ~ ~

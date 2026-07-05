@@ -159,6 +159,19 @@ Press **F1** (or Hide GUI) for the full ambient experience on either edition.
   the rail exactly like a block of redstone while looking like a plain
   stone pier. Java fakes the same look with a display entity over a real
   redstone block; Bedrock's disguise is genuinely one block.
+- **The "Hide Hand" option is applied automatically.** Bedrock's first-person
+  arm would hover in view the whole ride, and no command can toggle the
+  video setting — so the pack hides it the one vanilla way possible: an
+  invisibility effect on the rider (nothing is ever held, so nothing renders
+  at all). The trade-off is that your own body is hidden in third-person/F5
+  too (the cart still shows). Set `#HIDEHAND` to `0` to keep the arm.
+- **The rider is in survival mode, not adventure.** Bedrock doesn't
+  naturally spawn mobs around adventure-mode players, which made the ride
+  eerily lifeless; survival keeps the scenery populated with animals *and*
+  monsters. You're still untouchable (infinite Resistance 255, all damage
+  gamerules off, mob griefing off), your inventory is kept empty, and
+  nothing can enter the rig — the mobs are strictly décor. (Java keeps
+  adventure mode; its mob spawning doesn't care about game mode.)
 - **There is no hidden pace cart behind you** — Bedrock's port computes the
   pace virtually, so nothing is visible looking backward either.
 - The ocean speed-up drives the scripted cart speed directly (Bedrock has no
@@ -234,6 +247,18 @@ Press **F1** (or Hide GUI) for the full ambient experience on either edition.
   ("punch through instead of going over it"). An invisible vanilla light block
   is embedded above the rail in every column, so tunnels are gently lit and
   nothing can spawn on the track.
+- **Forests survive the ride** — the clearance bore spares natural
+  vegetation (tree trunks, leaves, giant mushrooms, bamboo, sugar cane,
+  flowers, vines…) everywhere outside the critical envelope: the rail cell
+  and the block above it are always cleared, but plants to the left and
+  right of the track and 2+ blocks overhead stay standing, so the line
+  brushes *through* a forest instead of mowing a square canyon through it.
+  Terrain (stone, dirt, sand…) still carves at full height, so tunnels look
+  the same as ever. Around climbs and descents the camera floats above the
+  rail line, so slope columns — plus `#SLOPECLEAR` columns just before and
+  after them — always get their full-height vertical clear (the sides still
+  keep their plants). Both editions share the same clearing rules *and* the
+  same plant list, from one source file.
 - **Speeds up over open ocean** — a long sea crossing is the one stretch with
   nothing to look at, so the ride quietly accelerates over open water. Once
   you've crossed `#OCEANCHUNKS` (6) chunks in a row of ocean biome (sampled at
@@ -249,9 +274,12 @@ Press **F1** (or Hide GUI) for the full ambient experience on either edition.
   area open ahead of the ride), and releases everything behind. World spawn
   and your respawn point roll forward with the ride, so nothing stays loaded
   behind you.
-- **Spectator constraints** — you're switched to Adventure mode with max
-  Resistance and Saturation, so you can look around freely but can't break the
-  track, get hurt, or starve, with true invulnerability from damage gamerules.
+- **Spectator constraints** — you ride with max Resistance and Saturation
+  plus every damage gamerule disabled, so you can look around freely but
+  can't get hurt or starve. Java switches you to Adventure mode (no block
+  breaking); Bedrock uses Survival instead — adventure suppresses Bedrock's
+  natural mob spawning and emptied the landscape — and relies on the
+  always-empty inventory and the ride's pace to keep the world untouched.
   Tile drops, mob griefing and fire tick are disabled so the scenery can't
   blow up the line.
 
@@ -297,6 +325,7 @@ file, which are therefore your permanent defaults.
 | `#CAMAHEAD`    | 64      | How far the viewer rides ahead of the (hidden/virtual) pace cart    |
 | `#CAMMODE`     | 0       | **Bedrock only**: 0 = native free-look rig, 1 = eased cinematic cam |
 | `#CARTYOFF`    | 0       | **Bedrock only**: fine-tune for the cart visual's height, tenths of a block (the pack's re-based cart model sits correctly at 0; keep within ~-3..3 -- big negative values sink the cart entity into the track and it suffocates) |
+| `#HIDEHAND`    | 1       | **Bedrock only**: 1 = hide the first-person arm automatically (via rider invisibility — your body is hidden in F5 too); 0 = keep the arm |
 | `#AUTOSTART`   | 1       | 1 = ride starts itself in a fresh world; 0 = manual start           |
 | `#MAXSPEED`    | 8       | Default ride speed in blocks/s (Java: minecart max-speed gamerule)  |
 | `#OCEANSPEED`  | 32      | Ride speed over open ocean (0 = disable the ocean speed-up)         |
@@ -305,6 +334,7 @@ file, which are therefore your permanent defaults.
 | `#DEADBAND`    | 3       | Min. height difference before a climb/descent is triggered          |
 | `#SAMEGAP`     | 25      | Min. flat blocks before sloping again in the **same** direction     |
 | `#TURNGAP`     | 40      | Min. flat blocks before **reversing** direction                     |
+| `#SLOPECLEAR`  | 8       | Columns just before/after each slope whose center bore is cleared at full height even through vegetation (sides always spare plants) |
 | `#AHEAD`       | 224     | How far ahead of the pace cart the **rails** are built (Java: keep < ~250; Bedrock: useful up to ~270, the single-scout ceiling) |
 | `#GENAHEAD`    | 192     | **Java only**: how far ahead of the rail head the world is force-generated (≥ ~64). Bedrock ignores it — the chunk scout derives its post from `#AHEAD` |
 | `#MAXTICK`     | 15      | Max track columns built per game tick                               |

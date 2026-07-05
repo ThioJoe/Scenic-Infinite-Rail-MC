@@ -9,6 +9,11 @@ src/
   shared/functions/     .mcfunction files used VERBATIM by both editions:
                         the event-model brain (decide, consider_start,
                         start_event, end_event) and config (every tunable)
+  shared/vegetation.js  the vegetation the carve spares -- ONE category list
+                        for both editions: the build emits Java's
+                        #infinite_rail:keep block tag from it and copies it
+                        into the Bedrock pack (scripts/vegetation.js) for
+                        runtime isVegetation() checks
   java/                 the Java data pack, minus the shared files
                         (pack.mcmeta, data/, overlay_snake/)
   bedrock/bp/           the Bedrock behavior pack, minus the shared files
@@ -63,7 +68,15 @@ The philosophy is **share the decisions, keep the data-work native**:
   into "this column is flat / climbing / descending" — is pure scoreboard
   math. It lives once, in `src/shared/functions/`, and runs as `.mcfunction`
   on both engines. Each engine boils its world down to two integers
-  (`#target`, `#railY`), calls `decide`, and reads back one integer (`#dir`).
+  (`#target`, `#railY`), calls `decide`, and reads back one integer (`#dir`)
+  plus the carve-mode flags (`#veg`, `#retro` — which columns may spare
+  vegetation, and when to retro-clear before a slope).
+- The *vegetation list* — what the carve spares — is also written once, in
+  `src/shared/vegetation.js`. It can't be a shared *function file* (Java
+  tests blocks with a block tag in commands; Bedrock commands have no block
+  tags, so its checks run in script), so the build derives both editions'
+  forms from the one source: Java's `#infinite_rail:keep` tag JSON, and a
+  copy of the module inside the Bedrock pack for `isVegetation()`.
 - Everything that touches the engine — terrain sampling, block placement,
   chunk loading, entities, the camera — is implemented natively per edition:
   Java keeps its `.mcfunction` machinery (`sample_window`, `cam_*`, macros,
@@ -94,14 +107,17 @@ this is the *entire* per-edition delta of the shared code:
 `tools/simulate.mjs` guards the whole arrangement: it interprets the
 **emitted** Java and Bedrock copies over six synthetic terrains and fails if
 their decisions ever diverge or the algorithm breaks an invariant (contiguous
-45° events, deadband, gap spacing, terrain convergence, camera floor/flats/
-parallel-climb guarantees).
+45° events, deadband, gap spacing, terrain convergence, the `#veg`/`#retro`
+carve-mode contract, camera floor/flats/parallel-climb guarantees).
 
 ## Adding or changing a function
 
 - **Changing the algorithm's rules** (when to slope, gaps, deadband):
   edit `src/shared/functions/` — both editions pick it up. Stay inside the
   dual-dialect subset; the lint will tell you if you don't.
+- **Changing which plants the carve spares**: edit `src/shared/vegetation.js`
+  (each category carries the Java tags/ids and the Bedrock id matchers side
+  by side) — the next build regenerates the Java tag and the Bedrock module.
 - **Changing how Java does something** (placement, camera, chunk plumbing):
   edit `src/java/data/infinite_rail/function/`.
 - **Changing how Bedrock does something**: edit `src/bedrock/bp/scripts/main.js`

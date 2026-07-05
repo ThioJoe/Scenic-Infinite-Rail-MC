@@ -46,6 +46,12 @@ execute store result score #headX ir run data get entity @e[type=marker,tag=ir_h
 scoreboard players set #slope ir 0
 scoreboard players set #flat ir 99
 scoreboard players set #lastDir ir 0
+# Fresh carve-mode state (see decide): no slope buffer, no pending retro-clear.
+# #veg 0 = the first column below (placed before any decide runs) gets a full
+# clear; every later column's decide computes its own #veg.
+scoreboard players set #vclear ir 0
+scoreboard players set #retro ir 0
+scoreboard players set #veg ir 0
 # Seed the rolling average (used as the fallback for bad heightmap samples).
 scoreboard players operation #avg ir = #railY ir
 scoreboard players operation #avg ir -= #HOVER ir

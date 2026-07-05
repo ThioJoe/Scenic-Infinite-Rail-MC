@@ -28,3 +28,18 @@ execute if score #slope0 ir = #nOne ir if score #diff ir matches 0.. run functio
 
 # --- If currently flat, decide whether to begin a new event ---
 execute if score #slope0 ir matches 0 run function infinite_rail:consider_start
+
+# --- Carve mode for this column (read by each edition's column placer) ---
+# #veg 1 = the carve may spare natural vegetation outside the critical
+# envelope; 0 = the full center bore is cleared unconditionally. Full clears
+# happen on every slope column -- #dir nonzero -- and for #SLOPECLEAR flat
+# columns AFTER an event ends, counted down by #vclear, which end_event
+# arms. The columns just BEFORE a slope are handled retroactively: when
+# start_event begins an event it raises #retro, and the edition's builder
+# re-clears the center bore of the last #SLOPECLEAR columns (then resets
+# #retro to 0). Left/right of the track always spare vegetation.
+scoreboard players set #veg ir 1
+execute if score #dir ir matches 1 run scoreboard players set #veg ir 0
+execute if score #dir ir = #nOne ir run scoreboard players set #veg ir 0
+execute if score #vclear ir matches 1.. run scoreboard players set #veg ir 0
+execute if score #dir ir matches 0 if score #vclear ir matches 1.. run scoreboard players remove #vclear ir 1

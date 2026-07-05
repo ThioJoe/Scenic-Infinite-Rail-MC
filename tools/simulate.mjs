@@ -148,7 +148,7 @@ function inRange(v, range) {
 // Every knob is read from the emitted config.mcfunction via the interpreter.
 // ---------------------------------------------------------------------------
 const CFG_KEYS = ['HOVER', 'DEADBAND', 'SAMEGAP', 'TURNGAP', 'UPCLAMP', 'DOWNCLAMP',
-  'CAMBLEND', 'CAMLIFT', 'CAMSMOOTH', 'CAMAHEAD'];
+  'CAMBLEND', 'CAMLIFT', 'CAMSMOOTH', 'CAMAHEAD', 'SLOPECLEAR'];
 
 function advance(sim, S, surface, cfg) {
   const lo = S.avg - cfg.DOWNCLAMP;
@@ -166,13 +166,19 @@ function advance(sim, S, surface, cfg) {
   sim.set('railY', S.railY);
   sim.call('decide');
   const dir = sim.get('dir');
+  // The carve-mode answers: veg (may this column spare vegetation?) and
+  // retro (a slope just started -- both engines consume the flag and reset
+  // it to 0 after retro-clearing, mirrored here).
+  const veg = sim.get('veg');
+  const retro = sim.get('retro');
+  sim.set('retro', 0);
 
   const railYBefore = S.railY;
   if (dir === -1) S.railY -= 1;
   else if (dir === 1) S.railY += 1;
   S.headX += 1;
   S.track.push(S.railY);
-  return { dir, target, railYBefore };
+  return { dir, target, railYBefore, veg, retro };
 }
 
 function runRide(fnDir, prefix, surface, columns) {
@@ -182,6 +188,8 @@ function runRide(fnDir, prefix, surface, columns) {
   sim.set('slope', 0);
   sim.set('flat', 99);
   sim.set('lastDir', 0);
+  sim.set('vclear', 0);
+  sim.set('retro', 0);
   const startRailY = surface(0) + cfg.HOVER;
   const S = { headX: 0, railY: startRailY, avg: surface(0), track: [startRailY] };
   const log = [];
@@ -212,9 +220,21 @@ function checkInvariants(name, ride, settles) {
   // counter ON the event-ending flat column, and each subsequent flat column
   // adds 1 -- so at an event-start column, `flats` equals the #flat the shared
   // brain compared against #SAMEGAP/#TURNGAP.
-  let flats = 99, lastDir = 0, inEvent = 0;
+  let flats = 99, lastDir = 0, inEvent = 0, vbuf = 0;
   log.forEach((step, i) => {
-    const { dir } = step;
+    const { dir, veg, retro } = step;
+    // Mirror the carve-mode contract: #retro fires exactly on event-start
+    // columns; #veg is 0 on every slope column and for #SLOPECLEAR flat
+    // columns after an event ends (counting the landing column), 1 elsewhere.
+    const starting = dir !== 0 && inEvent === 0;
+    if (retro !== (starting ? 1 : 0)) {
+      fail(`${name}: #retro was ${retro} at column ${i} (${starting ? 'event start' : 'no event start'})`);
+    }
+    if (dir === 0 && inEvent !== 0) vbuf = cfg.SLOPECLEAR; // end_event armed the buffer
+    const expectVeg = dir !== 0 || vbuf > 0 ? 0 : 1;
+    if (veg !== expectVeg) fail(`${name}: #veg was ${veg} at column ${i} (expected ${expectVeg})`);
+    if (dir === 0 && vbuf > 0) vbuf -= 1;
+
     if (dir !== 0) {
       if (inEvent !== 0 && dir !== inEvent) fail(`${name}: direction flip inside an event at column ${i}`);
       if (inEvent === 0) {
