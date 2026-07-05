@@ -8,9 +8,13 @@
 # pure rename lives here as a variable.
 #
 # Entries: the minecart max-speed gamerule (read by set_speed as storage
-# infinite_rail:speed rule), and the weather-cycle / daylight-cycle gamerules
+# infinite_rail:speed rule), the weather-cycle / daylight-cycle gamerules
 # (storage infinite_rail:names, copied into the set_rule macro by the rain and
-# night mode toggles). Add more entries here as needed.
+# night mode toggles), and the command chain/fork budget gamerules (raised by
+# load -- the synchronous ride start builds ~a hundred columns in one chain).
+# Add more entries here as needed.
 data modify storage infinite_rail:speed rule set value "minecartMaxSpeed"
 data modify storage infinite_rail:names weather_cycle set value "doWeatherCycle"
 data modify storage infinite_rail:names daylight_cycle set value "doDaylightCycle"
+data modify storage infinite_rail:names chain_length set value "maxCommandChainLength"
+data modify storage infinite_rail:names fork_count set value "maxCommandForkCount"
