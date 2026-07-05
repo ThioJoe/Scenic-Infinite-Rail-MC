@@ -257,11 +257,19 @@ scoreboard players set #SKYY ir 200
 scoreboard players set #SKYSPEED ir 32
 
 # Torch mode: the percent chance (0-100) that each newly built column plants
-# a torch somewhere 2-8 blocks left or right of the track. 10 = on average
-# about one torch per 10 blocks of line. Torches are only placed where one
-# can actually stand (never on water, ice or snow layers), and only on NEW
-# track built while the mode is on.
+# a torch somewhere beside the track (#TORCHRANGE below controls how far
+# out). 10 = on average about one torch per 10 blocks of line. Torches are
+# only placed where one can actually stand (never on water, ice or snow
+# layers), and only on NEW track built while the mode is on.
 scoreboard players set #TORCHODDS ir 10
+
+# Torch mode: how far (in blocks) a torch may land from the track's
+# centerline. Each torch rolls a random distance from 2 up to this, on a
+# random side. The floor of 2 keeps torches out of the carved bore. On Java,
+# values above 8 automatically widen the rolling forceload corridor so the
+# whole torch band stays loaded and generated (a few more chunks in memory
+# while torch mode is on); both editions cap the effective value at 48.
+scoreboard players set #TORCHRANGE ir 8
 
 
 # --- Debugging --------------------------------------------------------------

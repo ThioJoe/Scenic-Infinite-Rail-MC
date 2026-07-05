@@ -114,7 +114,8 @@ calls, or by the player running `/function infinite_rail:start` / `:stop`.
   - `~-1` = one below the rail (the support / redstone block)
   - `~3` = three above the rail (the light block)
   - `~4` / `~5` = top of the carved clearance
-  - `~-8 .. ~8` in Z (forceload) = ±1 chunk around the centerline
+  - `~-8 .. ~8` in Z (forceload) = ±1 chunk around the centerline (widened
+    up to `#TORCHRANGE` while torch mode is on — see `forceload_here`)
 
 A single **column** therefore looks like this vertically (flat case):
 
@@ -155,7 +156,8 @@ fake players. Grouped by role:
 | `#LANDCHUNKS`| Consecutive non-ocean chunks after a speed-up before reverting to `#MAXSPEED`. |
 | `#SKYY`      | Sky mode's fixed cruising altitude: while `#SKYMODE` is 1 the shared `decide` steers the rail to exactly this Y (§6.9). |
 | `#SKYSPEED`  | Sky mode's cruising speed (blocks/s), applied while the mode owns the speed system. |
-| `#TORCHODDS` | Torch mode: percent chance (0-100) per new column of planting a torch 2-8 blocks beside the line. |
+| `#TORCHODDS` | Torch mode: percent chance (0-100) per new column of planting a torch beside the line. |
+| `#TORCHRANGE`| Torch mode: the farthest a torch may land from the centerline — each torch rolls uniform 2..this (clamped 2-48). Above 8, `forceload_here` widens the Java corridor so the whole band stays loaded. |
 | `#DEBUGMODE` | `1` = print chat messages about the speed system (default applied, each ocean/land chunk with counters + the cart's real speed, every speed change); `0` = silent. |
 | `#CAMHEIGHT` | **Extra** rig height above the rail line, in **tenths of a block** (0 = the ride cart rests on the smoothed line like a cart on a rail). |
 | `#CAMBLEND`  | S-curve blend length in blocks (even): the camera transitions level⇄parallel over exactly this distance at every slope change. |
@@ -248,7 +250,9 @@ seeded to 0 by the shared `modes_init` with add-0, and deliberately NOT reset by
 | `#retro`    | `1` = a slope just started (raised by the shared `start_event`); the edition's builder retro-clears the center bore of the last `#SLOPECLEAR` columns and resets it to `0`. |
 | `#ch`,`#cy` | Carve state: this column's bore height (`#TUNNEL`/`#TUNNELUP`, set by the `place_*` caller) and `carve_layer`'s climbing layer index. |
 | `#rk`,`#rt` | `retro_clear` scratch: the clamped retro span and the columns-built count it is clamped against. |
-| `#tr`       | `place_torch` scratch: the torch-odds roll, then the side-offset roll (§6.9). |
+| `#tr`       | `place_torch` scratch: the odds roll, the distance roll, then the side roll (§6.9). |
+| `#td`       | `place_torch` scratch: the rolled torch distance (blocks off the centerline, 2..`#TORCHRANGE`). |
+| `#fw`       | `forceload_here` scratch: the corridor's Z half-width (8, or the clamped `#TORCHRANGE` while torch mode is on). |
 
 ### 4.2 Entities (all tagged, so selectors are unambiguous)
 
@@ -267,13 +271,14 @@ seeded to 0 by the shared `modes_init` with add-0, and deliberately NOT reset by
 | Storage              | Path      | Purpose |
 | -------------------- | --------- | ------- |
 | `infinite_rail:tmp`  | `y`(double) | Scratch in `begin` to copy `#railY` into the head marker's `Pos[1]`. |
-| `infinite_rail:args` | `gen`(int)  | The macro argument passed to `forceload` (the `#GENAHEAD` distance). |
+| `infinite_rail:args` | `gen`(int), `w`(int) | The macro arguments passed to `forceload` (the `#GENAHEAD` distance and the corridor's Z half-width), computed by `forceload_here`. |
 | `infinite_rail:cam`  | `dx`(int), `y`(double) | Macro arguments for `cam_tp`: the eastward offset from the pace cart (`#CAMAHEAD`) and the rig's absolute height (`(#sy + 62 + #CAMHEIGHT×100) × 0.001`). X/Z stay relative to the execution position (the pace cart), so they never pass through a scoreboard. |
 | `infinite_rail:track`| `y`(list of int) | The **track history**: one rail-Y per built column, appended by `advance` (and once by `begin`); index = world X − `#trackBase`. The camera's entire knowledge of the path. Grows ~4 bytes/column for the life of a ride; reset by `begin`. |
 | `infinite_rail:cami` | `i`(int) | Macro argument for `cam_get` (the history index to read). |
 | `infinite_rail:speed`| `rule`(string), `v`(int) | Macro args for `set_speed`: the version-correct gamerule name (`rule`, detected once at load) and the value to set (`v`). |
 | `infinite_rail:names`| `weather_cycle`, `daylight_cycle` (strings) | The version-correct names of the weather-/daylight-cycle gamerules, set at load by the version-selected `names.mcfunction`. The rain/night mode toggles copy one into `infinite_rail:rule` before calling `set_rule`. (The minecart-speed rule name predates this storage and stays in `infinite_rail:speed rule`.) |
 | `infinite_rail:rule` | `rule`(string), `v`(string) | Macro args for `set_rule`: an arbitrary gamerule name and its value ("true"/"false"). |
+| `infinite_rail:torch`| `dz`(int) | Macro arg for `torch_at`: the signed Z offset (distance + side in one number) a torch-mode torch lands at. |
 | `infinite_rail:carve`| `h`(int), `k`(int) | Macro arguments for the carve fills: the clearance-bore height above the rail (`carve_center`, `retro_fill`) and the retro-clear span behind the head (`retro_fill` only). |
 
 ---
@@ -390,7 +395,7 @@ modulo the two mechanical dialect rewrites of §11a. Sets every tunable score (`
 `#OCEANCHUNKS`, `#LANDCHUNKS`, `#DEADBAND`, `#SAMEGAP`, `#TURNGAP`,
 `#SLOPECLEAR`, `#UPCLAMP`,
 `#DOWNCLAMP`, `#AHEAD`, `#GENAHEAD`, `#MAXTICK`, plus the mode knobs `#SKYY`,
-`#SKYSPEED`, `#TORCHODDS`) with heavily-commented explanations. The mode
+`#SKYSPEED`, `#TORCHODDS`, `#TORCHRANGE`) with heavily-commented explanations. The mode
 *toggles* themselves (`#RAINMODE` & co.) deliberately do NOT live here — a
 reload re-runs this file and would shut every mode off (see `modes_init`,
 §6.9). Called by `load` (which then derives `#TUNNELUP`). Its header
@@ -417,7 +422,7 @@ Sets up and launches a ride (see the flow in §5). Notable steps:
   default (`sky_speed`, §6.9).
 - **Anchor:** summons the two markers at the player (`~0.5 … ~0.5` = block
   center); force-loads a small area behind + the `#GENAHEAD` corridor ahead
-  (via the `forceload` macro).
+  (via `forceload_here` → the `forceload` macro).
 - **Initial elevation:** teleports `ir_probe` onto the surface here
   (`positioned over motion_blocking_no_leaves`), reads its Y into `#railY`, adds
   `#HOVER`, and writes that Y into the head marker via storage `tmp.y`.
@@ -720,20 +725,33 @@ Lays the power+disguise under the rail (shared by all three place functions):
 
 **`function/roll_chunks.mcfunction`**
 Runs every 16 blocks of head travel (gated by `#nextLoad` in `advance`),
-positioned at the head. Stores `#GENAHEAD` into `infinite_rail:args gen` and
-calls the `forceload` macro (generate ahead, release behind). Then
-`setworldspawn` and `spawnpoint @a` at `~ ~1 ~` so world spawn and the player's
-respawn point **roll forward with the ride** (nothing anchors to the origin);
-`#nextLoad += 16`.
+positioned at the head. Runs `forceload_here` (which computes the corridor
+arguments and calls the `forceload` macro — generate ahead, release behind).
+Then `setworldspawn` and `spawnpoint @a` at `~ ~1 ~` so world spawn and the
+player's respawn point **roll forward with the ride** (nothing anchors to the
+origin); `#nextLoad += 16`.
+
+**`function/forceload_here.mcfunction`**
+Computes the `forceload` macro's two arguments into storage
+`infinite_rail:args` and calls it at the current position (the head for
+`roll_chunks`, the starting player for `begin`): `gen` = `#GENAHEAD`, and
+`w` = the corridor's Z half-width — 8 (±1 chunk) normally, raised to
+`#TORCHRANGE` (capped 48) while torch mode is on, so torches thrown past the
+standard band still land in loaded, generated chunks instead of silently
+failing to place.
 
 **`function/forceload.mcfunction`** *(a function macro)*
-`forceload` only accepts literal/relative coordinates, not scoreboard values, so
-the configurable distance arrives as the macro arg `$(gen)`:
-- `$forceload add ~ ~-8 ~$(gen) ~8` — force-generate the corridor from the head
-  out to `#GENAHEAD` blocks ahead (±1 chunk in Z).
-- `forceload remove ~-336 ~-8 ~-256 ~8` — release a band well behind the head;
-  as the head advances 16 at a time these bands tile to clear everything ≳256
-  blocks back. Runs at the caller's position (head), inherited via the call.
+`forceload` only accepts literal/relative coordinates, not scoreboard values,
+so both distances arrive as macro args:
+- `$forceload add ~ ~-$(w) ~$(gen) ~$(w)` — force-generate the corridor from
+  the head out to `#GENAHEAD` blocks ahead, `$(w)` blocks to each side.
+- `forceload remove ~-336 ~-64 ~-256 ~64` — release a band well behind the
+  head; as the head advances 16 at a time these bands tile to clear everything
+  ≳256 blocks back. The ±64 half-width is fixed and generous on purpose: it
+  covers every width the add line can have used (releasing a never-forced
+  chunk is a no-op), so lowering `#TORCHRANGE` mid-ride can't strand wide
+  chunks loaded behind the ride. Runs at the caller's position (head),
+  inherited via the call.
 
 ### 6.8 Smooth camera (the ride rig)
 
@@ -796,7 +814,7 @@ exclusive mode select** — any combination stacks — and they are **state, not
 config**: the toggles live in the `#RAINMODE`/`#NIGHTMODE`/`#TORCHMODE`/
 `#SKYMODE` scores (§4.1), seeded by the shared `modes_init` and untouched by
 `config`, so a `/reload`, a ride restart, `stop`, or a rejoin never turns a
-mode off. The knobs shaping them (`#SKYY`, `#SKYSPEED`, `#TORCHODDS`) are
+mode off. The knobs shaping them (`#SKYY`, `#SKYSPEED`, `#TORCHODDS`, `#TORCHRANGE`) are
 ordinary config tunables.
 
 **`modes_init.mcfunction`** *(shared source: `src/shared/functions/`)*
@@ -822,9 +840,17 @@ into `advance` (step 6b).
 **`function/place_torch.mcfunction`**
 Runs positioned at the head, once per built column while `#TORCHMODE` is 1.
 Roll one (`random value 1..100` vs `#TORCHODDS`): does this column get a torch
-at all? Roll two (`1..10`): which of ten preset side spots — Z offsets ±2, ±3,
-±5, ±6, ±8 from the centerline, always clear of the 3-wide carve. Preset lines
-because coordinates can't come from scoreboards without macro plumbing.
+at all? Roll two: how far out — `/random` can only roll literal ranges, so a
+fixed `0..99` roll is scaled in fixed point to a uniform 2..`#TORCHRANGE`
+distance (clamped 2–48; the floor of 2 stays clear of the 3-wide carve). Roll
+three (`0..1`): which side — the result is written to storage
+`infinite_rail:torch dz` with store scale **+1 or −1**, folding distance and
+side into one signed offset for the macro hop.
+
+**`function/torch_at.mcfunction`** *(a function macro)*
+`$execute positioned ~ ~ ~$(dz) run function infinite_rail:torch_try` —
+positions can't come from scoreboards, so the signed Z offset arrives as a
+macro arg. Runs at the head (inherited from `place_torch`'s caller).
 
 **`function/torch_try.mcfunction`**
 Plants one torch at the rolled X/Z if — and only if — it can actually stand:
@@ -1060,7 +1086,7 @@ Current defaults in `config.mcfunction`: `#HOVER 2`, `#TUNNEL 6`,
 `#OCEANSPEED 32`, `#OCEANCHUNKS 6`, `#LANDCHUNKS 4`, `#DEADBAND 2`,
 `#SAMEGAP 40`, `#TURNGAP 40`, `#SLOPECLEAR 8`, `#UPCLAMP 250`,
 `#DOWNCLAMP 20`, `#AHEAD 224`, `#GENAHEAD 192`, `#MAXTICK 15`, `#DEBUGMODE 0`,
-`#SKYY 200`, `#SKYSPEED 32`, `#TORCHODDS 10`. (These are tuned to taste and change often;
+`#SKYY 200`, `#SKYSPEED 32`, `#TORCHODDS 10`, `#TORCHRANGE 8`. (These are tuned to taste and change often;
 the algorithm works across a wide range. The gaps and deadband are far lower
 than the pre-camera 50/50/4 because the profile-driven camera erases slope
 corners entirely, so frequent small elevation changes are now visually free.
@@ -1154,16 +1180,16 @@ corners entirely, so frequent small elevation changes are now visually free.
                         │        │                                     │                                      │         └─ carve_layer (recursive)
                         │        │                                     │                                      └─ support
                         │        ├─ #cartX read                        ├─ (track-history append)
-                        │        │                                     ├─ (if #TORCHMODE) place_torch ─ torch_try
+                        │        │                                     ├─ (if #TORCHMODE) place_torch ─ torch_at (macro) ─ torch_try
                         │        ├─ ocean_check ─ speed_up / speed_down ─ set_speed (macro)
-                        │        ├─ (keepers, inline)                  └─ roll_chunks ─ forceload (macro)
+                        │        ├─ (keepers, inline)                  └─ roll_chunks ─ forceload_here ─ forceload (macro)
                         │        └─ cam_follow ─┬─ cam_blend ⇄ cam_scan ⇄ cam_sample ─ cam_get (macro)
                         │                       └─ cam_move ─ cam_tp (macro)
                         └─ (auto-start, once per world) start
 
 /function infinite_rail:start ─ start ─ begin ─┬─ setup_world (version-selected by overlay)
                                                ├─ set_speed (macro, apply #MAXSPEED)
-                                               ├─ forceload (macro)
+                                               ├─ forceload_here ─ forceload (macro)
                                                ├─ (track-history reset)
                                                ├─ place_flat (first column) ─ summon ir_cart + ir_plug
                                                ├─ build_loop … (pre-build past the rig position)
@@ -1243,7 +1269,7 @@ counterparts all live in `src/bedrock/scripts/main.js` (stable
 | Start/stop entry | `/function infinite_rail:start` | `/function infinite_rail/start` — a one-line function bridging into the script via `/scriptevent` |
 | Ride modes: rain / night (§6.9) | `set_rule` macro + version-picked names from `names.mcfunction` | plain lowercase gamerule literals in the `mode_*` function files (Bedrock's names are stable) — no script involvement |
 | Ride modes: sky speed & ocean pause | `sky_speed` at toggle/begin + an early `return` in `ocean_check` | `tickPace()` asserts `.SKYSPEED` every tick while `.SKYMODE` is on (and resets the ocean state on the toggle-off transition); `oceanCheck()` returns early — both read the score through the same bridge as the brain flags, so cmd-bridge worlds keep working |
-| Ride modes: torch scatter | `place_torch`/`torch_try` (`/random` rolls + `positioned over` heightmap + `setblock … keep`) | `maybeTorch()` (Math.random + the surface probe + per-cell air/solid checks), called from `advance()` |
+| Ride modes: torch scatter | `place_torch`/`torch_at`/`torch_try` (`/random` rolls + a macro'd Z offset + `positioned over` heightmap + `setblock … keep`), with `forceload_here` widening the corridor to `#TORCHRANGE` | `maybeTorch()` (Math.random + the surface probe + per-cell air/solid checks), called from `advance()` — the scout bubble already covers ±96 blocks, so no corridor change |
 | World tuning | `setup_world` (camelCase) + overlay (snake_case) | `setup_world` (Bedrock's lowercase gamerule names) — a third small file, same rules |
 
 ### 11b. The Bedrock rig and camera

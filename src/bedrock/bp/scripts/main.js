@@ -160,7 +160,7 @@ const CONFIG_DEFAULTS = {
   MAXSPEED: 8, OCEANSPEED: 32, OCEANCHUNKS: 6, LANDCHUNKS: 4, DEADBAND: 2,
   SAMEGAP: 40, TURNGAP: 40, SLOPECLEAR: 8, UPCLAMP: 250, DOWNCLAMP: 20,
   AHEAD: 224, GENAHEAD: 192, MAXTICK: 15, DEBUGMODE: 0,
-  SKYY: 200, SKYSPEED: 32, TORCHODDS: 10,
+  SKYY: 200, SKYSPEED: 32, TORCHODDS: 10, TORCHRANGE: 8,
 };
 
 // The vanilla ocean biomes (Bedrock has no biome tags, so #minecraft:is_ocean
@@ -590,16 +590,21 @@ function placeColumn(x, y, dir, veg) {
 
 // Torch mode (.TORCHMODE -- mode_torches_on): sprinkle torches on the
 // terrain around the line as it is built. The native twin of Java's
-// place_torch/torch_try: same odds knob (.TORCHODDS percent of columns),
-// same 2-8 block side offsets, same "skip every doubtful spot" rule -- a
-// missing torch is invisible, a floating or popped one is not. Only onto
-// ground the surface probe answers for, only into an air cell, and never
-// onto water/lava (the probe counts liquid surfaces as terrain), ice
-// (torches can't attach), leaves, snow layers or other non-solid tops.
+// place_torch/torch_at/torch_try: same odds knob (.TORCHODDS percent of
+// columns), same 2..TORCHRANGE side offsets, same "skip every doubtful
+// spot" rule -- a missing torch is invisible, a floating or popped one is
+// not. Only onto ground the surface probe answers for, only into an air
+// cell, and never onto water/lava (the probe counts liquid surfaces as
+// terrain), ice (torches can't attach), leaves, snow layers or other
+// non-solid tops. The 48 cap matches Java's (its widened forceload
+// corridor's ceiling); here the scout bubble covers +-96 blocks anyway.
 function maybeTorch(x) {
   if (Math.random() * 100 >= cfg('TORCHODDS')) return;
   const side = Math.random() < 0.5 ? -1 : 1;
-  const z = S.centerZ + side * (2 + Math.floor(Math.random() * 7)); // 2..8 off-center
+  let range = cfg('TORCHRANGE');
+  if (range < 2) range = 2;   // 2 keeps torches out of the carved bore
+  if (range > 48) range = 48;
+  const z = S.centerZ + side * (2 + Math.floor(Math.random() * (range - 1))); // 2..range off-center
   try {
     const surf = surfaceY(x, z); // Y one above the surface, like the Java heightmap
     if (surf === undefined || surf <= -63) return;

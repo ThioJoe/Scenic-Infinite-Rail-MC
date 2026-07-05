@@ -312,7 +312,7 @@ Java commands shown; Bedrock is identical with `/` instead of `:` (e.g.
 | ---- | ------ | ------------ |
 | Rain | `/function infinite_rail:mode_rain_on` / `..._off` | Permanent rain: freezes the weather cycle and starts rain, so it can never time out. Off clears the sky and resumes the vanilla cycle. |
 | Night | `/function infinite_rail:mode_night_on` / `..._off` | Endless night: freezes the daylight cycle at midnight, moon at its peak. Off sets morning and resumes the cycle. |
-| Torches | `/function infinite_rail:mode_torches_on` / `..._off` | Scatters torches along **new** track as it is built — random spots 2–8 blocks left/right of the line, about one per `#TORCHODDS`% of columns (default 10). |
+| Torches | `/function infinite_rail:mode_torches_on` / `..._off` | Scatters torches along **new** track as it is built — random spots 2–`#TORCHRANGE` blocks left/right of the line (default 8), about one per `#TORCHODDS`% of columns (default 10). |
 | Sky | `/function infinite_rail:mode_sky_on` / `..._off` | High-altitude cruise: one long 45° climb to `#SKYY` (default 200 — just above the clouds), then dead-level flight at `#SKYSPEED` (default 32). Off glides the line back down onto the terrain. |
 | — | `/function infinite_rail:modes` | Prints which modes are currently on. |
 
@@ -321,7 +321,12 @@ Details worth knowing:
 - **Torches** are only planted where a torch can actually stand — never on
   water, lava, ice, snow layers or lily pads — and in forests they land on
   the ground *under* the canopy, not on the treetops. Track already behind
-  you is unaffected; toggling off leaves existing torches standing.
+  you is unaffected; toggling off leaves existing torches standing. How far
+  they scatter is `#TORCHRANGE` (default 8): each torch rolls a random
+  distance from 2 up to that many blocks off the centerline. Values above 8
+  make Java widen its rolling forceload corridor so the wider band stays
+  loaded and generated (a few more chunks in memory while the mode is on);
+  the effective ceiling is 48 on both editions.
 - **Sky mode** owns the whole speed system while it's on: `#SKYSPEED`
   applies, and the ocean speed-up is paused (toggling off restores
   `#MAXSPEED` and resets the ocean counters). Mountains taller than `#SKYY`
@@ -390,6 +395,7 @@ file, which are therefore your permanent defaults.
 | `#SKYY`        | 200     | Sky mode: the fixed cruising altitude (see [Ride modes](#ride-modes)) |
 | `#SKYSPEED`    | 32      | Sky mode: cruising speed in blocks/s while the mode is on           |
 | `#TORCHODDS`   | 10      | Torch mode: % chance per new column of planting a torch beside it   |
+| `#TORCHRANGE`  | 8       | Torch mode: farthest a torch lands from the centerline (2–48 blocks) |
 | `#DEADBAND`    | 2       | Min. height difference before a climb/descent is triggered          |
 | `#SAMEGAP`     | 40      | Min. flat blocks before sloping again in the **same** direction     |
 | `#TURNGAP`     | 40      | Min. flat blocks before **reversing** direction                     |
