@@ -145,10 +145,12 @@ Press **F1** (or Hide GUI) for the full ambient experience on either edition.
   terrain under it exists, and never outruns the built track.
 - **A ride survives quitting and rejoining the world** mid-journey — the
   script saves its state continuously and resumes where it left off.
-- **The support block under the rail is visibly a block of redstone** when
-  seen from the side (bridges). Java disguises it with a display entity;
-  Bedrock has no display entities, so the port doesn't hide it. You won't see
-  it while riding.
+- **The support under each rail is a custom "Track Support" block** — it
+  renders with the vanilla smooth-stone texture but produces full redstone
+  power (the `minecraft:redstone_producer` block component), so it powers
+  the rail exactly like a block of redstone while looking like a plain
+  stone pier. Java fakes the same look with a display entity over a real
+  redstone block; Bedrock's disguise is genuinely one block.
 - **There is no hidden pace cart behind you** — Bedrock's port computes the
   pace virtually, so nothing is visible looking backward either.
 - The ocean speed-up drives the scripted cart speed directly (Bedrock has no
@@ -158,14 +160,16 @@ Press **F1** (or Hide GUI) for the full ambient experience on either edition.
 ## What it does
 
 - **Perpetual motion** — the track is built exclusively from always-powered
-  rails. Each rail sits directly on a **block of redstone**, which powers it,
-  is immune to water, and emits no light — so the power source can never be
+  rails. Each rail sits directly on its own full-strength power block, which
+  is immune to water and emits no light — so the power source can never be
   washed away by oceans/rivers or melt the surrounding ice, even skimming low
-  over water. On Java the redstone block is disguised as smooth stone by a
-  **block display**, so from the side (e.g. on a bridge) it reads as a plain
-  stone support. Per-tick keepers guarantee the ride never ends: if the cart
-  ever stalls it is re-boosted, and if the rider ever dismounts they are put
-  straight back on the ride.
+  over water. On Java that's a **block of redstone** disguised as smooth
+  stone by a **block display**; on Bedrock it's a **custom block** that
+  looks like smooth stone and produces the power itself. Either way, from
+  the side (e.g. on a bridge) it reads as a plain stone support. Per-tick
+  keepers guarantee the ride never ends: if the cart ever stalls it is
+  re-boosted, and if the rider ever dismounts they are put straight back on
+  the ride.
 - **Butter-smooth camera (the ride rig)** — you sit in a real minecart, but
   it isn't riding the rails: your cart glides *off* the rails along a
   **smoothed path computed from the track's own recorded profile**. Because

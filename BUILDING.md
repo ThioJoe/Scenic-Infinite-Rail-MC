@@ -12,10 +12,13 @@ src/
   java/                 the Java data pack, minus the shared files
                         (pack.mcmeta, data/, overlay_snake/)
   bedrock/bp/           the Bedrock behavior pack, minus the shared files
-                        (manifest.json, functions/, scripts/, entities/)
-  bedrock/rp/           the Bedrock resource pack (the invisible client
+                        (manifest.json, functions/, scripts/, entities/,
+                        blocks/)
+  bedrock/rp/           the Bedrock resource pack: the invisible client
                         definitions of the camera-seat and chunk-scout
-                        entities; nothing else)
+                        entities, plus the texture/sound/name wiring for the
+                        custom track-support block (which reuses a vanilla
+                        texture -- no image files are shipped)
 tools/
   build.mjs             assembles + validates + zips both packs (zero deps)
   simulate.mjs          interprets the emitted shared functions and asserts

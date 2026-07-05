@@ -995,7 +995,7 @@ counterparts all live in `src/bedrock/scripts/main.js` (stable
 | The pace | hidden `ir_cart` on the physical rails + `ir_plug` + stall keeper + the minecart max-speed gamerule | a **virtual pace position** (`paceX`) advanced by scripted speed with smooth acceleration — no entity, no keepers, nothing visible behind the rider |
 | Ocean detection | `execute if biome ~ ~ ~ #minecraft:is_ocean` | `dimension.getBiome()` against an explicit ocean-id set (Bedrock has no biome tags) |
 | Chunk management | `forceload` macro corridor | an invisible **chunk scout** entity carrying vanilla's `minecraft:tick_world` component (radius 6 chunks = a 96-block ticking bubble, `never_despawn` — the ender dragon's own chunk loader), gliding ahead of the rig as a *mobile ticking area*. Its post is derived from `#AHEAD` so the bubble covers a full-gap head's **entire 48-block sample window** (~120 blocks ahead of the rig at defaults), capped so the bubble always overlaps the rider's own simulation bubble (no coverage hole the head couldn't cross). `/tickingarea` is unusable for this job: it neither generates new terrain nor pre-loads it (measured in-game — a 470-block corridor of areas contributed zero loaded chunks) |
-| Column placement | `place_flat/up/down` + `carve` macro + `support` | `fillBlocks` + `setBlockPermutation` (`golden_rail` `rail_direction` 1/2/3, `redstone_block`, `light_block_11`) |
+| Column placement | `place_flat/up/down` + `carve` macro + `support` | `fillBlocks` + `setBlockPermutation` (`golden_rail` `rail_direction` 1/2/3, the custom `infinite_rail:support` power block, `light_block_11`) |
 | Start/stop entry | `/function infinite_rail:start` | `/function infinite_rail/start` — a one-line function bridging into the script via `/scriptevent` |
 | World tuning | `setup_world` (camelCase) + overlay (snake_case) | `setup_world` (Bedrock's lowercase gamerule names) — a third small file, same rules |
 
@@ -1066,13 +1066,22 @@ which is unbounded by design.
 
 ### 11e. Bedrock-specific behavior differences & gotchas
 
-- **The redstone support block is undisguised.** Bedrock has no
-  `block_display` entities, so the block of redstone under each rail shows its
-  red sides when a bridge is viewed from outside the ride. Function and water
-  immunity are identical; it's purely cosmetic, and invisible from the cart.
+- **The support is a custom block, not a disguised redstone block.** Bedrock
+  has no `block_display` entities, so instead of Java's disguise-over-power
+  two-parter the port defines `infinite_rail:support` (BP
+  `blocks/support.json`): a full cube rendered with the **vanilla
+  smooth-stone texture** (the RP's `terrain_texture.json` maps a shortname
+  onto vanilla's `textures/blocks/stone_slab_top` — no texture is shipped)
+  that carries **`minecraft:redstone_producer`** at power 15
+  (`strongly_powered_face: up`), so it powers the rail exactly like a block
+  of redstone. Water immunity and zero light emission are the same as the
+  redstone block it replaces; the script falls back to a bare
+  `minecraft:redstone_block` if the custom block fails to resolve (outdated
+  BP). Track built by older pack versions keeps its redstone blocks.
 - **Requires Bedrock 1.21.120+** (`@minecraft/server` module `2.3.0`,
-  `min_engine_version [1,21,120]` — `dimension.getBiome` is the newest API
-  used). Both pins can be raised freely for newer-only targets.
+  `min_engine_version [1,21,120]` — `dimension.getBiome` and the
+  `minecraft:redstone_producer` block component, both 1.21.120-era, are the
+  gates). Both pins can be raised freely for newer-only targets.
 - **Rails are decorative for physics.** No entity rides the physical rails on
   Bedrock (the pace is virtual, the ride cart is velocity-driven), but the
   track is still built from genuinely powered golden rails on redstone blocks,

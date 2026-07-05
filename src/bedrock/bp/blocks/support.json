@@ -1,0 +1,31 @@
+{
+  "format_version": "1.21.120",
+  "minecraft:block": {
+    "description": {
+      "identifier": "infinite_rail:support",
+      "menu_category": {
+        "category": "none"
+      }
+    },
+    "components": {
+      "minecraft:geometry": "minecraft:geometry.full_block",
+      "minecraft:material_instances": {
+        "*": {
+          "texture": "ir_smooth_stone",
+          "render_method": "opaque"
+        }
+      },
+      "minecraft:redstone_producer": {
+        "power": 15,
+        "strongly_powered_face": "up"
+      },
+      "minecraft:map_color": "#A8A8A8",
+      "minecraft:destructible_by_mining": {
+        "seconds_to_destroy": 2.0
+      },
+      "minecraft:destructible_by_explosion": {
+        "explosion_resistance": 6.0
+      }
+    }
+  }
+}
