@@ -5,3 +5,6 @@
 # where 25w44a renamed the gamerules to snake_case. Keep it in sync with the
 # base copy: same variables, snake_case names.
 data modify storage infinite_rail:speed rule set value "max_minecart_speed"
+# 25w44a renamed doWeatherCycle -> advance_weather, doDaylightCycle -> advance_time.
+data modify storage infinite_rail:names weather_cycle set value "advance_weather"
+data modify storage infinite_rail:names daylight_cycle set value "advance_time"

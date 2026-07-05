@@ -66,9 +66,9 @@ infinite_rail/
 ```
 
 **In the repository**, these files are split across `src/java/` and
-`src/shared/functions/`: five functions (`config`, `decide`, `consider_start`,
-`start_event`, `end_event`) are *shared source* used verbatim by both the Java
-pack and the Bedrock port, and the build drops them into
+`src/shared/functions/`: six functions (`config`, `modes_init`, `decide`,
+`consider_start`, `start_event`, `end_event`) are *shared source* used verbatim
+by both the Java pack and the Bedrock port, and the build drops them into
 `data/infinite_rail/function/` alongside the Java-only files (see `BUILDING.md`
 and §11). Nothing about the shipped pack differs from the layout above.
 
@@ -153,6 +153,9 @@ fake players. Grouped by role:
 | `#OCEANSPEED`| Minecart max-speed used while crossing open ocean. `0` disables the ocean speed-up entirely. |
 | `#OCEANCHUNKS`| Consecutive ocean-biome chunks the ride must cross before speeding up to `#OCEANSPEED`. |
 | `#LANDCHUNKS`| Consecutive non-ocean chunks after a speed-up before reverting to `#MAXSPEED`. |
+| `#SKYY`      | Sky mode's fixed cruising altitude: while `#SKYMODE` is 1 the shared `decide` steers the rail to exactly this Y (§6.9). |
+| `#SKYSPEED`  | Sky mode's cruising speed (blocks/s), applied while the mode owns the speed system. |
+| `#TORCHODDS` | Torch mode: percent chance (0-100) per new column of planting a torch 2-8 blocks beside the line. |
 | `#DEBUGMODE` | `1` = print chat messages about the speed system (default applied, each ocean/land chunk with counters + the cart's real speed, every speed change); `0` = silent. |
 | `#CAMHEIGHT` | **Extra** rig height above the rail line, in **tenths of a block** (0 = the ride cart rests on the smoothed line like a cart on a rail). |
 | `#CAMBLEND`  | S-curve blend length in blocks (even): the camera transitions level⇄parallel over exactly this distance at every slope change. |
@@ -172,6 +175,17 @@ fake players. Grouped by role:
 | `#AHEAD`     | How far (blocks) ahead of the **cart** the rails are kept built. |
 | `#GENAHEAD`  | How far (blocks) ahead of the **rail head** terrain is force-generated. |
 | `#MAXTICK`   | Max columns built per game tick (catch-up budget). |
+
+**Mode toggles** (state, not config: flipped by the `mode_*` functions — §6.9 —
+seeded to 0 by the shared `modes_init` with add-0, and deliberately NOT reset by
+`config`/`/reload`; like every `ir` score they persist in the world save):
+
+| Score        | Meaning |
+| ------------ | ------- |
+| `#RAINMODE`  | 1 = permanent rain is on. Informational once set — the weather-cycle gamerule and `/weather` do the actual work. |
+| `#NIGHTMODE` | 1 = endless midnight is on. Informational once set — the daylight-cycle gamerule and `/time` do the actual work. |
+| `#TORCHMODE` | 1 = torch scatter: each edition's builder plants torches beside new columns (Java `place_torch`/`torch_try`, Bedrock `maybeTorch()`). |
+| `#SKYMODE`   | 1 = sky cruise: the shared `decide` overrides `#target` with `#SKYY`, and the editions pin the speed to `#SKYSPEED` while pausing the ocean system. |
 
 **Internal constants** (set by `load.mcfunction`, kept out of user config):
 
@@ -234,6 +248,7 @@ fake players. Grouped by role:
 | `#retro`    | `1` = a slope just started (raised by the shared `start_event`); the edition's builder retro-clears the center bore of the last `#SLOPECLEAR` columns and resets it to `0`. |
 | `#ch`,`#cy` | Carve state: this column's bore height (`#TUNNEL`/`#TUNNELUP`, set by the `place_*` caller) and `carve_layer`'s climbing layer index. |
 | `#rk`,`#rt` | `retro_clear` scratch: the clamped retro span and the columns-built count it is clamped against. |
+| `#tr`       | `place_torch` scratch: the torch-odds roll, then the side-offset roll (§6.9). |
 
 ### 4.2 Entities (all tagged, so selectors are unambiguous)
 
@@ -257,6 +272,8 @@ fake players. Grouped by role:
 | `infinite_rail:track`| `y`(list of int) | The **track history**: one rail-Y per built column, appended by `advance` (and once by `begin`); index = world X − `#trackBase`. The camera's entire knowledge of the path. Grows ~4 bytes/column for the life of a ride; reset by `begin`. |
 | `infinite_rail:cami` | `i`(int) | Macro argument for `cam_get` (the history index to read). |
 | `infinite_rail:speed`| `rule`(string), `v`(int) | Macro args for `set_speed`: the version-correct gamerule name (`rule`, detected once at load) and the value to set (`v`). |
+| `infinite_rail:names`| `weather_cycle`, `daylight_cycle` (strings) | The version-correct names of the weather-/daylight-cycle gamerules, set at load by the version-selected `names.mcfunction`. The rain/night mode toggles copy one into `infinite_rail:rule` before calling `set_rule`. (The minecart-speed rule name predates this storage and stays in `infinite_rail:speed rule`.) |
+| `infinite_rail:rule` | `rule`(string), `v`(string) | Macro args for `set_rule`: an arbitrary gamerule name and its value ("true"/"false"). |
 | `infinite_rail:carve`| `h`(int), `k`(int) | Macro arguments for the carve fills: the clearance-bore height above the rail (`carve_center`, `retro_fill`) and the retro-clear span behind the head (`retro_fill` only). |
 
 ---
@@ -357,9 +374,12 @@ Vanilla tag `#minecraft:tick`; lists `infinite_rail:tick`. Makes the game run
 Runs on load/reload. `scoreboard objectives add ir dummy` (idempotent) creates
 the objective; sets the internal constants `#C12 = 12`, `#C16 = 16`,
 `#C100 = 100`, `#C1000 = 1000`; calls `infinite_rail:config` to apply all
-tunables; derives `#TUNNELUP = #TUNNEL + 1`; calls `names` to load the
-version-correct command/gamerule names (e.g. the minecart-speed gamerule name
-into storage `infinite_rail:speed rule`); prints a "Loaded" message. Does **not**
+tunables; seeds the mode toggles via the shared `modes_init` (add-0, so an
+enabled mode survives the reload — §6.9); derives `#TUNNELUP = #TUNNEL + 1`;
+calls `names` to load the version-correct command/gamerule names (the
+minecart-speed gamerule name into storage `infinite_rail:speed rule`, the
+weather-/daylight-cycle names into `infinite_rail:names`); prints a "Loaded"
+message. Does **not**
 touch ride state (including `#autodone`), so a `/reload` mid-ride refreshes the
 knobs without stopping it, and a stopped world stays stopped.
 
@@ -369,8 +389,11 @@ modulo the two mechanical dialect rewrites of §11a. Sets every tunable score (`
 `#CAMHEIGHT`, `#CAMSMOOTH`, `#HIDEHAND`, `#AUTOSTART`, `#MAXSPEED`, `#OCEANSPEED`,
 `#OCEANCHUNKS`, `#LANDCHUNKS`, `#DEADBAND`, `#SAMEGAP`, `#TURNGAP`,
 `#SLOPECLEAR`, `#UPCLAMP`,
-`#DOWNCLAMP`, `#AHEAD`, `#GENAHEAD`, `#MAXTICK`) with heavily-commented
-explanations. Called by `load` (which then derives `#TUNNELUP`). Its header
+`#DOWNCLAMP`, `#AHEAD`, `#GENAHEAD`, `#MAXTICK`, plus the mode knobs `#SKYY`,
+`#SKYSPEED`, `#TORCHODDS`) with heavily-commented explanations. The mode
+*toggles* themselves (`#RAINMODE` & co.) deliberately do NOT live here — a
+reload re-runs this file and would shut every mode off (see `modes_init`,
+§6.9). Called by `load` (which then derives `#TUNNELUP`). Its header
 documents how to apply edits (`/reload`) and that running `config` by itself
 only re-runs the in-memory copy (so it's only good for resetting live
 `/scoreboard` tweaks).
@@ -390,7 +413,8 @@ Sets up and launches a ride (see the flow in §5). Notable steps:
   the player — so `start` is safely re-runnable.
 - **World tuning:** calls `setup_world`; applies the default minecart max-speed
   (`#MAXSPEED` via the `set_speed` macro) and clears the ocean fast state
-  (`#fast = 0`).
+  (`#fast = 0`); if sky mode was left on, re-applies `#SKYSPEED` over the
+  default (`sky_speed`, §6.9).
 - **Anchor:** summons the two markers at the player (`~0.5 … ~0.5` = block
   center); force-loads a small area behind + the `#GENAHEAD` corridor ahead
   (via the `forceload` macro).
@@ -452,13 +476,25 @@ Improvements** feature in `pack.mcmeta`. Called by `begin` (with `#MAXSPEED`),
 `speed_up` (`#OCEANSPEED`, every ocean chunk) and `speed_down` (`#MAXSPEED`).
 
 **`function/names.mcfunction`** (+ `overlay_snake/…/names.mcfunction`)
-Sets the version-specific command/gamerule **names** into storage — currently
-just the minecart max-speed gamerule name into `infinite_rail:speed rule`
-(`minecartMaxSpeed` in the base copy, `max_minecart_speed` in the overlay). This
-is the tidy home for anything that is a *pure rename* between versions: the base
-file holds the camelCase names, the `overlay_snake` overlay replaces it with the
+Sets the version-specific command/gamerule **names** into storage: the minecart
+max-speed gamerule name into `infinite_rail:speed rule` (`minecartMaxSpeed` in
+the base copy, `max_minecart_speed` in the overlay), and the weather-/daylight-
+cycle gamerule names into `infinite_rail:names` (`doWeatherCycle`/
+`doDaylightCycle` base, `advance_weather`/`advance_time` overlay — used by the
+rain/night mode toggles through the `set_rule` macro, §6.9). This is the tidy
+home for anything that is a *pure rename* between versions: the base file holds
+the camelCase names, the `overlay_snake` overlay replaces it with the
 snake_case names on format 92+, and the shared logic reads the variable. `load`
 calls it once. Add more entries here as new version-renamed names come up.
+
+**`function/set_rule.mcfunction`** *(a function macro)*
+`$gamerule $(rule) $(v)` — the generic sibling of `set_speed`, reading both
+macro args from storage `infinite_rail:rule`. Exists for the same reason (a
+macro line expanding to an unknown gamerule aborts its function, so the
+version-correct name must come from `names.mcfunction`, never a literal).
+Callers copy `rule` from `infinite_rail:names` and set `v` to `"true"`/
+`"false"` just before the call. Used by `mode_rain_on/off` and
+`mode_night_on/off` (§6.9).
 
 **`function/stop.mcfunction`**
 Ends the ride: `#started=0`, clears effects from and dismounts adventure
@@ -492,7 +528,9 @@ Per-tick driver while riding:
 7. Set `#budget = #MAXTICK` and run `build_loop` to extend the track.
 
 **`function/ocean_check.mcfunction`**
-The ocean speed-up driver, called each tick from `main` (§7h). Reads the rider's
+The ocean speed-up driver, called each tick from `main` (§7h). Returns
+immediately while `#SKYMODE` is 1 — sky mode owns the speed, and `mode_sky_off`
+resets the counters and restores `#MAXSPEED` on the way out. Reads the rider's
 X from the seat (`#rigX = ir_seat` Pos[0]) and computes its chunk
 `#chunkNow = #rigX / #C16`; if it equals `#lastChunk` it `return`s immediately
 (act only when the rider crosses a chunk boundary). Otherwise it records the new
@@ -544,6 +582,8 @@ Builds **one** column (see §7 for the algorithms it drives):
 5. `#headX += 1`.
 6. Append the (updated) `#railY` to the track-history list (the camera's map
    of the path; index = `#headX − #trackBase`).
+6b. If `#TORCHMODE` is 1: run `place_torch` at the head — torch mode's random
+   scatter beside the new column (§6.9).
 7. If `#headX ≥ #nextLoad`, run `roll_chunks`.
 
 ### 6.5 Terrain sampling & the slope decision (the algorithm)
@@ -748,6 +788,73 @@ relative X (the `#CAMAHEAD` offset) and Z with an absolute Y. `tp` only takes
 literal/relative coordinates, so the values arrive as macro arguments from
 storage `infinite_rail:cam`.
 
+### 6.9 Ride modes
+
+Optional flavors toggled by chat command (`/function infinite_rail:mode_*`),
+one `_on`/`_off` pair each. They are **independent switches, not a mutually
+exclusive mode select** — any combination stacks — and they are **state, not
+config**: the toggles live in the `#RAINMODE`/`#NIGHTMODE`/`#TORCHMODE`/
+`#SKYMODE` scores (§4.1), seeded by the shared `modes_init` and untouched by
+`config`, so a `/reload`, a ride restart, `stop`, or a rejoin never turns a
+mode off. The knobs shaping them (`#SKYY`, `#SKYSPEED`, `#TORCHODDS`) are
+ordinary config tunables.
+
+**`modes_init.mcfunction`** *(shared source: `src/shared/functions/`)*
+Seeds all four toggle scores with `scoreboard players add … 0` — creates a
+missing score at 0, leaves a set one alone. Called from `load` (Java) and the
+script's `init()` (Bedrock).
+
+**`function/mode_rain_on.mcfunction`** / **`mode_rain_off.mcfunction`**
+Permanent rain. `_on` freezes the vanilla weather cycle (the version-correct
+gamerule via `names` → `set_rule`) and runs `weather rain` — with the cycle
+frozen the rain can never time out. `_off` re-enables the cycle and clears the
+sky. Pure world state: works with or without a ride running.
+
+**`function/mode_night_on.mcfunction`** / **`mode_night_off.mcfunction`**
+Endless night: same pattern with the daylight-cycle gamerule plus `time set
+midnight` (frozen, moon at its peak). `_off` re-enables the cycle and sets
+morning.
+
+**`function/mode_torches_on.mcfunction`** / **`mode_torches_off.mcfunction`**
+Flip `#TORCHMODE`; the placement itself is `place_torch`/`torch_try`, hooked
+into `advance` (step 6b).
+
+**`function/place_torch.mcfunction`**
+Runs positioned at the head, once per built column while `#TORCHMODE` is 1.
+Roll one (`random value 1..100` vs `#TORCHODDS`): does this column get a torch
+at all? Roll two (`1..10`): which of ten preset side spots — Z offsets ±2, ±3,
+±5, ±6, ±8 from the centerline, always clear of the 3-wide carve. Preset lines
+because coordinates can't come from scoreboards without macro plumbing.
+
+**`function/torch_try.mcfunction`**
+Plants one torch at the rolled X/Z if — and only if — it can actually stand:
+`positioned over motion_blocking_no_leaves` snaps to the surface (under forest
+canopy, not on it), `setblock … keep` only fills air, and the ground below
+must not be water, lava, ice, a snow layer or a lily pad. A skipped torch is
+invisible; a floating or popped one is not, so every doubtful spot is skipped.
+
+**`function/mode_sky_on.mcfunction`** / **`mode_sky_off.mcfunction`** /
+**`function/sky_speed.mcfunction`**
+The high-altitude cruise. The elevation half lives in the **shared `decide`**:
+while `#SKYMODE` is 1 the terrain-derived `#target` is replaced with `#SKYY`
+before any slope decision, so the ordinary event model climbs to it in one
+contiguous 45° event, holds it dead level (the target never moves), and glides
+back down when the mode ends — no new machinery, just a different opinion
+about where the rail wants to be. The terrain sampler keeps running
+underneath, so the descent lands correctly wherever the ride happens to be.
+The speed half: `_on` applies `#SKYSPEED` (via `sky_speed`, which `begin` also
+re-applies if a ride starts while the mode is on) and `ocean_check` returns
+early while the mode is on; `_off` restores `#MAXSPEED` and zeroes
+`#fast`/`#oceanRun`/`#landRun` so the ocean system resumes fresh. Terrain
+above `#SKYY` is punched through like any rise the rail can't out-climb.
+
+**`function/modes.mcfunction`**
+Status printout: one `tellraw` line with all four toggle scores.
+
+*(Bedrock: rain/night are the same commands with Bedrock's stable lowercase
+gamerule names; sky/torches only flip the score and `scripts/main.js` does the
+native work — see §11a.)*
+
 ---
 
 ## 7. The algorithms in depth
@@ -949,10 +1056,11 @@ edits — it re-runs the copy already in memory.
 
 Current defaults in `config.mcfunction`: `#HOVER 2`, `#TUNNEL 6`,
 `#CAMHEIGHT 0`, `#CAMBLEND 6`, `#CAMSMOOTH 6`, `#CAMLIFT 20`, `#CAMAHEAD 64`,
-`#CAMMODE 0`, `#HIDEHAND 1`, `#AUTOSTART 1`, `#MAXSPEED 8`, `#OCEANSPEED 32`,
-`#OCEANCHUNKS 6`, `#LANDCHUNKS 4`, `#DEADBAND 3`, `#SAMEGAP 25`, `#TURNGAP 40`,
-`#SLOPECLEAR 8`, `#UPCLAMP 150`,
-`#DOWNCLAMP 50`, `#AHEAD 224`, `#GENAHEAD 192`, `#MAXTICK 15`, `#DEBUGMODE 0`. (These are tuned to taste and change often;
+`#CAMMODE 0`, `#CARTYOFF 12`, `#HIDEHAND 1`, `#AUTOSTART 1`, `#MAXSPEED 8`,
+`#OCEANSPEED 32`, `#OCEANCHUNKS 6`, `#LANDCHUNKS 4`, `#DEADBAND 2`,
+`#SAMEGAP 40`, `#TURNGAP 40`, `#SLOPECLEAR 8`, `#UPCLAMP 250`,
+`#DOWNCLAMP 20`, `#AHEAD 224`, `#GENAHEAD 192`, `#MAXTICK 15`, `#DEBUGMODE 0`,
+`#SKYY 200`, `#SKYSPEED 32`, `#TORCHODDS 10`. (These are tuned to taste and change often;
 the algorithm works across a wide range. The gaps and deadband are far lower
 than the pre-camera 50/50/4 because the profile-driven camera erases slope
 corners entirely, so frequent small elevation changes are now visually free.
@@ -1003,6 +1111,12 @@ corners entirely, so frequent small elevation changes are now visually free.
   Run `stop` once, or set `#AUTOSTART 0`, if that's unwanted.
 - **File edits need `/reload`.** See §8 — the single most common point of
   confusion.
+- **Ride modes persist on purpose.** The `mode_*` toggles (§6.9) survive
+  `stop`, `/reload` and rejoins, and rain/night mode set plain vanilla world
+  state (weather-/daylight-cycle gamerules + `/weather`/`/time`) that nothing
+  in the pack unwinds automatically. Run the `_off` functions to restore
+  vanilla behavior; uninstalling the pack while rain/night are on leaves the
+  cycles frozen until re-enabled by hand.
 - **Minecart speed & the feature flag.** `#MAXSPEED` and the ocean speed-up
   (§7h) drive the minecart max-speed gamerule, which exists only with the
   **Minecart Improvements** feature. The pack **enables that feature itself**
@@ -1030,6 +1144,7 @@ corners entirely, so frequent small elevation changes are now visually free.
 
 ```
 #minecraft:load ─ load ─┬─ config   (then load derives #TUNNELUP)
+                        ├─ modes_init   (seed the mode toggles, add-0)
                         └─ names   (version-selected by overlay: gamerule names → storage)
 #minecraft:tick ─ tick ─┬─ main ─┬─ build_loop ⇄ build_step ─ advance ─┬─ sample_window
                         │        │                                     ├─ decide ─ consider_start ─ start_event
@@ -1039,6 +1154,7 @@ corners entirely, so frequent small elevation changes are now visually free.
                         │        │                                     │                                      │         └─ carve_layer (recursive)
                         │        │                                     │                                      └─ support
                         │        ├─ #cartX read                        ├─ (track-history append)
+                        │        │                                     ├─ (if #TORCHMODE) place_torch ─ torch_try
                         │        ├─ ocean_check ─ speed_up / speed_down ─ set_speed (macro)
                         │        ├─ (keepers, inline)                  └─ roll_chunks ─ forceload (macro)
                         │        └─ cam_follow ─┬─ cam_blend ⇄ cam_scan ⇄ cam_sample ─ cam_get (macro)
@@ -1054,6 +1170,12 @@ corners entirely, so frequent small elevation changes are now visually free.
                                                ├─ summon ir_seat + ir_ride, mount the stack
                                                └─ cam_follow (snap the rig into place)
 /function infinite_rail:stop  ─ stop
+
+/function infinite_rail:mode_rain_on|off   ─ (names →) set_rule (macro) + weather
+/function infinite_rail:mode_night_on|off  ─ (names →) set_rule (macro) + time
+/function infinite_rail:mode_torches_on|off ─ #TORCHMODE (read by advance step 6b)
+/function infinite_rail:mode_sky_on|off    ─ #SKYMODE (read by decide + ocean_check) + sky_speed / set_speed
+/function infinite_rail:modes              ─ status printout
 ```
 
 ---
@@ -1071,7 +1193,8 @@ that is pure algorithm.
 
 **Shared (identical `.mcfunction` source, both editions):** the event-model
 brain — `decide`, `consider_start`, `start_event`, `end_event` — plus
-`config`. These are pure scoreboard math on the `ir` objective. Each engine
+`config` and `modes_init` (the ride-mode toggle seeding, §6.9). These are pure
+scoreboard math on the `ir` objective. Each engine
 boils its world down to two integers per column (`#target`, `#railY`), calls
 `decide`, and reads back one integer (`#dir`). All event state (`#slope`,
 `#flat`, `#lastDir`, the gap rules, the deadband) lives *only* inside the
@@ -1118,6 +1241,9 @@ counterparts all live in `src/bedrock/scripts/main.js` (stable
 | Chunk management | `forceload` macro corridor | an invisible **chunk scout** entity carrying vanilla's `minecraft:tick_world` component (radius 6 chunks = a 96-block ticking bubble, `never_despawn` — the ender dragon's own chunk loader), gliding ahead of the rig as a *mobile ticking area*. Its post is derived from `#AHEAD` so the bubble covers a full-gap head's **entire 48-block sample window** (~120 blocks ahead of the rig at defaults), capped so the bubble always overlaps the rider's own simulation bubble (no coverage hole the head couldn't cross). `/tickingarea` is unusable for this job: it neither generates new terrain nor pre-loads it (measured in-game — a 470-block corridor of areas contributed zero loaded chunks) |
 | Column placement | `place_flat/up/down` + the vegetation-sparing `carve`/`carve_layer` (per-cell `unless block … #infinite_rail:keep`) + `support` | `fillBlocks` + per-cell `isVegetation()` checks (from the shared `vegetation.js`) + `setBlockPermutation` (`golden_rail` `rail_direction` 1/2/3, the custom `infinite_rail:support` power block, `light_block_11`) |
 | Start/stop entry | `/function infinite_rail:start` | `/function infinite_rail/start` — a one-line function bridging into the script via `/scriptevent` |
+| Ride modes: rain / night (§6.9) | `set_rule` macro + version-picked names from `names.mcfunction` | plain lowercase gamerule literals in the `mode_*` function files (Bedrock's names are stable) — no script involvement |
+| Ride modes: sky speed & ocean pause | `sky_speed` at toggle/begin + an early `return` in `ocean_check` | `tickPace()` asserts `.SKYSPEED` every tick while `.SKYMODE` is on (and resets the ocean state on the toggle-off transition); `oceanCheck()` returns early — both read the score through the same bridge as the brain flags, so cmd-bridge worlds keep working |
+| Ride modes: torch scatter | `place_torch`/`torch_try` (`/random` rolls + `positioned over` heightmap + `setblock … keep`) | `maybeTorch()` (Math.random + the surface probe + per-cell air/solid checks), called from `advance()` |
 | World tuning | `setup_world` (camelCase) + overlay (snake_case) | `setup_world` (Bedrock's lowercase gamerule names) — a third small file, same rules |
 
 ### 11b. The Bedrock rig and camera
@@ -1325,3 +1451,12 @@ which is unbounded by design.
   (or the first player, on auto-start); only that player is re-seated by the
   keeper. Leave the ride the sanctioned way — switch to creative or run
   `stop` — exactly like Java.
+- **Ride modes are score-driven on the Bedrock side too.** The `mode_*`
+  functions only run commands and flip `.RAINMODE`/`.NIGHTMODE`/`.TORCHMODE`/
+  `.SKYMODE`; the script never needs a scriptevent for them. It reads
+  `.SKYMODE` and `.TORCHMODE` through the same bridge as the brain flags
+  (native API normally, successCount probes cached ~1 s on cmd-bridge
+  worlds), asserts `.SKYSPEED` each tick while sky mode is on, resets the
+  ocean counters on the sky-off transition, and plants torch-mode torches
+  from `maybeTorch()` in the column builder. Rain/night use Bedrock's stable
+  lowercase gamerule names directly in the function files.

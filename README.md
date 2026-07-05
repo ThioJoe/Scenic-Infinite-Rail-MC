@@ -74,7 +74,12 @@ To end the ride (and other controls):
 /function infinite_rail:stop
 /function infinite_rail:debug       (debug chat output on)
 /function infinite_rail:debug_off
+/function infinite_rail:modes       (show which ride modes are on)
 ```
+
+Optional ride *modes* (permanent rain, endless night, torch-scattered track,
+a high-altitude sky cruise) have their own toggle commands — see
+[Ride modes](#ride-modes) below.
 
 (This stops the builder and removes the cart; run `/gamemode creative` if you
 want to move around afterward.)
@@ -110,7 +115,11 @@ Manual control (note the `/` instead of Java's `:`):
 /function infinite_rail/stop
 /function infinite_rail/debug       (debug chat output ON + command feedback)
 /function infinite_rail/debug_off
+/function infinite_rail/modes       (show which ride modes are on)
 ```
+
+The ride-mode toggles work here too, with the same names — see
+[Ride modes](#ride-modes) below.
 
 Press **F1** (or Hide GUI) for the full ambient experience on either edition.
 
@@ -274,6 +283,10 @@ Press **F1** (or Hide GUI) for the full ambient experience on either edition.
   area open ahead of the ride), and releases everything behind. World spawn
   and your respawn point roll forward with the ride, so nothing stays loaded
   behind you.
+- **Ride modes** — optional flavors toggled live with chat commands:
+  permanent rain, endless night, torch-scattered track, and a high-altitude
+  sky cruise. Independent switches, freely stackable (night + torches is the
+  lantern ride). See [Ride modes](#ride-modes).
 - **Spectator constraints** — you ride with max Resistance and Saturation
   plus every damage gamerule disabled, so you can look around freely but
   can't get hurt or starve. Java switches you to Adventure mode (no block
@@ -282,6 +295,49 @@ Press **F1** (or Hide GUI) for the full ambient experience on either edition.
   always-empty inventory and the ride's pace to keep the world untouched.
   Tile drops, mob griefing and fire tick are disabled so the scenery can't
   blow up the line.
+
+## Ride modes
+
+Optional flavors for the ride, switched live with chat commands — no config
+editing, no `/reload`. Every mode is an **independent on/off toggle**, not a
+mutually exclusive selection: stack night + torches for a lantern-lit ride,
+night + rain for a storm, sky + rain to cruise above a downpour. Modes are
+*state, not settings* — they stick across `/reload`, ride restarts, world
+rejoins and `stop`, until you switch them off.
+
+Java commands shown; Bedrock is identical with `/` instead of `:` (e.g.
+`/function infinite_rail/mode_rain_on`):
+
+| Mode | Toggle | What it does |
+| ---- | ------ | ------------ |
+| Rain | `/function infinite_rail:mode_rain_on` / `..._off` | Permanent rain: freezes the weather cycle and starts rain, so it can never time out. Off clears the sky and resumes the vanilla cycle. |
+| Night | `/function infinite_rail:mode_night_on` / `..._off` | Endless night: freezes the daylight cycle at midnight, moon at its peak. Off sets morning and resumes the cycle. |
+| Torches | `/function infinite_rail:mode_torches_on` / `..._off` | Scatters torches along **new** track as it is built — random spots 2–8 blocks left/right of the line, about one per `#TORCHODDS`% of columns (default 10). |
+| Sky | `/function infinite_rail:mode_sky_on` / `..._off` | High-altitude cruise: one long 45° climb to `#SKYY` (default 200 — just above the clouds), then dead-level flight at `#SKYSPEED` (default 32). Off glides the line back down onto the terrain. |
+| — | `/function infinite_rail:modes` | Prints which modes are currently on. |
+
+Details worth knowing:
+
+- **Torches** are only planted where a torch can actually stand — never on
+  water, lava, ice, snow layers or lily pads — and in forests they land on
+  the ground *under* the canopy, not on the treetops. Track already behind
+  you is unaffected; toggling off leaves existing torches standing.
+- **Sky mode** owns the whole speed system while it's on: `#SKYSPEED`
+  applies, and the ocean speed-up is paused (toggling off restores
+  `#MAXSPEED` and resets the ocean counters). Mountains taller than `#SKYY`
+  are punched through like any other terrain the rail can't out-climb —
+  raise `#SKYY` to ~260 to clear even the tallest jagged peaks. The terrain
+  smoother keeps watching the ground underneath the whole time, so toggling
+  off glides you straight back down wherever you are.
+- **Rain and night** work by setting plain vanilla state (the weather- and
+  daylight-cycle gamerules plus `/weather` and `/time`), so they apply even
+  while no ride is running — and `stop` deliberately leaves them alone. Run
+  the `_off` functions to restore vanilla behavior. On Java the pack picks
+  the right gamerule names for your version automatically (`doWeatherCycle`
+  / `doDaylightCycle` on 1.21-era formats, `advance_weather` /
+  `advance_time` on 26.x — same overlay trick as the rest of the pack).
+- The three mode knobs (`#SKYY`, `#SKYSPEED`, `#TORCHODDS`) live in the same
+  config file as every other setting — see Tuning below.
 
 ## Tuning
 
@@ -324,22 +380,25 @@ file, which are therefore your permanent defaults.
 | `#CAMLIFT`     | 20      | Climb float (tenths): height above the rail while climbing          |
 | `#CAMAHEAD`    | 64      | How far the viewer rides ahead of the (hidden/virtual) pace cart    |
 | `#CAMMODE`     | 0       | **Bedrock only**: 0 = native free-look rig, 1 = eased cinematic cam |
-| `#CARTYOFF`    | 0       | **Bedrock only**: fine-tune for the cart visual's height, tenths of a block (the pack's re-based cart model sits correctly at 0; keep within ~-3..3 -- big negative values sink the cart entity into the track and it suffocates) |
+| `#CARTYOFF`    | 12      | **Bedrock only**: fine-tune for the cart visual's height, tenths of a block (negative = lower; big negative values sink the cart entity into the track and it suffocates) |
 | `#HIDEHAND`    | 1       | **Bedrock only**: 1 = hide the first-person arm automatically (via rider invisibility — your body is hidden in F5 too); 0 = keep the arm |
 | `#AUTOSTART`   | 1       | 1 = ride starts itself in a fresh world; 0 = manual start           |
 | `#MAXSPEED`    | 8       | Default ride speed in blocks/s (Java: minecart max-speed gamerule)  |
 | `#OCEANSPEED`  | 32      | Ride speed over open ocean (0 = disable the ocean speed-up)         |
 | `#OCEANCHUNKS` | 6       | Consecutive ocean chunks before speeding up to `#OCEANSPEED`        |
 | `#LANDCHUNKS`  | 4       | Consecutive non-ocean chunks before reverting to `#MAXSPEED`        |
-| `#DEADBAND`    | 3       | Min. height difference before a climb/descent is triggered          |
-| `#SAMEGAP`     | 25      | Min. flat blocks before sloping again in the **same** direction     |
+| `#SKYY`        | 200     | Sky mode: the fixed cruising altitude (see [Ride modes](#ride-modes)) |
+| `#SKYSPEED`    | 32      | Sky mode: cruising speed in blocks/s while the mode is on           |
+| `#TORCHODDS`   | 10      | Torch mode: % chance per new column of planting a torch beside it   |
+| `#DEADBAND`    | 2       | Min. height difference before a climb/descent is triggered          |
+| `#SAMEGAP`     | 40      | Min. flat blocks before sloping again in the **same** direction     |
 | `#TURNGAP`     | 40      | Min. flat blocks before **reversing** direction                     |
 | `#SLOPECLEAR`  | 8       | Columns just before/after each slope whose center bore is cleared at full height even through vegetation (sides always spare plants) |
 | `#AHEAD`       | 224     | How far ahead of the pace cart the **rails** are built (Java: keep < ~250; Bedrock: useful up to ~270, the single-scout ceiling) |
 | `#GENAHEAD`    | 192     | **Java only**: how far ahead of the rail head the world is force-generated (≥ ~64). Bedrock ignores it — the chunk scout derives its post from `#AHEAD` |
 | `#MAXTICK`     | 15      | Max track columns built per game tick                               |
-| `#UPCLAMP`     | 150     | How hard approaching mountains may pull the average up              |
-| `#DOWNCLAMP`   | 50      | How hard dips pull the average down (small = level bridges)         |
+| `#UPCLAMP`     | 250     | How hard approaching mountains may pull the average up              |
+| `#DOWNCLAMP`   | 20      | How hard dips pull the average down (small = level bridges)         |
 | `#DEBUGMODE`   | 0       | 1 = print chat messages about the speed / ocean system              |
 
 `#SAMEGAP` and `#TURNGAP` are the two knobs from the design: raise them for

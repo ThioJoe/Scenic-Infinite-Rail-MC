@@ -7,6 +7,10 @@
 # see pack.mcmeta. `load` calls this once; anything version-dependent that is a
 # pure rename lives here as a variable.
 #
-# Currently just the minecart max-speed gamerule (read by set_speed as
-# storage infinite_rail:speed rule). Add more entries here as needed.
+# Entries: the minecart max-speed gamerule (read by set_speed as storage
+# infinite_rail:speed rule), and the weather-cycle / daylight-cycle gamerules
+# (storage infinite_rail:names, copied into the set_rule macro by the rain and
+# night mode toggles). Add more entries here as needed.
 data modify storage infinite_rail:speed rule set value "minecartMaxSpeed"
+data modify storage infinite_rail:names weather_cycle set value "doWeatherCycle"
+data modify storage infinite_rail:names daylight_cycle set value "doDaylightCycle"

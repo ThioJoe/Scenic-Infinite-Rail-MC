@@ -8,7 +8,8 @@ the build assembles the shippable packs from three source folders.
 src/
   shared/functions/     .mcfunction files used VERBATIM by both editions:
                         the event-model brain (decide, consider_start,
-                        start_event, end_event) and config (every tunable)
+                        start_event, end_event), config (every tunable) and
+                        modes_init (ride-mode toggle seeding)
   shared/vegetation.js  the vegetation the carve spares -- ONE category list
                         for both editions: the build emits Java's
                         #infinite_rail:keep block tag from it and copies it

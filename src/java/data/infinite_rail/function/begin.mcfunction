@@ -25,6 +25,8 @@ scoreboard players set #fast ir 0
 execute store result storage infinite_rail:speed v int 1 run scoreboard players get #MAXSPEED ir
 function infinite_rail:set_speed with storage infinite_rail:speed
 execute if score #DEBUGMODE ir matches 1 run tellraw @a [{"text":"[IR debug] ","color":"dark_aqua"},{"text":"default minecart speed set to ","color":"gray"},{"score":{"name":"#MAXSPEED","objective":"ir"},"color":"white"},{"text":" (needs Minecart Improvements enabled to take effect)","color":"dark_gray"}]
+# Sky mode, if it was left on, overrides the default with its cruise speed.
+execute if score #SKYMODE ir matches 1 run function infinite_rail:sky_speed
 
 # --- Anchor the line at the player's position ---
 summon minecraft:marker ~0.5 0.0 ~0.5 {Tags:["ir_head"]}

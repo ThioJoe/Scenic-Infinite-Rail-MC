@@ -16,6 +16,17 @@
 scoreboard players set #dir ir 0
 scoreboard players set #nOne ir 0
 scoreboard players remove #nOne ir 1
+
+# --- Sky mode (mode_sky_on): cruise at a fixed altitude ---
+# While #SKYMODE is 1 the terrain-derived target is replaced with the fixed
+# altitude #SKYY before any slope decision, so the event model steers the
+# rail there -- one long 45-degree climb -- and holds it dead level until the
+# mode is switched off, when the same machinery glides the line back down
+# onto the terrain-following target. Everything downstream (events, gaps,
+# carve modes, the camera) is unchanged: sky mode is just a different
+# opinion about where the rail wants to be.
+execute if score #SKYMODE ir matches 1 run scoreboard players operation #target ir = #SKYY ir
+
 scoreboard players operation #diff ir = #target ir
 scoreboard players operation #diff ir -= #railY ir
 scoreboard players operation #slope0 ir = #slope ir

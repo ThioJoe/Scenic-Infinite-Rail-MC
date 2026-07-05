@@ -21,6 +21,11 @@ scoreboard players set #C16 ir 16
 # Apply all tunable settings.
 function infinite_rail:config
 
+# Seed the ride-mode toggle scores (0 = off) if they've never been set. Modes
+# are state, not config: config re-runs on every /reload, so keeping them out
+# of it is what lets an enabled mode survive a reload (see modes_init).
+function infinite_rail:modes_init
+
 # Derived from the tunables above: slope columns carve one block taller than
 # flat ones for extra headroom as the cart rises/falls. Recomputed here so it
 # tracks #TUNNEL on every /reload.

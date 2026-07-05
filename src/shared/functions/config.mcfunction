@@ -229,6 +229,41 @@ scoreboard players set #GENAHEAD ir 192
 scoreboard players set #MAXTICK ir 15
 
 
+# --- Ride modes (see the mode_* functions) -----------------------------------
+# The modes themselves are toggled with chat commands, not here:
+#   /function infinite_rail:mode_rain_on      permanent rain          (_off)
+#   /function infinite_rail:mode_night_on     frozen midnight         (_off)
+#   /function infinite_rail:mode_torches_on   torch-scattered track   (_off)
+#   /function infinite_rail:mode_sky_on       high-altitude cruise    (_off)
+#   /function infinite_rail:modes             show what is currently on
+# They are STATE, not settings -- independent switches that stack freely
+# (night + torches is the lantern ride, night + rain the storm ride), stick
+# across /reload, ride restarts and rejoins, and never get reset by this
+# file. The knobs below only shape what the modes do while they are on.
+
+# Sky mode: the fixed altitude the rail cruises at while mode_sky_on is
+# active (the shared decide steers the line to exactly this Y, one long
+# 45-degree climb up and one long glide back down on mode_sky_off). The
+# default rides just above the cloud layer (Y 192). Terrain taller than this
+# is punched through like any rise the rail cannot climb over -- raise it
+# toward ~260 to clear even the tallest jagged peaks (build limit 320).
+scoreboard players set #SKYY ir 200
+
+# Sky mode: cruising speed (blocks/second) while the mode is on. There is
+# nothing nearby to look at up there, so it defaults to ocean pace. Applied
+# when the mode is toggled on (and at ride start if the mode was left on);
+# mode_sky_off restores #MAXSPEED. The ocean speed-up is paused while sky
+# mode owns the speed.
+scoreboard players set #SKYSPEED ir 32
+
+# Torch mode: the percent chance (0-100) that each newly built column plants
+# a torch somewhere 2-8 blocks left or right of the track. 10 = on average
+# about one torch per 10 blocks of line. Torches are only placed where one
+# can actually stand (never on water, ice or snow layers), and only on NEW
+# track built while the mode is on.
+scoreboard players set #TORCHODDS ir 10
+
+
 # --- Debugging --------------------------------------------------------------
 
 # 1 = print chat messages about the minecart-speed system: the default speed

@@ -156,10 +156,11 @@ const HIST_PERSIST = 1024;
 // .HOVER ir 8" tweaks work mid-ride exactly like Java.
 const CONFIG_DEFAULTS = {
   HOVER: 2, TUNNEL: 6, CAMHEIGHT: 0, CAMBLEND: 6, CAMSMOOTH: 6, CAMLIFT: 20,
-  CAMAHEAD: 64, CAMMODE: 0, CARTYOFF: 0, HIDEHAND: 1, AUTOSTART: 1,
-  MAXSPEED: 8, OCEANSPEED: 32, OCEANCHUNKS: 6, LANDCHUNKS: 4, DEADBAND: 3,
-  SAMEGAP: 25, TURNGAP: 40, SLOPECLEAR: 8, UPCLAMP: 150, DOWNCLAMP: 50,
+  CAMAHEAD: 64, CAMMODE: 0, CARTYOFF: 12, HIDEHAND: 1, AUTOSTART: 1,
+  MAXSPEED: 8, OCEANSPEED: 32, OCEANCHUNKS: 6, LANDCHUNKS: 4, DEADBAND: 2,
+  SAMEGAP: 40, TURNGAP: 40, SLOPECLEAR: 8, UPCLAMP: 250, DOWNCLAMP: 20,
   AHEAD: 224, GENAHEAD: 192, MAXTICK: 15, DEBUGMODE: 0,
+  SKYY: 200, SKYSPEED: 32, TORCHODDS: 10,
 };
 
 // The vanilla ocean biomes (Bedrock has no biome tags, so #minecraft:is_ocean
@@ -176,7 +177,7 @@ const OCEAN_BIOMES = new Set([
 // Column block palette (resolved once; golden_rail is Bedrock's powered rail;
 // rail_direction: 1 = flat east-west, 2 = ascending east, 3 = ascending west;
 // the light block is per-level flattened on current Bedrock).
-let AIR, RAIL_FLAT, RAIL_UP, RAIL_DOWN, SUPPORT;
+let AIR, RAIL_FLAT, RAIL_UP, RAIL_DOWN, SUPPORT, TORCH;
 const LIGHT_BLOCK = 'minecraft:light_block_11';
 
 // --- Ride state ----------------------------------------------------------------
@@ -290,6 +291,22 @@ function debugOn() {
   return dbgCache;
 }
 function dbg(msg) { if (debugOn()) world.sendMessage(DBG + msg); }
+
+// Is a ride-mode toggle on? (.SKYMODE / .TORCHMODE -- the two modes the
+// script acts on; rain and night are pure command files and never read
+// here.) The mode functions only flip scoreboard scores, so reads go
+// through the same bridge as the brain flags: the native API normally, a
+// successCount probe on cmd-bridge worlds -- cached for a second there,
+// because tickPace asks every tick.
+const modeCache = new Map(); // name -> { at, v }
+function modeOn(name) {
+  if (bridgeMode === 'api') return getScore(name, 0) === 1;
+  const c = modeCache.get(name);
+  if (c && tickN - c.at <= 20) return c.v;
+  const v = (runCmd(`execute if score ${P}${name} ir matches 1 run scoreboard players add ${P}probe ir 1`)?.successCount ?? 0) > 0;
+  modeCache.set(name, { at: tickN, v });
+  return v;
+}
 
 function findRider() {
   if (!S.riderName) return undefined;
@@ -571,6 +588,32 @@ function placeColumn(x, y, dir, veg) {
   dim.setBlockType({ x, y: y + 3, z }, LIGHT_BLOCK);
 }
 
+// Torch mode (.TORCHMODE -- mode_torches_on): sprinkle torches on the
+// terrain around the line as it is built. The native twin of Java's
+// place_torch/torch_try: same odds knob (.TORCHODDS percent of columns),
+// same 2-8 block side offsets, same "skip every doubtful spot" rule -- a
+// missing torch is invisible, a floating or popped one is not. Only onto
+// ground the surface probe answers for, only into an air cell, and never
+// onto water/lava (the probe counts liquid surfaces as terrain), ice
+// (torches can't attach), leaves, snow layers or other non-solid tops.
+function maybeTorch(x) {
+  if (Math.random() * 100 >= cfg('TORCHODDS')) return;
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const z = S.centerZ + side * (2 + Math.floor(Math.random() * 7)); // 2..8 off-center
+  try {
+    const surf = surfaceY(x, z); // Y one above the surface, like the Java heightmap
+    if (surf === undefined || surf <= -63) return;
+    const below = dim.getBlock({ x, y: surf - 1, z });
+    const cell = dim.getBlock({ x, y: surf, z });
+    if (!below || !cell) return;
+    if (below.isLiquid === true || below.isSolid === false) return;
+    const bid = below.typeId ?? '';
+    if (bid.includes('ice') || bid.includes('leaves') || bid === 'minecraft:snow_layer') return;
+    if (!(cell.isAir === true || cell.typeId === 'minecraft:air')) return;
+    dim.setBlockPermutation({ x, y: surf, z }, TORCH);
+  } catch { /* border chunk: skip this torch */ }
+}
+
 // A slope just started (the shared start_event raised #retro): retroactively
 // clear the FULL center bore over the last #SLOPECLEAR columns -- the camera
 // lifts off the rail line before the slope arrives, so vegetation spared
@@ -624,6 +667,10 @@ function advance() {
     placeColumn(colX, S.railY, 0, veg);
   }
   S.headX = colX;
+
+  // Torch mode: maybe plant a torch on the terrain beside this column
+  // (advance.mcfunction's step 5b on Java).
+  if (modeOn('TORCHMODE')) maybeTorch(colX);
 
   S.trackY.push(S.railY);
   if (S.trackY.length > HIST_MAX + 256) {
@@ -805,6 +852,10 @@ function rollChunks() {
 // tickPace) -- same trigger logic, same knobs, same per-chunk cadence.
 
 function oceanCheck() {
+  // Sky mode owns the ride speed while it is on (and the line flies far
+  // above any water anyway) -- skip the whole ocean system. tickPace resets
+  // the counters and .fast on the toggle-off transition.
+  if (modeOn('SKYMODE')) return;
   const rigX = S.paceX + cfg('CAMAHEAD');
   const chunkNow = Math.floor(rigX / 16);
   if (chunkNow === S.lastChunk) return;
@@ -848,8 +899,24 @@ function oceanCheck() {
 // The virtual pace cart: eases toward the target speed and rolls east. This is
 // what the hidden physical pace cart + always-powered rails + stall keeper +
 // max-speed gamerule achieved on Java, in four lines.
+let skyWas = false; // last tick's .SKYMODE, to catch the toggle-off transition
 function tickPace() {
-  if (!S.fast) S.targetSpeed = cfg('MAXSPEED') / 20; // land speed stays live-tweakable
+  // Sky mode (mode_sky_on) owns the speed outright: .SKYSPEED is asserted
+  // every tick while it is on (so it is live-tweakable, like .MAXSPEED), and
+  // the moment it turns off the ocean system gets the speed back with fresh
+  // counters -- Java's mode_sky_off does the same reset explicitly.
+  const sky = modeOn('SKYMODE');
+  if (sky) {
+    S.targetSpeed = cfg('SKYSPEED') / 20;
+  } else if (skyWas) {
+    S.fast = false;
+    S.oceanRun = 0;
+    S.landRun = 0;
+    S.targetSpeed = cfg('MAXSPEED') / 20;
+  } else if (!S.fast) {
+    S.targetSpeed = cfg('MAXSPEED') / 20; // land speed stays live-tweakable
+  }
+  skyWas = sky;
   const accel = ACCEL / 20;
   // Never let the ride outrun the built track (e.g. while world generation is
   // catching up). This is a SOFT ceiling: the allowed speed shrinks smoothly
@@ -1434,6 +1501,9 @@ function init() {
   // block does the same job undisguised if this BP is somehow outdated.
   try { SUPPORT = BlockPermutation.resolve('infinite_rail:support'); }
   catch { SUPPORT = BlockPermutation.resolve('minecraft:redstone_block'); }
+  // A standing torch for torch mode (maybeTorch).
+  try { TORCH = BlockPermutation.resolve('minecraft:torch', { torch_facing_direction: 'top' }); }
+  catch { TORCH = BlockPermutation.resolve('minecraft:torch'); }
 
   // Apply the tunable knobs from the SHARED config.mcfunction (the same file
   // Java runs from load.mcfunction). Editing config + /reload refreshes them
@@ -1445,6 +1515,11 @@ function init() {
       if (getScore(k, undefined) === undefined) setScore(k, v);
     }
   }
+  // Seed the ride-mode toggle scores (0 = off) if they've never been set --
+  // the shared modes_init, same call Java makes from load.mcfunction. Modes
+  // are state, not config: they live outside config.mcfunction so a /reload
+  // never resets an enabled mode.
+  runCmd(`function ${NS}/modes_init`);
 
   loadState();
   if (S.started) say('§7Ride resumed. Run §b/function infinite_rail/stop§7 to end it.');

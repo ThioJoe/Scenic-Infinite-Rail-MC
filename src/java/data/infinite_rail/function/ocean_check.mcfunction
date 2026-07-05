@@ -14,6 +14,11 @@
 # without the "Minecart Improvements" feature the speed changes are no-ops and
 # the ride just cruises at vanilla speed the whole way.
 
+# Sky mode owns the ride speed while it is on (and the line flies far above
+# any water anyway) -- skip the whole ocean system. mode_sky_off resets the
+# run counters and #fast and restores #MAXSPEED on the way out.
+execute if score #SKYMODE ir matches 1 run return 0
+
 # Which chunk is the rider (seat) in now? (X floored to 16-block chunks.)
 execute store result score #rigX ir run data get entity @e[type=item_display,tag=ir_seat,limit=1] Pos[0] 1
 scoreboard players operation #chunkNow ir = #rigX ir

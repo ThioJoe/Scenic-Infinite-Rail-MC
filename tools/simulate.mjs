@@ -324,6 +324,45 @@ for (const [name, { settles, f: surface }] of Object.entries(TERRAINS)) {
   checkCamera(name, java);
 }
 
+// ---------------------------------------------------------------------------
+// Sky mode: with #SKYMODE set, the shared decide must override the terrain
+// target with the fixed #SKYY altitude -- one contiguous 45-degree climb up,
+// dead-level cruising at exactly #SKYY, and a glide back down onto the
+// terrain-following line once the mode is toggled off. Exercises the mode
+// override line in decide on both emitted copies.
+// ---------------------------------------------------------------------------
+console.log('\nSimulating sky mode (the fixed-altitude #SKYY override in the shared decide):');
+{
+  const SKYY = 200;
+  const surface = TERRAINS.rolling.f; // rolling hills around Y 48..80
+  const dirsByEdition = [];
+  for (const [label, fnDir, prefix] of [['java', JAVA_FN, '#'], ['bedrock', BEDROCK_FN, '.']]) {
+    const sim = new Sim(fnDir, prefix);
+    sim.call('config');
+    const cfg = Object.fromEntries(CFG_KEYS.map((k) => [k, sim.get(k)]));
+    sim.set('slope', 0);
+    sim.set('flat', 99);
+    sim.set('lastDir', 0);
+    sim.set('vclear', 0);
+    sim.set('retro', 0);
+    sim.set('SKYMODE', 1);
+    sim.set('SKYY', SKYY);
+    const startY = surface(0) + cfg.HOVER;
+    const S = { headX: 0, railY: startY, avg: surface(0), track: [startY] };
+    const log = [];
+    for (let i = 0; i < 400; i++) log.push(advance(sim, S, surface, cfg));
+    if (S.railY !== SKYY) fail(`sky/${label}: rail ended at Y=${S.railY}, wanted exactly ${SKYY}`);
+    const climbDirs = log.map((s) => s.dir).join('');
+    if (!/^0*1+0+$/.test(climbDirs)) fail(`sky/${label}: the climb to #SKYY was not one contiguous 45-degree event`);
+    sim.set('SKYMODE', 0); // toggle off: the rail must glide back to the terrain
+    for (let i = 0; i < 400; i++) log.push(advance(sim, S, surface, cfg));
+    if (S.railY > 90) fail(`sky/${label}: rail did not descend after toggling sky mode off (Y=${S.railY})`);
+    dirsByEdition.push(log.map((s) => s.dir).join(''));
+  }
+  if (dirsByEdition[0] !== dirsByEdition[1]) fail('sky: Java and Bedrock copies diverged');
+  else ok(`sky: climbs to ${SKYY} in one event, holds level, and glides back down after toggle-off (editions identical)`);
+}
+
 if (failures > 0) {
   console.error(`\n${failures} simulation check(s) FAILED`);
   process.exit(1);
