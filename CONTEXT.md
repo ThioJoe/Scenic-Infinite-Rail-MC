@@ -156,7 +156,8 @@ A single `dummy` objective named `ir` holds every variable. All are on `.`-named
 
 | Score       | Meaning |
 | ----------- | ------- |
-| `.started`  | `1` while a ride is active. `tick` does nothing unless this is 1. |
+| `.started`  | `1` while a ride is active (`tick` runs `main`); `2` while a launch is in progress (`tick` runs `launch_tick` — the runway pre-build, phased across ticks); `0` otherwise. |
+| `.pregoal`  | The launch's runway goal: the `.headX` at which `launch_tick` finishes the launch (`start + .CAMAHEAD + 32`), set by `begin`. |
 | `.railY`    | Current rail elevation (Y). Tracks the head marker's Y. |
 | `.headX`    | Current head X (also the column counter / absolute world X of the build front). |
 | `.cartX`    | The cart's current X, sampled each tick, for the build-ahead gap. |
@@ -223,6 +224,7 @@ A single `dummy` objective named `ir` holds every variable. All are on `.`-named
 | `ir_ride`  | `minecart`      | The **ride cart** the player actually sits in — a real minecart, off the rails, permanently a passenger of the seat. The whole stack (seat → ride cart → player) moves rigidly, so the cart can never bounce, tilt or shift against the view. |
 | `ir_plug`  | `item_display`  | The **seat-blocker**: permanently occupies the pace cart. |
 | `ir_disp`  | `block_display` | One per column: a smooth-stone visual that disguises the redstone block under the rail. Purely cosmetic. |
+| `ir_rider` | *(player tag)*  | Marks the player who started the launch, so `launch_done` (which runs from the tick loop, without `begin`'s player context) knows who to seat. Removed by `stop` and by `begin`'s reset. |
 
 ### 4.3 Command storage
 
@@ -263,11 +265,17 @@ start ─► (as nearest player, block-aligned) begin
             ├─ reset the track-history list; .trackBase = .headX; record column 0
             ├─ place the first column; summon ir_cart (pace cart) + ir_plug; plug in cart
             ├─ seed the ocean state (.lastChunk = cart chunk, .oceanRun/.landRun = 0)
-            ├─ pre-build .CAMAHEAD+32 columns synchronously
-            ├─ summon ir_seat + ir_ride at the head; ride cart onto seat;
-            │    mount player INTO THE RIDE CART (the only mount of the ride);
-            │    set adventure + Resistance/Saturation
-            └─ seed .sy, snap the rig into place (cam_follow), set .started = 1
+            └─ tag the player ir_rider; .pregoal = start + .CAMAHEAD + 32; .started = 2
+
+While .started == 2, every tick ─► launch_tick   (the launch, phased)
+            ├─ build up to 24 runway columns (each tick is a FRESH command
+            │    chain -- a synchronous pre-build inside begin used to get
+            │    silently truncated by the per-chain command/fork budgets)
+            └─ once .headX ≥ .pregoal ─► launch_done
+                  ├─ summon ir_seat + ir_ride at the rider; ride cart onto seat
+                  ├─ adventure + Resistance/Saturation FIRST, then mount the
+                  │    player INTO THE RIDE CART (the only mount of the ride)
+                  └─ seed .s2, snap the rig into place (cam_follow), .started = 1
 
 Every game tick (while .started == 1)
         │
@@ -342,9 +350,13 @@ Sets up and launches a ride (see the flow in §5). Notable steps:
 - **Init counters:** `.slope=0`, `.flat=99` (large, so the first change isn't gap-blocked), `.lastDir=0`; seeds `.avg = .railY − .HOVER`; sets `.nextLoad`.
 - **Track history:** empties storage `infinite_rail:track y`, sets `.trackBase = .headX` and records the first column's rail Y (index 0).
 - **Pace cart:** places the first column (`place_flat`), summons `ir_cart` (invuln, small eastward motion) and `ir_plug`, and plugs the cart. Seeds the ocean-check state: `.lastChunk` = the rider's starting chunk (pace cart chunk + `.CAMAHEAD`), `.oceanRun` and `.landRun` = 0.
-- **Pre-build:** sets `.budget = .CAMAHEAD + 32` and runs `build_loop` once synchronously — the head ends up past the rig's starting position, so the viewer starts on ready track.
-- **Camera rig:** summons `ir_seat` (`teleport_duration:1`) and `ir_ride` (invuln, yaw 90) at the head, mounts the ride cart onto the seat and the player **into the ride cart** — the one and only player mount of the ride (mount events flash the client's un-hideable "press ⇧ to dismount" hint, so they must never repeat). Adventure mode + **infinite Resistance 255 + Saturation** (can't break track, get hurt, or starve); any leftover invisibility from older pack versions is cleared — the rider is meant to be visible in their cart. (The rider's held item stays hidden because the per-tick keeper clears the inventory.)
-- **Handoff:** seeds `.sy = .railY×1000`, runs `cam_follow` once to snap the rig to its cruising position, then `.started=1`.
+- **Launch handoff:** tags the player `ir_rider`, sets `.pregoal = .headX + .CAMAHEAD + 32` and `.started = 2` — and returns. The runway pre-build and the rig used to run right here, synchronously, but a single command chain that builds ~a hundred columns (each with a 24-probe near scan) silently exceeds vanilla's per-chain command/fork budgets, truncating `begin` before the rig or the mount — so the launch is now **phased** through the tick loop (`launch_tick` → `launch_done`, below).
+
+**`function/launch_tick.mcfunction`**
+The launch driver, run from `tick` while `.started` is 2: samples `.cartX`, sets `.budget = 24` and runs `build_loop` — up to 24 runway columns per tick, each tick its own fresh command chain, so the launch can never be truncated by the per-chain budgets no matter how heavy the per-column pipeline or the config gets. Once `.headX ≥ .pregoal`, runs `launch_done`.
+
+**`function/launch_done.mcfunction`**
+Finishes the launch: summons `ir_seat` (`teleport_duration:1`) and `ir_ride` (invuln, yaw 90) **at the rider** and mounts the stack at distance zero — ride cart onto seat, then the player **into the ride cart**, the one and only player mount of the ride (mount events flash the client's un-hideable "press ⇧ to dismount" hint, so they must never repeat). Adventure mode + **infinite Resistance 255 + Saturation** are applied **before** the mount, so if the mount ever fails transiently the per-tick rider keeper (which recaptures adventure players) heals it a tick later; any leftover invisibility from older pack versions is cleared — the rider is meant to be visible in their cart. (The rider's held item stays hidden because the per-tick keeper clears the inventory.) Then seeds `.s2 = .railY×1000`, runs `cam_follow` once — the same absolute teleport the ride performs every tick — to snap the whole stack (rider aboard) to its cruising position, sets `.started = 1`, and prints "Enjoy the ride." (plus a loud warning if the rider somehow still isn't seated).
 
 **`function/setup_world.mcfunction`** (+ `overlay_snake/…/setup_world.mcfunction`)
 One-time gamerule tuning for a clean ride: silences command feedback/output/ advancement spam; don't keep origin chunks loaded; no mob griefing (creepers/ endermen can't wreck the track); no fire spread, no phantoms; disabled tile drops; disabled all environmental damage; immediate respawn at the moving spawn point if anything impossible ever happens. It exists in **two copies** because snapshot 25w44a (format 92+, the 26.x era) renamed every gamerule to snake_case and reworked a few (`announceAdvancements` → `show_advancement_messages`, `doInsomnia` → `spawn_phantoms`, `doFireTick` → removed in favor of `fire_spread_radius_around_player`, `spawnChunkRadius` → gone). The base copy is camelCase (formats 82-91); the `overlay_snake` overlay copy is snake_case and **replaces** the base on format 92+ (see §2). `begin` calls `setup_world` once and always gets the right copy — no dropped-file no-op, no duplicate call. Keep the two copies in sync when changing a rule. *(A full names-macro rewrite isn't worth it here: several rules aren't pure renames — `doFireTick`→ `fire_spread_radius_around_player` changes name **and** value, and `spawnChunkRadius` has no 26.x equivalent — so two small whole files read cleaner than one macro'd file plus a big name map.)*
@@ -358,10 +370,10 @@ Sets the version-specific command/gamerule **names** into storage: the minecart 
 **`function/set_rule.mcfunction`** *(a function macro)* `$gamerule $(rule) $(v)` — the generic sibling of `set_speed`, reading both macro args from storage `infinite_rail:rule`. Exists for the same reason (a macro line expanding to an unknown gamerule aborts its function, so the version-correct name must come from `names.mcfunction`, never a literal). Callers copy `rule` from `infinite_rail:names` and set `v` to `"true"`/ `"false"` just before the call. Used by `mode_rain_on/off` and `mode_night_on/off` (§6.9).
 
 **`function/stop.mcfunction`**
-Ends the ride: `.started=0`, clears effects from adventure players, takes back the Settings book (`clear … minecraft:written_book`), dismounts them, kills `ir_cart`, `ir_ride`, `ir_seat`, `ir_plug` and both markers, clears all forceloads. `.autodone` stays `1`, so a stopped world never auto-restarts. **The built track (blocks + `ir_disp` displays) is intentionally left in the world.**
+Ends the ride: `.started=0` (which also cancels a launch still in progress), removes the `ir_rider` tag, clears effects from adventure players, takes back the Settings book (`clear … minecraft:written_book`), dismounts them, kills `ir_cart`, `ir_ride`, `ir_seat`, `ir_plug` and both markers, clears all forceloads. `.autodone` stays `1`, so a stopped world never auto-restarts. **The built track (blocks + `ir_disp` displays) is intentionally left in the world.**
 
 **`function/tick.mcfunction`**
-The heartbeat. Runs `menu_tick` (the Settings book's `/trigger` dispatcher, §6.9) every tick, ride or no ride, so a click can never sit stale. Then, if `.started == 1`, run `main`. Below that, the **auto-starter**: while `.AUTOSTART == 1`, `.started == 0` and `.autodone ≠ 1`, it waits for a player to exist, then runs a 100-tick countdown before running start, at which point `begin` sets `.autodone = 1` and it never fires again (the score persists in the world save).
+The heartbeat. Runs `menu_tick` (the Settings book's `/trigger` dispatcher, §6.9) every tick, ride or no ride, so a click can never sit stale. Then, if `.started == 1`, run `main`; if `.started == 2`, run `launch_tick` (a launch is pre-building its runway — §6.3). Below that, the **auto-starter**: while `.AUTOSTART == 1`, `.started == 0` and `.autodone ≠ 1`, it waits for a player to exist, then runs a 100-tick countdown before running start, at which point `begin` sets `.autodone = 1` and it never fires again (the score persists in the world save).
 
 **`function/main.mcfunction`**
 Per-tick driver while riding:
@@ -638,7 +650,7 @@ Current defaults in `config.mcfunction`: `.HOVER 2`, `.TUNNEL 6`, `.CAMHEIGHT 0`
 - **The pace cart is visible looking backward** — an empty-looking minecart rolling `.CAMAHEAD` blocks behind the viewer. Raise `.CAMAHEAD` to push it further out of sight (keep `.AHEAD` at least ~40 above it, and `.AHEAD` below ~250 so the rolling forceload never releases the pace cart's chunk).
 - **The vanilla dismount hint** ("press ⇧/left-ctrl to dismount") is a client-side toast shown on every player mount event; it cannot be hidden by a server or data pack. The rig design means it appears exactly once, at ride start (and again only if the rider dismounts themselves and is re-caught by the keeper).
 - **Auto-start on upgraded worlds.** `.autodone` didn't exist before the smooth-camera update, so a pre-existing world that had used the pack will auto-start once on its first load after upgrading (its `.autodone` is unset). Run `stop` once, or set `.AUTOSTART 0`, if that's unwanted.
-- **The pack raises the command-chain budget gamerules.** `load` sets `maxCommandChainLength` and `maxCommandForkCount` to 1,000,000 (defaults 65,536) — the ride start builds ~a hundred columns, each with a near-ground scan, inside one command chain, and at the vanilla cap the chain was silently truncated mid-`begin` (rider never mounted). Like the `setup_world` rules, this persists in the world until changed by hand.
+- **The pack raises the command-chain budget gamerules.** `load` sets `maxCommandChainLength` and `maxCommandForkCount` to 1,000,000 (defaults 65,536) as headroom for heavy config values — the launch itself no longer depends on it (it is phased across ticks, §6.3), but a silently-truncated chain is undebuggable, so the budgets are kept far away. Like the `setup_world` rules, this persists in the world until changed by hand.
 - **File edits need `/reload`.** See §8 — the single most common point of confusion.
 - **Ride modes persist on purpose.** The `mode_*` toggles (§6.9) survive `stop`, `/reload` and rejoins, and rain/night mode set plain vanilla world state (weather-/daylight-cycle gamerules + `/weather`/`/time`) that nothing in the pack unwinds automatically. Run the `_off` functions to restore vanilla behavior; uninstalling the pack while rain/night are on leaves the cycles frozen until re-enabled by hand.
 - **Minecart speed & the feature flag.** `.MAXSPEED` and the ocean speed-up (§7h) drive the minecart max-speed gamerule, which exists only with the **Minecart Improvements** feature. The pack **enables that feature itself** (`features.enabled` in `pack.mcmeta`), so the gamerule is present whenever the pack is loaded — no manual experiment toggle needed. The rule is named `minecartMaxSpeed` on formats 82-91 and `max_minecart_speed` on 92+ (renamed in 25w44a); `names.mcfunction` (base vs `overlay_snake`) supplies the right name into `rule` and `set_speed` runs only that one (a macro line that expands to an unknown gamerule would abort the function, so the wrong name is never emitted). If a speed change still doesn't take, set `.DEBUGMODE 1` — it prints the speed being set and the pace cart's real `Motion[0]×100` each chunk.
@@ -674,9 +686,10 @@ Current defaults in `config.mcfunction`: `.HOVER 2`, `.TUNNEL 6`, `.CAMHEIGHT 0`
                                                ├─ forceload_here ─ forceload (macro)
                                                ├─ (track-history reset)
                                                ├─ place_flat (first column) ─ summon ir_cart + ir_plug
-                                               ├─ build_loop … (pre-build past the rig position)
-                                               ├─ summon ir_seat + ir_ride, mount the stack
-                                               └─ cam_follow (snap the rig into place)
+                                               └─ tag ir_rider, set .pregoal, .started = 2
+(tick, while .started = 2) ─ launch_tick ─┬─ build_loop … (the runway, 24 columns/tick)
+                                          └─ (at .pregoal) launch_done ─┬─ summon ir_seat + ir_ride, mount the stack
+                                                                        └─ cam_follow (snap the rig into place), .started = 1
 /function infinite_rail:stop  ─ stop
 
 /function infinite_rail:mode_rain_on|off   ─ (names →) set_rule (macro) + weather /function infinite_rail:mode_night_on|off  ─ (names →) set_rule (macro) + time /function infinite_rail:mode_torches_on|off ─ .TORCHMODE (read by advance step 6b) /function infinite_rail:mode_sky_on|off    ─ .SKYMODE (read by decide + ocean_check) + sky_speed / set_speed /function infinite_rail:modes              ─ status printout

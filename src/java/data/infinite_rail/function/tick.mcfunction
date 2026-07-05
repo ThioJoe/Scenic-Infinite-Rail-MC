@@ -2,6 +2,9 @@
 # The Settings book's click dispatcher (the /trigger relay -- see menu_tick).
 function infinite_rail:menu_tick
 execute if score .started ir matches 1 run function infinite_rail:main
+# .started 2 = a launch is in progress: begin seeded the ride and the runway
+# is being pre-built a slice per tick (see launch_tick / launch_done).
+execute if score .started ir matches 2 run function infinite_rail:launch_tick
 
 # Auto-start: in a fresh world, begin the ride for the first player to appear
 # -- no command needed.

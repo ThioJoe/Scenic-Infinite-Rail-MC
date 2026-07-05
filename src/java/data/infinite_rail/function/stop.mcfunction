@@ -1,5 +1,7 @@
 # Ends the ride and cleans up. The world and track are left as-is.
+# (Setting .started 0 also cancels a launch still in progress -- .started 2.)
 scoreboard players set .started ir 0
+tag @a remove ir_rider
 effect clear @a[gamemode=adventure]
 # Take the Settings book (the mode-menu item) back -- the ride is over.
 clear @a[gamemode=adventure] minecraft:written_book

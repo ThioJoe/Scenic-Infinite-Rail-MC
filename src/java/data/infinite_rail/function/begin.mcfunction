@@ -1,4 +1,9 @@
-# Starts the ride. Runs as/at the starting player, aligned to the block grid.
+# Starts the ride: phase 1 of the launch. Runs as/at the starting player,
+# aligned to the block grid. Seeds the world, the anchor, the first column
+# and the pace cart, then hands off to launch_tick (via .started 2), which
+# pre-builds the runway across several ticks and finishes the launch in
+# launch_done (the rig + the one player mount). See the handoff comment at
+# the bottom for why the launch is phased.
 
 # --- Reset any previous run ---
 scoreboard players set .started ir 0
@@ -12,6 +17,7 @@ kill @e[type=item_display,tag=ir_seat]
 kill @e[type=item_display,tag=ir_plug]
 forceload remove all
 ride @s dismount
+tag @a remove ir_rider
 
 # --- World tuning ---
 # setup_world exists in two copies -- a base (camelCase) one and a snake_case
@@ -71,43 +77,29 @@ execute at @e[type=marker,tag=ir_head,limit=1] run summon minecraft:minecart ~ ~
 execute at @e[type=marker,tag=ir_head,limit=1] run summon minecraft:item_display ~ ~1 ~ {Tags:["ir_plug"]}
 ride @e[type=item_display,tag=ir_plug,limit=1] mount @e[type=minecart,tag=ir_cart,limit=1]
 
-# --- Pre-build past the rig position so the viewer starts on ready track ---
+# --- Seed the ocean speed-up state ---
 execute store result score .cartX ir run data get entity @e[type=minecart,tag=ir_cart,limit=1] Pos[0] 1
-# Seed the ocean speed-up state: the rider starts .CAMAHEAD blocks ahead of the
-# pace cart, so seed .lastChunk from that chunk (matches where ocean_check
-# samples). Empty ocean/land run counters.
+# The rider starts .CAMAHEAD blocks ahead of the pace cart, so seed
+# .lastChunk from that chunk (matches where ocean_check samples). Empty
+# ocean/land run counters.
 scoreboard players operation .lastChunk ir = .cartX ir
 scoreboard players operation .lastChunk ir += .CAMAHEAD ir
 scoreboard players operation .lastChunk ir /= .C16 ir
 scoreboard players set .oceanRun ir 0
 scoreboard players set .landRun ir 0
-scoreboard players operation .budget ir = .CAMAHEAD ir
-scoreboard players add .budget ir 32
-function infinite_rail:build_loop
 
-# --- The camera rig: seat (interpolated mover) + ride cart + rider ---
-# The rider mounts ONCE, here, and is never remounted during the ride (mount
-# events flash the vanilla "press X to dismount" hint, which can't be hidden).
-# The ride cart is a real minecart riding the seat, off the rails: the whole
-# stack moves rigidly with the seat's client-side interpolation, so the cart
-# can never bounce, tilt or shift against the rider's view.
-# teleport_duration:1 keeps the seat's interpolation in the same class as
-# normal entity movement so the world glides by smoothly.
-execute at @e[type=marker,tag=ir_head,limit=1] run summon minecraft:item_display ~ ~1 ~ {Tags:["ir_seat"],teleport_duration:1}
-execute at @e[type=marker,tag=ir_head,limit=1] run summon minecraft:minecart ~ ~1 ~ {Tags:["ir_ride"],Invulnerable:1b,Rotation:[90f,0f]}
-ride @e[type=minecart,tag=ir_ride,limit=1] mount @e[type=item_display,tag=ir_seat,limit=1]
-ride @s mount @e[type=minecart,tag=ir_ride,limit=1]
-gamemode adventure @s
-effect give @s minecraft:resistance infinite 255 true
-effect give @s minecraft:saturation infinite 0 true
-# The rider is visible again (they sit in a real cart) -- clear any leftover
-# invisibility from rides started on older pack versions.
-effect clear @s minecraft:invisibility
-
-# --- Snap the rig to its cruising position and hand off to the ticker ---
-# The S-curve (c1) is stateless; only the descent chaser (.s2) needs seeding.
-scoreboard players operation .s2 ir = .railY ir
-scoreboard players operation .s2 ir *= .C1000 ir
-function infinite_rail:cam_follow
-scoreboard players set .started ir 1
-tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Enjoy the ride.","color":"gray"}]
+# --- Hand the rest of the launch to the ticker (launch_tick/launch_done) ---
+# The runway pre-build (~.CAMAHEAD+32 columns) plus the rig used to run right
+# here, synchronously -- but one command chain that big brushes vanilla's
+# per-chain command/fork budgets, and a chain that exceeds a budget is cut
+# off SILENTLY. That manifested as: track built, pace cart rolling away, rig
+# never summoned, rider never mounted, .started never set. So begin now only
+# marks the launch: .started 2 makes tick run launch_tick, which extends the
+# runway a couple dozen columns per tick (every tick is its own fresh chain,
+# so no budget can ever be hit) and then finishes the launch in launch_done.
+# The rider is remembered by tag -- begin's player context is gone by then.
+tag @s add ir_rider
+scoreboard players operation .pregoal ir = .headX ir
+scoreboard players operation .pregoal ir += .CAMAHEAD ir
+scoreboard players add .pregoal ir 32
+scoreboard players set .started ir 2

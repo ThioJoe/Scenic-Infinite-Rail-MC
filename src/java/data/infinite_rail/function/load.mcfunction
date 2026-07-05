@@ -44,15 +44,14 @@ scoreboard players add .TUNNELUP ir 1
 # replaces it with the snake_case names (see pack.mcmeta and names.mcfunction).
 function infinite_rail:names
 
-# Raise the per-chain command budgets. Vanilla caps one command chain (a
-# function call and EVERYTHING nested under it) at 65536 commands / 65536
-# execution forks; the synchronous ride start pre-builds .CAMAHEAD+32 columns
-# in a single chain, and with the per-column near-ground scan that is well
-# past the default -- the chain was getting cut off silently in the middle of
-# begin, leaving the track built but the rider never mounted and .started
-# never set. load runs in its own (small) chain, so the raise here is already
-# in force for every later start/tick chain. Names are version-dependent
-# (snake_case on 26.x), so they come from names.mcfunction via set_rule.
+# Raise the per-chain command budgets (belt and suspenders). Vanilla caps
+# one command chain -- a function call and EVERYTHING nested under it -- at
+# 65536 commands / 65536 execution forks, and a chain that exceeds a budget
+# is TRUNCATED SILENTLY, which is undebuggable in the field. The launch no
+# longer depends on this (it is phased across ticks -- launch_tick), but
+# heavy config values (.MAXTICK, .UPLOOK) deserve headroom. Names are
+# version-dependent (snake_case on 26.x), so they come from names.mcfunction
+# via set_rule.
 data modify storage infinite_rail:rule rule set from storage infinite_rail:names chain_length
 data modify storage infinite_rail:rule v set value "1000000"
 function infinite_rail:set_rule with storage infinite_rail:rule
