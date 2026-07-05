@@ -1,3 +1,6 @@
 *.lnk
 # Build output (assembled packs + release archives); rebuild with: node tools/build.mjs
 dist/
+prompt.txt
+
+
