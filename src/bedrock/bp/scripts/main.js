@@ -165,6 +165,20 @@ let saveCountdown = 0;
 // resurrect a canceled ride.
 let lifecycleGen = 0;
 
+// Loud, rate-limited error reporting. A script error that is only swallowed
+// (or only lands in the Content Log) presents in-game as "the pack does
+// nothing", which is undebuggable for a player -- so every guarded top-level
+// path reports its first error to chat, at most once per ~10 s.
+let tickN = 0;
+let lastErrAt = -1e9;
+function reportError(where, e) {
+  if (tickN - lastErrAt < 200) return;
+  lastErrAt = tickN;
+  try {
+    world.sendMessage(`${PREFIX}§cError in ${where}: ${e}§7 (also check the Content Log)`);
+  } catch { /* chat not available yet (early startup) */ }
+}
+
 // --- Small helpers -----------------------------------------------------------
 
 function objective() {
@@ -172,8 +186,16 @@ function objective() {
 }
 
 function getScore(name, fallback) {
-  const v = objective().getScore(P + name);
-  return v === undefined ? fallback : v;
+  // getScore is documented to throw; on some versions it throws for fake
+  // players that have never been registered (rather than returning
+  // undefined), so an unguarded read of a not-yet-set score can kill the
+  // caller. Treat any throw exactly like "no score yet".
+  try {
+    const v = objective().getScore(P + name);
+    return v === undefined ? fallback : v;
+  } catch {
+    return fallback;
+  }
 }
 
 function setScore(name, value) {
@@ -702,7 +724,12 @@ function begin(player) {
       && chunkLoaded(startX + cfg('CAMAHEAD'), S.centerZ);
     if (!ready && waited < 200) return;
     system.clearRun(poll);
-    beginPhase2(startX);
+    try {
+      beginPhase2(startX);
+    } catch (e) {
+      reportError('ride start', e);
+      abortLaunch('an internal error -- see the message above.');
+    }
   }, 5);
 }
 
@@ -767,10 +794,11 @@ function beginPhase2(startX) {
     spawnRig(rigPos);
     const cart = findCart();
     cart?.getComponent('minecraft:rideable')?.addRider(player);
-  } catch {
-    // Rig chunk still not generated after the 50 s wait (or the player
-    // portaled away mid-launch): give up cleanly instead of dying half-done.
-    abortLaunch('the starting area is still generating -- run the start command again.');
+  } catch (e) {
+    // Rig chunk still not generated after the 50 s wait, the player portaled
+    // away mid-launch, or the seat entity is unavailable: give up cleanly
+    // instead of dying half-done, and say which it was.
+    abortLaunch(`could not spawn the ride rig (${e}). If the terrain was still generating, run the start command again; otherwise make sure BOTH Infinite Rail packs (behavior + resource) are active and check the Content Log.`);
     return;
   }
 
@@ -848,7 +876,7 @@ function bridgeTest() {
   const touched = ['slope', 'flat', 'lastDir', 'target', 'railY', 'dir',
     'diff', 'slope0', 'want', 'need', 'ndead', 'nOne', 'bt'];
   const snap = {};
-  for (const k of touched) snap[k] = objective().getScore(P + k);
+  for (const k of touched) snap[k] = getScore(k, undefined);
 
   let legScores = false;
   let legBrain = false;
@@ -901,44 +929,62 @@ function init() {
   if (r === undefined) {
     say('§cconfig function failed to run -- using built-in defaults. Is the behavior pack fully installed?');
     for (const [k, v] of Object.entries(CONFIG_DEFAULTS)) {
-      if (objective().getScore(P + k) === undefined) setScore(k, v);
+      if (getScore(k, undefined) === undefined) setScore(k, v);
     }
   }
 
   loadState();
-  if (!S.started) bridgeTest();
   if (S.started) say('§7Ride resumed. Run §b/function infinite_rail/stop§7 to end it.');
   else say('§7Loaded. A fresh world starts the ride automatically; run §b/function infinite_rail/start§7 to (re)start it here.');
   inited = true;
+
+  // The self-test runs LAST, fully guarded, and after inited is set: it is a
+  // diagnostic, and no diagnostic may ever be the thing that breaks startup.
+  if (!S.started) {
+    try { bridgeTest(); } catch (e) { reportError('self-test', e); }
+  }
 }
 
 // init() is called from worldLoad, but also lazily from the tick driver and
 // the command bridge below: after a /reload the script module re-evaluates
 // without a fresh worldLoad event, and the ride must come back regardless.
+// A persistent init failure is REPORTED (rate-limited), never swallowed --
+// a silently dead script is indistinguishable from an uninstalled pack.
 function ensureInit() {
   if (inited) return true;
-  try { init(); } catch { /* world not ready yet */ }
+  try { init(); } catch (e) {
+    if (tickN > 40) reportError('startup', e); // give the world a 2s grace to actually load
+  }
   return inited;
 }
 
 world.afterEvents.worldLoad.subscribe(ensureInit);
 
 system.afterEvents.scriptEventReceive.subscribe((ev) => {
-  if (!ensureInit()) return;
-  if (ev.id === `${NS}:start`) {
-    // Start at the triggering player if there is one (parity with Java's
-    // "execute as @p"), else at the nearest player to spawn.
-    const player = ev.sourceEntity?.typeId === 'minecraft:player'
-      ? ev.sourceEntity
-      : world.getAllPlayers()[0];
-    if (player) begin(player);
-    else say('§cNo player online to start the ride at.');
-  } else if (ev.id === `${NS}:stop`) {
-    stop(false);
+  try {
+    if (!ensureInit()) { say('§cThe pack is not initialized yet -- see any error above.'); return; }
+    if (ev.id === `${NS}:start`) {
+      // Start at the triggering player if there is one (parity with Java's
+      // "execute as @p"), else at the nearest player to spawn.
+      const player = ev.sourceEntity?.typeId === 'minecraft:player'
+        ? ev.sourceEntity
+        : world.getAllPlayers()[0];
+      if (player) begin(player);
+      else say('§cNo player online to start the ride at.');
+    } else if (ev.id === `${NS}:stop`) {
+      stop(false);
+    }
+  } catch (e) {
+    reportError('start/stop command', e);
   }
 }, { namespaces: [NS] });
 
 system.runInterval(() => {
+  tickN += 1;
+  try { tick(); } catch (e) { reportError('tick', e); }
+});
+
+function tick() {
   if (!ensureInit()) return;
 
   if (!S.started) { autoStart(); return; }
@@ -987,4 +1033,4 @@ system.runInterval(() => {
   buildLoop();                      // 7.  extend the track
 
   if (--saveCountdown <= 0) { saveState(); saveCountdown = 40; }
-});
+}
