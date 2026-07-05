@@ -148,7 +148,7 @@ scoreboard players set #OCEANCHUNKS ir 6
 
 # How many consecutive non-ocean chunks after a speed-up before it reverts to
 # #MAXSPEED (so brief islands/gaps don't keep flipping the speed).
-scoreboard players set #LANDCHUNKS ir 4
+scoreboard players set #LANDCHUNKS ir 3
 
 
 # --- Slope shaping (the "event" model) -------------------------------------
@@ -247,21 +247,21 @@ scoreboard players set #MAXTICK ir 15
 # default rides just above the cloud layer (Y 192). Terrain taller than this
 # is punched through like any rise the rail cannot climb over -- raise it
 # toward ~260 to clear even the tallest jagged peaks (build limit 320).
-scoreboard players set #SKYY ir 200
+scoreboard players set #SKYY ir 180
 
 # Sky mode: cruising speed (blocks/second) while the mode is on. There is
 # nothing nearby to look at up there, so it defaults to ocean pace. Applied
 # when the mode is toggled on (and at ride start if the mode was left on);
 # mode_sky_off restores #MAXSPEED. The ocean speed-up is paused while sky
 # mode owns the speed.
-scoreboard players set #SKYSPEED ir 32
+scoreboard players set #SKYSPEED ir 18
 
 # Torch mode: the percent chance (0-100) that each newly built column plants
 # a torch somewhere beside the track (#TORCHRANGE below controls how far
 # out). 10 = on average about one torch per 10 blocks of line. Torches are
 # only placed where one can actually stand (never on water, ice or snow
 # layers), and only on NEW track built while the mode is on.
-scoreboard players set #TORCHODDS ir 10
+scoreboard players set #TORCHODDS ir 35
 
 # Torch mode: how far (in blocks) a torch may land from the track's
 # centerline. Each torch rolls a random distance from 2 up to this, on a
@@ -269,7 +269,7 @@ scoreboard players set #TORCHODDS ir 10
 # values above 8 automatically widen the rolling forceload corridor so the
 # whole torch band stays loaded and generated (a few more chunks in memory
 # while torch mode is on); both editions cap the effective value at 48.
-scoreboard players set #TORCHRANGE ir 8
+scoreboard players set #TORCHRANGE ir 32
 
 
 # --- Debugging --------------------------------------------------------------
