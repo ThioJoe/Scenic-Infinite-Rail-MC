@@ -1,0 +1,64 @@
+{
+  "format_version": "1.14.0",
+  "sound_definitions": {
+    "step.stone": {
+      "category": "player",
+      "sounds": [
+        {
+          "name": "sounds/step/stone1",
+          "volume": 0.0
+        },
+        {
+          "name": "sounds/step/stone2",
+          "volume": 0.0
+        },
+        {
+          "name": "sounds/step/stone3",
+          "volume": 0.0
+        },
+        {
+          "name": "sounds/step/stone4",
+          "volume": 0.0
+        },
+		{
+          "name": "sounds/step/stone4",
+          "volume": 0.0
+        },
+		{
+          "name": "sounds/step/stone4",
+          "volume": 0.0
+        }
+      ]
+    },
+    "step.grass": {
+      "category": "player",
+      "sounds": [
+        {
+          "name": "sounds/step/grass1",
+          "volume": 0.0
+        },
+        {
+          "name": "sounds/step/grass2",
+          "volume": 0.0
+        },
+        {
+          "name": "sounds/step/grass3",
+          "volume": 0.0
+        },
+        {
+          "name": "sounds/step/grass4",
+          "volume": 0.0
+        }
+      ]
+    },
+    "minecart.base": {
+      "category": "player",
+      "sounds": [
+        {
+          "name": "sounds/minecart/minecart",
+          "volume": 0.0
+        }
+      ]
+    }
+  }
+}
