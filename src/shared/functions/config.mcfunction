@@ -107,9 +107,10 @@ scoreboard players set .CAMMODE cfg_camera 0
 
 # BEDROCK EDITION ONLY (ignored on Java). Fine-tune for the minecart
 # VISUAL's height, in TENTHS of a block (negative = draw it lower). The
-# pack's cart model is already re-based to sit correctly at 0, so this is
-# purely for taste -- keep it small (within about -3..3). Large negative
-# values sink the cart ENTITY into the track blocks, where it suffocates.
+# pack's cart model is supposed to be already re-based to sit correctly at 0, 
+# but in reality ~12 or seems to be correct.
+# Purely for taste. Large negative values sink the cart ENTITY into
+# the track blocks, where it may suffocate (untested).
 # Tune live (takes effect instantly):
 #   /scoreboard players set .CARTYOFF cfg_camera -1
 scoreboard players set .CARTYOFF cfg_camera 12
