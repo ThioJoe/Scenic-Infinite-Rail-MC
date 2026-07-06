@@ -21,3 +21,12 @@ gamerule drowningdamage false
 gamerule doimmediaterespawn true
 # Keep the spawn-protection area from anchoring chunks at the origin.
 gamerule spawnradius 0
+# No recipe unlocking (every unlock pops a toast + chat line; false = the
+# classic everything-available recipe book), and silence any recipe message
+# that would still slip through. Bedrock-only rules -- Java has neither, so
+# its begin pre-unlocks all recipes instead.
+gamerule recipesunlock false
+gamerule showrecipemessages false
+# No tutorial-hint toasts over the ride (Bedrock-only command; Java's
+# tutorial hints are a client setting no pack can reach).
+gametips disable

@@ -855,13 +855,14 @@ function placeColumn(x, y, dir, veg) {
 // Torch mode (.TORCHMODE -- mode_torches_on): sprinkle torches on the
 // terrain around the line as it is built. The native twin of Java's
 // place_torch/torch_at/torch_try: same odds knob (.TORCHODDS percent of
-// columns), same 2..TORCHRANGE side offsets, same "skip every doubtful
-// spot" rule -- a missing torch is invisible, a floating or popped one is
-// not. Only onto ground the surface probe answers for, only into an air
-// cell, and never onto water/lava (the probe counts liquid surfaces as
-// terrain), ice (torches can't attach), leaves, snow layers or other
-// non-solid tops. The 48 cap matches Java's (its widened forceload
-// corridor's ceiling); here the scout bubble covers +-96 blocks anyway.
+// columns), same 2..TORCHRANGE side offsets, same placement policy -- only
+// genuinely hopeless spots are skipped (liquid or non-solid ground: a torch
+// over water/lava would float then pop). Everything else gets its attempt,
+// so frozen and snowy biomes are lit too: ice (all kinds) holds a torch
+// fine, and a snow LAYER occupying the target cell is REPLACED by the torch
+// (what placing one by hand on snowy ground does; requiring an air cell
+// left whole snowfields torchless). The 48 cap matches Java's (its widened
+// forceload corridor's ceiling); here the scout bubble covers +-96 anyway.
 function maybeTorch(x) {
   if (Math.random() * 100 >= cfg('TORCHODDS')) return;
   const side = Math.random() < 0.5 ? -1 : 1;
@@ -877,8 +878,9 @@ function maybeTorch(x) {
     if (!below || !cell) return;
     if (below.isLiquid === true || below.isSolid === false) return;
     const bid = below.typeId ?? '';
-    if (bid.includes('ice') || bid.includes('leaves') || bid === 'minecraft:snow_layer') return;
-    if (!(cell.isAir === true || cell.typeId === 'minecraft:air')) return;
+    if (bid.includes('leaves')) return; // canopy top the probe couldn't dig past
+    const cid = cell.typeId ?? '';
+    if (!(cell.isAir === true || cid === 'minecraft:air' || cid === 'minecraft:snow_layer')) return;
     dim.setBlockPermutation({ x, y: surf, z }, TORCH);
   } catch { /* border chunk: skip this torch */ }
 }
@@ -1270,12 +1272,47 @@ function glide(ent, target) {
   }
 }
 
+// The cart's cell and the one in front of it (each plus the cell above --
+// the cart is about a block tall) must never hold liquid: water right at the
+// viewer splashes and drags, lava flashes the fire overlay even though the
+// damage gamerules make it harmless. Java runs the same guard as a fill at
+// its pace cart; here the rig IS the thing the player sees, so it runs at
+// the cart. Adjacent sources re-flow, but this runs every tick.
+function clearCartLiquids(target) {
+  const bx = Math.floor(target.x);
+  const by = Math.floor(target.y);
+  const z = S.centerZ;
+  for (const [dx, dy] of [[0, 0], [0, 1], [1, 0], [1, 1]]) {
+    try {
+      const b = dim.getBlock({ x: bx + dx, y: by + dy, z });
+      if (b && b.isLiquid === true) dim.setBlockType({ x: bx + dx, y: by + dy, z }, 'minecraft:air');
+    } catch { /* border chunk: retry next tick */ }
+  }
+}
+
+// Dropped items and XP orbs near the rig are removed before the rider
+// glides into pickup range -- the inventory keeper deletes pickups
+// instantly, but the pickup SOUND still plays; sweeping them early keeps
+// the ride silent. (Java sweeps the same radius around its camera seat.)
+function sweepDrops(seat) {
+  let center;
+  try { center = seat.location; } catch { return; }
+  for (const type of ['minecraft:item', 'minecraft:xp_orb']) {
+    try {
+      for (const e of dim.getEntities({ type, location: center, maxDistance: 16 })) {
+        try { e.remove(); } catch { /* already gone */ }
+      }
+    } catch { /* query raced a chunk unload: retry next tick */ }
+  }
+}
+
 function camMove(seat, cart, sy) {
   const target = {
     x: S.paceX + cfg('CAMAHEAD'),
     y: sy + CART_REST + cfg('CAMHEIGHT') / 10,
     z: S.centerZ + 0.5,
   };
+  clearCartLiquids(target);
   glide(seat, target);
   if (cart) {
     // The vanilla minecart geometry draws one block above a custom
@@ -1968,6 +2005,7 @@ function tick() {
   }
   if (seat && cart) {
     keepers(seat);                  // 2-4. eject strangers, re-seat the rider
+    sweepDrops(seat);               // 5.  no pickup sounds: drops die early
     const sy = camFollow();         // 6.  the smoothed rail-line height
     if (sy !== undefined) camMove(seat, cart, sy); // glide seat + cart prop
   }

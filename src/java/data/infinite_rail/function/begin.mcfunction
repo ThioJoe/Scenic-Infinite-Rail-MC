@@ -25,6 +25,12 @@ tag @a remove ir_rider
 # version (format 92+ gets the overlay). Just call it once.
 function infinite_rail:setup_world
 
+# Java has no recipe-unlocking gamerule (Bedrock's setup_world uses one), so
+# pre-unlock EVERY recipe instead: with nothing left to unlock, no "recipes
+# unlocked" toast can ever pop mid-ride. Costs one combined toast here at
+# start, before the launch.
+recipe give @s *
+
 # Apply the land cruising speed (.speed -- the config default .MAXSPEED
 # unless adjusted with the Speed +/- items; state, so a chosen speed sticks
 # across ride restarts) to the minecart max-speed gamerule once, at the

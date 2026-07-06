@@ -22,11 +22,35 @@ execute as @a[gamemode=adventure] unless data entity @s RootVehicle run ride @s 
 # Keeper: prevent the ride cart from visually tilting due to the minecart_improvements experiment.
 execute as @e[type=minecart,tag=ir_ride,limit=1] run data modify entity @s Rotation[1] set value 0.0f
 
-# Keeper: keep the player's inventory empty to hide held items and prevent
-# picking things up -- then hand the Settings book straight back into the
-# last hotbar slot (the clear wipes it each tick, give_menu re-pins it; net
-# effect: the book is always there and nothing else ever accumulates).
-clear @a[gamemode=adventure]
+# Keeper: no creature may crowd the pace cart -- entities physically shove a
+# minecart around, and a mob pile can slow or stall it outright. The rider is
+# .CAMAHEAD blocks ahead, so nothing here is ever seen or heard. Every entity
+# kind the ride itself uses is excluded (pace/ride carts, the plug/seat
+# displays, the support-disguise block_displays, the head/probe markers);
+# the kill sweeping up nearby dropped items/orbs too is fine -- doTileDrops
+# is off and nobody is looking.
+execute at @e[type=minecart,tag=ir_cart,limit=1] run kill @e[type=!player,type=!minecart,type=!marker,type=!item_display,type=!block_display,distance=..8]
+
+# Keeper: the pace cart must never run through liquid -- water drags a
+# minecart to a crawl and lava sets everything on fire. Clear any water/lava
+# from the cart's cell and the one ahead of it (each plus the cell above --
+# the cart is about a block tall). Flowing water can't waterlog the rails
+# themselves (waterlogging only happens at placement), so clearing the open
+# cells is the whole job; adjacent sources re-flow, but this runs every tick.
+execute at @e[type=minecart,tag=ir_cart,limit=1] align xyz run fill ~ ~ ~ ~1 ~1 ~ minecraft:air replace minecraft:water
+execute at @e[type=minecart,tag=ir_cart,limit=1] align xyz run fill ~ ~ ~ ~1 ~1 ~ minecraft:air replace minecraft:lava
+
+# Keeper: vaporize dropped items and XP orbs before the rider glides into
+# pickup range -- the inventory keeper deletes pickups instantly, but the
+# pickup SOUND still plays; killing them ahead of time keeps the ride silent.
+execute at @e[type=item_display,tag=ir_seat,limit=1] run kill @e[type=item,distance=..16]
+execute at @e[type=item_display,tag=ir_seat,limit=1] run kill @e[type=experience_orb,distance=..16]
+
+# Keeper: police the rider's inventory (give_menu): anything beyond the four
+# pinned hotbar items is wiped, and a missing/wrong pinned item is re-pinned
+# in place. (A blanket clear + re-give every tick used to re-fire the
+# client's item-pickup animation nonstop, freezing every hotbar icon on the
+# animation's first -- stretched -- frame.)
 execute as @a[gamemode=adventure] run function infinite_rail:give_menu
 
 # Keepers: plug on the pace cart, ride cart on the seat. Non-player
