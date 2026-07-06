@@ -9,7 +9,7 @@ scoreboard players operation .avg ir /= .C12 ir
 
 # --- 2. Target elevation = average surface + hover altitude ---
 scoreboard players operation .target ir = .avg ir
-scoreboard players operation .target ir += .HOVER ir
+scoreboard players operation .target ir += .HOVER cfg_terrain
 
 # --- 2b. Near-ground scan: .gfloor/.gmax for decide's slope-timing guards ---
 execute at @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:near_scan

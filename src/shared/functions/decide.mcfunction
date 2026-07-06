@@ -43,7 +43,7 @@ scoreboard players remove .nOne ir 1
 # onto the terrain-following target. Everything downstream (events, gaps,
 # carve modes, the camera) is unchanged: sky mode is just a different
 # opinion about where the rail wants to be.
-execute if score .SKYMODE ir matches 1 run scoreboard players operation .target ir = .SKYY ir
+execute if score .SKYMODE ir matches 1 run scoreboard players operation .target ir = .SKYY cfg_ride
 
 scoreboard players operation .diff ir = .target ir
 scoreboard players operation .diff ir -= .railY ir
@@ -90,21 +90,21 @@ scoreboard players set .dig2 ir 0
 scoreboard players set .push ir 0
 scoreboard players set .due ir 1
 scoreboard players operation .glim ir = .gfloor ir
-scoreboard players operation .glim ir += .DOWNGRACE ir
+scoreboard players operation .glim ir += .DOWNGRACE cfg_terrain
 scoreboard players operation .rnext ir = .railY ir
 scoreboard players remove .rnext ir 1
-execute unless score .SKYMODE ir matches 1 if score .DOWNLOOK ir matches 1.. if score .rnext ir < .glim ir run scoreboard players set .dig ir 1
+execute unless score .SKYMODE ir matches 1 if score .DOWNLOOK cfg_terrain matches 1.. if score .rnext ir < .glim ir run scoreboard players set .dig ir 1
 scoreboard players remove .rnext ir 1
-execute unless score .SKYMODE ir matches 1 if score .DOWNLOOK ir matches 1.. if score .rnext ir < .glim ir run scoreboard players set .dig2 ir 1
+execute unless score .SKYMODE ir matches 1 if score .DOWNLOOK cfg_terrain matches 1.. if score .rnext ir < .glim ir run scoreboard players set .dig2 ir 1
 scoreboard players operation .glift ir = .target ir
-scoreboard players operation .glift ir += .UPGRACE ir
+scoreboard players operation .glift ir += .UPGRACE cfg_terrain
 scoreboard players operation .gtop ir = .gmax ir
-scoreboard players operation .gtop ir += .HOVER ir
-execute unless score .SKYMODE ir matches 1 if score .UPLOOK ir matches 1.. if score .railY ir < .gtop ir if score .railY ir < .glift ir run scoreboard players set .push ir 1
+scoreboard players operation .gtop ir += .HOVER cfg_terrain
+execute unless score .SKYMODE ir matches 1 if score .UPLOOK cfg_terrain matches 1.. if score .railY ir < .gtop ir if score .railY ir < .glift ir run scoreboard players set .push ir 1
 scoreboard players operation .cgate ir = .gcone ir
-scoreboard players operation .cgate ir += .HOVER ir
-scoreboard players operation .cgate ir += .UPEARLY ir
-execute unless score .SKYMODE ir matches 1 if score .UPLOOK ir matches 1.. if score .railY ir >= .cgate ir run scoreboard players set .due ir 0
+scoreboard players operation .cgate ir += .HOVER cfg_terrain
+scoreboard players operation .cgate ir += .UPEARLY cfg_terrain
+execute unless score .SKYMODE ir matches 1 if score .UPLOOK cfg_terrain matches 1.. if score .railY ir >= .cgate ir run scoreboard players set .due ir 0
 
 # --- Continue an in-progress climb/descent until it reaches the target ---
 # A climb also continues past the target while ground is still at or above

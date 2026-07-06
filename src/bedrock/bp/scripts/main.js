@@ -141,25 +141,39 @@ const LEGACY_AREAS = ['ir_area_a', 'ir_area_b', 'ir_t0', 'ir_t1', 'ir_t2', 'ir_t
 const PREFIX = '§6[Infinite Rail]§r ';
 const DBG = '§3[IR debug]§r ';
 
-// The SETTINGS BOOK -- the mode-menu opener. A plain book (no vanilla use
-// action of its own), pinned into the rider's last hotbar slot by the
-// inventory keeper; "using" it (right-click / hold) fires itemUse and opens
-// the native mode menu (showMenu). Java's twin is a clickable written book
-// (give_menu.mcfunction) since Java has no native forms. Identified by
-// type + name so a random picked-up book could never open menus.
-const SETTINGS_SLOT = 8; // last hotbar slot, matching Java's hotbar.8
-const SETTINGS_ITEM = 'minecraft:book';
+// The PINNED HOTBAR ITEMS -- kept in place by the inventory keeper (which
+// clears everything else every tick) and matched by type + name in the
+// itemUse handler, so a random picked-up item could never trigger them.
+// Mirrors Java's give_menu slot for slot:
+//   0  "Speed -"   one block/s slower  (runs infinite_rail/speed_dec)
+//   1  "Speed +"   one block/s faster  (runs infinite_rail/speed_inc)
+//   7  "Debug"     opens the native debug form (chat output, sidebar views)
+//   8  "Settings"  opens the native ride-mode form (the classic)
+// The books are plain books (no vanilla use action of their own) and the
+// speed items are inert non-placeables, so "using" any of them just fires
+// itemUse. Java's twins are clickable written books + re-modeled
+// carrot_on_a_sticks (give_menu.mcfunction) since Java has no native forms.
+//
+// Deliberately NOT slot-locked (ItemLockMode.slot): Bedrock decorates
+// locked items with a lock badge and a "Can't be moved / dropped /
+// removed / crafted with" tooltip block, which reads as clutter. The
+// inventory keeper re-pins every item every tick, so a moved or dropped
+// one heals itself within a tick anyway.
 const SETTINGS_NAME = '§6Settings';
+const DEBUG_NAME = '§3Debug';
+const SPEED_UP_NAME = '§aSpeed +';
+const SPEED_DOWN_NAME = '§cSpeed -';
+const PINNED = [
+  { slot: 0, type: 'minecraft:red_dye', name: SPEED_DOWN_NAME, lore: ['§7One block/s slower'] },
+  { slot: 1, type: 'minecraft:emerald', name: SPEED_UP_NAME, lore: ['§7One block/s faster'] },
+  { slot: 7, type: 'minecraft:book', name: DEBUG_NAME, lore: ['§7Use to open the', '§7debug menu'] },
+  { slot: 8, type: 'minecraft:book', name: SETTINGS_NAME, lore: ['§7Use to open the', '§7ride mode menu'] },
+];
 
-function makeSettingsItem() {
-  const item = new ItemStack(SETTINGS_ITEM, 1);
-  item.nameTag = SETTINGS_NAME;
-  item.setLore(['§7Use to open the', '§7ride mode menu']);
-  // Deliberately NOT slot-locked (ItemLockMode.slot): Bedrock decorates
-  // locked items with a lock badge and a "Can't be moved / dropped /
-  // removed / crafted with" tooltip block, which reads as clutter. The
-  // inventory keeper re-pins the book every tick, so a moved or dropped
-  // book heals itself within a tick anyway.
+function makePinnedItem(def) {
+  const item = new ItemStack(def.type, 1);
+  item.nameTag = def.name;
+  item.setLore(def.lore);
   return item;
 }
 
@@ -191,6 +205,34 @@ const CONFIG_DEFAULTS = {
   UPLOOK: 50, UPGRACE: 10, UPEARLY: 6, DOWNLOOK: 16, DOWNGRACE: 1,
   AHEAD: 224, GENAHEAD: 192, MAXTICK: 15, DEBUGMODE: 0,
   SKYY: 180, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 32,
+};
+
+// Which objective each knob lives in. The tunables are split into three
+// sidebar-sized groups (a vanilla sidebar shows ONE objective, max 15 rows)
+// so the Debug menu can display any whole group; .DEBUGMODE/.AUTOSTART stay
+// in `ir` with the runtime state. Must match config.mcfunction and Java's
+// load.mcfunction.
+const CFG_GROUPS = {
+  cfg_terrain: ['HOVER', 'TUNNEL', 'DEADBAND', 'SAMEGAP', 'TURNGAP',
+    'SLOPECLEAR', 'UPCLAMP', 'DOWNCLAMP', 'UPLOOK', 'UPGRACE', 'UPEARLY',
+    'DOWNLOOK', 'DOWNGRACE'],
+  cfg_camera: ['CAMHEIGHT', 'CAMBLEND', 'CAMSMOOTH', 'CAMLIFT', 'CAMAHEAD',
+    'CAMMODE', 'CARTYOFF', 'HIDEHAND'],
+  cfg_ride: ['MAXSPEED', 'OCEANSPEED', 'OCEANCHUNKS', 'LANDCHUNKS', 'SKYY',
+    'SKYSPEED', 'TORCHODDS', 'TORCHRANGE', 'AHEAD', 'GENAHEAD', 'MAXTICK'],
+};
+const CFG_OBJ = {}; // knob name -> objective id (defaults to OBJ)
+for (const [obj, keys] of Object.entries(CFG_GROUPS)) {
+  for (const k of keys) CFG_OBJ[k] = obj;
+}
+// Every objective the pack uses, with the sidebar display name it is created
+// with (`dbg` is the Debug menu's curated live-state mirror -- display-only).
+const OBJ_DISPLAY = {
+  ir: 'ir',
+  cfg_terrain: 'Terrain settings',
+  cfg_camera: 'Camera settings',
+  cfg_ride: 'Ride settings',
+  dbg: 'Live state',
 };
 
 // The vanilla ocean biomes (Bedrock has no biome tags, so #minecraft:is_ocean
@@ -276,29 +318,30 @@ function reportError(where, e) {
 
 // --- Small helpers -----------------------------------------------------------
 
-function objective() {
-  return world.scoreboard.getObjective(OBJ) ?? world.scoreboard.addObjective(OBJ);
+function objective(id = OBJ) {
+  return world.scoreboard.getObjective(id)
+    ?? world.scoreboard.addObjective(id, OBJ_DISPLAY[id] ?? id);
 }
 
-function getScore(name, fallback) {
+function getScore(name, fallback, obj = OBJ) {
   // getScore is documented to throw; on some versions it throws for fake
   // players that have never been registered (rather than returning
   // undefined), so an unguarded read of a not-yet-set score can kill the
   // caller. Treat any throw exactly like "no score yet".
   try {
-    const v = objective().getScore(P + name);
+    const v = objective(obj).getScore(P + name);
     return v === undefined ? fallback : v;
   } catch {
     return fallback;
   }
 }
 
-function setScore(name, value) {
-  objective().setScore(P + name, value | 0);
+function setScore(name, value, obj = OBJ) {
+  objective(obj).setScore(P + name, value | 0);
 }
 
 function cfg(name) {
-  return getScore(name, CONFIG_DEFAULTS[name]);
+  return getScore(name, CONFIG_DEFAULTS[name], CFG_OBJ[name] ?? OBJ);
 }
 
 function runCmd(command) {
@@ -338,36 +381,129 @@ function modeOn(name) {
   return v;
 }
 
+// The tri-state time mode (.NIGHTMODE: 0 = default day/night cycle,
+// 1 = night only, 2 = day only), read through the same bridge as the other
+// mode flags -- two successCount probes on cmd-bridge worlds.
+function nightMode() {
+  if (bridgeMode === 'api') {
+    const v = getScore('NIGHTMODE', 0);
+    return v >= 0 && v <= 2 ? v : 0;
+  }
+  if ((runCmd(`execute if score ${P}NIGHTMODE ir matches 1 run scoreboard players add ${P}probe ir 1`)?.successCount ?? 0) > 0) return 1;
+  if ((runCmd(`execute if score ${P}NIGHTMODE ir matches 2 run scoreboard players add ${P}probe ir 1`)?.successCount ?? 0) > 0) return 2;
+  return 0;
+}
+
+// The ride's land cruising speed: the .speed state score (adjusted by the
+// Speed +/- items and the Settings form's slider; seeded from .MAXSPEED by
+// the shared modes_init, clamped 1..64 by the shared speed_step). Falls
+// back to the config default where the score is unreadable (cmd-bridge
+// worlds -- there live speed changes degrade to the config value, like
+// every other live tweak).
+function landSpeed() {
+  const v = getScore('speed', 0);
+  return v >= 1 ? v : cfg('MAXSPEED');
+}
+
+// Route a speed change through the shared speed_step state machine (clamp
+// 1..64 + default detection) by feeding it a delta, then let speed_msg
+// report -- the same path as the +/- items and Java, so the feedback and
+// the clamping can never drift apart.
+function adjustSpeed(delta) {
+  runCmd(`scoreboard players set ${P}spdir ir ${delta | 0}`);
+  runCmd(`function ${NS}/speed_step`);
+  runCmd(`function ${NS}/speed_msg`);
+}
+
 // The native mode menu (@minecraft/server-ui), opened by using the Settings
-// book: one ModalFormData with a toggle per ride mode, pre-checked from the
-// live scores, applied on submit by running the same mode_* function files
-// the chat commands use -- so the menu, the commands and Java behave
-// identically, tellraw feedback included. Only actual changes run anything.
+// book: one ModalFormData pre-set from the live scores, applied on submit by
+// running the same mode_* / speed function files the chat commands use --
+// so the menu, the commands and Java behave identically, tellraw feedback
+// included. Only actual changes run anything.
 function showMenu(player) {
   const current = {
     rain: modeOn('RAINMODE'),
-    night: modeOn('NIGHTMODE'),
+    night: nightMode(),
     torches: modeOn('TORCHMODE'),
     sky: modeOn('SKYMODE'),
+    // Clamped to the slider's 1..64 range -- a hand-set out-of-range .speed
+    // must not make the form throw on its default value.
+    speed: Math.min(64, Math.max(1, landSpeed())),
   };
   const form = new ModalFormData()
     .title('Infinite Rail Settings')
     .toggle('Rain (permanent rain)', { defaultValue: current.rain })
-    .toggle('Night (frozen at midnight)', { defaultValue: current.night })
+    .dropdown('Time', ['Default (day/night cycle)', 'Night only (frozen midnight)', 'Day only (frozen noon)'], { defaultValueIndex: current.night })
     .toggle('Torches (scattered along new track)', { defaultValue: current.torches })
     .toggle('Sky (high-altitude cruise)', { defaultValue: current.sky })
+    .slider(`Ride speed, blocks/s (default ${cfg('MAXSPEED')})`, 1, 64, { defaultValue: current.speed, valueStep: 1 })
     .submitButton('Apply');
   form.show(player).then((r) => {
     if (r.canceled || !r.formValues) return;
-    const [rain, night, torches, sky] = r.formValues;
+    const [rain, night, torches, sky, speed] = r.formValues;
     const apply = (was, wanted, fn) => {
       if (was !== !!wanted) runCmd(`function ${NS}/mode_${fn}_${wanted ? 'on' : 'off'}`);
     };
     apply(current.rain, rain, 'rain');
-    apply(current.night, night, 'night');
     apply(current.torches, torches, 'torches');
     apply(current.sky, sky, 'sky');
+    const nightWant = night | 0;
+    if (nightWant !== current.night) {
+      runCmd(`function ${NS}/${['mode_night_off', 'mode_night_on', 'mode_day_on'][nightWant] ?? 'mode_night_off'}`);
+    }
+    const speedWant = Math.round(+speed);
+    if (speedWant !== current.speed) adjustSpeed(speedWant - current.speed);
   }).catch((e) => reportError('settings menu', e));
+}
+
+// The native debug menu, opened by using the Debug book: the .DEBUGMODE
+// chat-output toggle plus the scoreboard sidebar selector. A vanilla
+// sidebar shows ONE objective (max 15 rows), which is why the 30+ config
+// knobs live in three groups (cfg_terrain / cfg_camera / cfg_ride) and this
+// menu switches between them and the Live state view (the dbg mirror,
+// refreshed per tick while selected -- tickStateSidebar). Everything is
+// applied by running the same function files as Java's Debug book.
+const SIDEBAR_FN = ['sidebar_off', 'sidebar_terrain', 'sidebar_camera', 'sidebar_ride', 'sidebar_state'];
+function showDebugMenu(player) {
+  const current = {
+    chat: debugOn(),
+    sidebar: Math.min(4, Math.max(0, getScore('SIDEBAR', 0))),
+  };
+  const form = new ModalFormData()
+    .title('Infinite Rail Debug')
+    .toggle('Debug chat output (speed system, chunk status)', { defaultValue: current.chat })
+    .dropdown('Scoreboard sidebar', [
+      'Hidden',
+      'Terrain settings (cfg_terrain)',
+      'Camera settings (cfg_camera)',
+      'Ride settings (cfg_ride)',
+      'Live ride state',
+    ], { defaultValueIndex: current.sidebar })
+    .toggle('Print scoreboard command examples to chat', { defaultValue: false })
+    .submitButton('Apply');
+  form.show(player).then((r) => {
+    if (r.canceled || !r.formValues) return;
+    const [chat, sidebar, help] = r.formValues;
+    if (!!chat !== current.chat) runCmd(`function ${NS}/${chat ? 'debug' : 'debug_off'}`);
+    if ((sidebar | 0) !== current.sidebar) runCmd(`function ${NS}/${SIDEBAR_FN[sidebar | 0] ?? 'sidebar_off'}`);
+    if (help) runCmd(`function ${NS}/cmd_help`);
+  }).catch((e) => reportError('debug menu', e));
+}
+
+// The "Live state" sidebar's per-tick refresh (while .SIDEBAR is 4): the
+// ten shared-brain scores go through the shared debug_state (the same file
+// Java's debug_tick runs), and the five script-native values are written
+// beside them -- 15 rows total, the sidebar maximum, same names as Java.
+function tickStateSidebar() {
+  if (getScore('SIDEBAR', 0) !== 4) return;
+  runCmd(`function ${NS}/debug_state`);
+  try {
+    setScore('headX', S.headX, 'dbg');
+    setScore('gap', S.headX - Math.floor(S.paceX), 'dbg');
+    setScore('avg', S.avg, 'dbg');
+    setScore('fast', S.fast ? 1 : 0, 'dbg');
+    setScore('started', S.started ? 1 : 0, 'dbg');
+  } catch { /* dbg objective unavailable (split scoreboards) */ }
 }
 
 function findRider() {
@@ -1004,9 +1140,11 @@ function oceanCheck() {
       dbg(`§eland chunk - landRun=§f${S.landRun}§e/§f${cfg('LANDCHUNKS')}§7  speed=§f${(S.paceSpeed * 20).toFixed(1)}`);
     }
     if (S.fast && S.landRun >= cfg('LANDCHUNKS')) {
-      // speed_down: restored once on the transition back to land.
-      S.targetSpeed = cfg('MAXSPEED') / 20;
-      dbg(`§eslowing down over land, speed §f${cfg('MAXSPEED')}`);
+      // speed_down: the land cruising speed (.speed -- the config default
+      // unless adjusted with the Speed items), restored once on the
+      // transition back to land.
+      S.targetSpeed = landSpeed() / 20;
+      dbg(`§eslowing down over land, speed §f${landSpeed()}`);
       S.fast = false;
     }
   }
@@ -1028,9 +1166,9 @@ function tickPace() {
     S.fast = false;
     S.oceanRun = 0;
     S.landRun = 0;
-    S.targetSpeed = cfg('MAXSPEED') / 20;
+    S.targetSpeed = landSpeed() / 20;
   } else if (!S.fast) {
-    S.targetSpeed = cfg('MAXSPEED') / 20; // land speed stays live-tweakable
+    S.targetSpeed = landSpeed() / 20; // the land speed stays live-adjustable
   }
   skyWas = sky;
   const accel = ACCEL / 20;
@@ -1286,18 +1424,20 @@ function keepers(seat) {
     riderAstray = 0;
   }
 
-  // Keep the rider's inventory empty -- except the pinned Settings book,
-  // the mode-menu opener -- hiding held items and stopping item pickup.
+  // Keep the rider's inventory empty -- except the pinned hotbar items
+  // (Settings/Debug books, Speed +/-) -- hiding held items and stopping
+  // item pickup.
   try {
     const inv = rider.getComponent('minecraft:inventory')?.container;
     if (inv) {
       for (let i = 0; i < inv.size; i++) {
-        if (i === SETTINGS_SLOT) continue;
-        if (inv.getItem(i)) inv.setItem(i, undefined);
-      }
-      const cur = inv.getItem(SETTINGS_SLOT);
-      if (!cur || cur.typeId !== SETTINGS_ITEM || cur.nameTag !== SETTINGS_NAME) {
-        inv.setItem(SETTINGS_SLOT, makeSettingsItem());
+        const want = PINNED.find((d) => d.slot === i);
+        const cur = inv.getItem(i);
+        if (!want) {
+          if (cur) inv.setItem(i, undefined);
+        } else if (!cur || cur.typeId !== want.type || cur.nameTag !== want.name) {
+          try { inv.setItem(i, makePinnedItem(want)); } catch { /* unknown item id on this version: leave the slot empty */ }
+        }
       }
     }
   } catch { /* container busy */ }
@@ -1358,9 +1498,9 @@ function begin(player) {
   }
 
   S.paceSpeed = 0;
-  S.targetSpeed = cfg('MAXSPEED') / 20;
+  S.targetSpeed = landSpeed() / 20;
   S.fast = false;
-  dbg(`default ride speed set to §f${cfg('MAXSPEED')}§7 blocks/s`);
+  dbg(`ride speed set to §f${landSpeed()}§7 blocks/s`);
 
   // Wait (up to ~50 s) for the ticking area to load/generate both the start
   // column and the rig position (startX + .CAMAHEAD, where the ride cart
@@ -1491,12 +1631,15 @@ function stop(silent) {
   if (rider) {
     try { rider.camera.clear(); } catch { /* not set */ }
     try { rider.runCommand('effect @s clear'); } catch { /* none */ }
-    // Take the Settings book (the mode-menu item) back -- the ride is over.
+    // Take the pinned hotbar items (Settings/Debug books, Speed +/-) back
+    // -- the ride is over.
     try {
       const inv = rider.getComponent('minecraft:inventory')?.container;
-      const cur = inv?.getItem(SETTINGS_SLOT);
-      if (cur && cur.typeId === SETTINGS_ITEM && cur.nameTag === SETTINGS_NAME) {
-        inv.setItem(SETTINGS_SLOT, undefined);
+      for (const def of PINNED) {
+        const cur = inv?.getItem(def.slot);
+        if (cur && cur.typeId === def.type && cur.nameTag === def.name) {
+          inv.setItem(def.slot, undefined);
+        }
       }
     } catch { /* inventory unavailable */ }
   }
@@ -1631,7 +1774,15 @@ function bridgeTest() {
 
 function init() {
   dim = world.getDimension('overworld');
-  objective();
+  // Create every objective the pack uses BEFORE config runs (a scoreboard
+  // write into a missing objective fails silently on Bedrock). Created both
+  // through the API and through a command so cmd-bridge worlds (split
+  // scoreboards -- see bridgeTest) get the command-side copies too; each
+  // call is a no-op wherever the objective already exists.
+  for (const [id, label] of Object.entries(OBJ_DISPLAY)) {
+    try { objective(id); } catch { /* API scoreboard unavailable */ }
+    runCmd(`scoreboard objectives add ${id} dummy "${label}"`);
+  }
 
   AIR = BlockPermutation.resolve('minecraft:air');
   RAIL_FLAT = BlockPermutation.resolve('minecraft:golden_rail', { rail_direction: 1, rail_data_bit: true });
@@ -1652,7 +1803,8 @@ function init() {
   if (r === undefined) {
     say('§cconfig function failed to run -- using built-in defaults. Is the behavior pack fully installed?');
     for (const [k, v] of Object.entries(CONFIG_DEFAULTS)) {
-      if (getScore(k, undefined) === undefined) setScore(k, v);
+      const obj = CFG_OBJ[k] ?? OBJ;
+      if (getScore(k, undefined, obj) === undefined) setScore(k, v, obj);
     }
   }
   // Seed the ride-mode toggle scores (0 = off) if they've never been set --
@@ -1706,19 +1858,29 @@ system.afterEvents.scriptEventReceive.subscribe((ev) => {
   }
 }, { namespaces: [NS] });
 
-// The Settings book: using it (right-click / hold) opens the native mode
-// menu. itemUse fires for a plain book because it has no vanilla use action
-// competing for the interaction; matched by type + name + rider so nothing
-// else can trigger it.
+// The pinned hotbar items: using one (right-click / hold) opens its menu or
+// nudges the speed. itemUse fires for all four because none has a vanilla
+// use action competing for the interaction; matched by type + name + rider
+// so nothing else can trigger anything. The speed items get a short
+// cooldown -- holding the use button fires itemUse repeatedly, and one
+// click should mean one block/s.
+let lastSpeedUseAt = -1e9;
 world.afterEvents.itemUse.subscribe((ev) => {
   try {
     if (!inited || !S.started) return;
     const item = ev.itemStack;
-    if (!item || item.typeId !== SETTINGS_ITEM || item.nameTag !== SETTINGS_NAME) return;
-    if (ev.source?.typeId !== 'minecraft:player' || ev.source.name !== S.riderName) return;
-    showMenu(ev.source);
+    if (!item || ev.source?.typeId !== 'minecraft:player' || ev.source.name !== S.riderName) return;
+    const def = PINNED.find((d) => d.type === item.typeId && d.name === item.nameTag);
+    if (!def) return;
+    if (def.name === SETTINGS_NAME) { showMenu(ev.source); return; }
+    if (def.name === DEBUG_NAME) { showDebugMenu(ev.source); return; }
+    if (def.name === SPEED_UP_NAME || def.name === SPEED_DOWN_NAME) {
+      if (tickN - lastSpeedUseAt < 4) return;
+      lastSpeedUseAt = tickN;
+      runCmd(`function ${NS}/${def.name === SPEED_UP_NAME ? 'speed_inc' : 'speed_dec'}`);
+    }
   } catch (e) {
-    reportError('settings menu', e);
+    reportError('hotbar menu', e);
   }
 });
 
@@ -1787,6 +1949,7 @@ function tick() {
     if (sy !== undefined) camMove(seat, cart, sy); // glide seat + cart prop
   }
   buildLoop();                      // 7.  extend the track
+  tickStateSidebar();               // 8.  the Debug menu's Live state mirror
 
   if (--saveCountdown <= 0) { saveState(); saveCountdown = 40; }
 }

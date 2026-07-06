@@ -7,10 +7,10 @@
 # Runs positioned at the head, which still sits on the LAST BUILT column
 # (advance moves it after decide). The span is clamped to the columns this
 # ride actually built, so the fill can never reach behind the start point.
-scoreboard players operation .rk ir = .SLOPECLEAR ir
+scoreboard players operation .rk ir = .SLOPECLEAR cfg_terrain
 scoreboard players operation .rt ir = .headX ir
 scoreboard players operation .rt ir -= .trackBase ir
 scoreboard players operation .rk ir < .rt ir
 execute store result storage infinite_rail:carve k int 1 run scoreboard players get .rk ir
-execute store result storage infinite_rail:carve h int 1 run scoreboard players get .TUNNEL ir
+execute store result storage infinite_rail:carve h int 1 run scoreboard players get .TUNNEL cfg_terrain
 function infinite_rail:retro_fill with storage infinite_rail:carve

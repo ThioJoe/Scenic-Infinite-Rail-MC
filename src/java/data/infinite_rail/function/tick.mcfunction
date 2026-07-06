@@ -1,6 +1,10 @@
 # Runs every game tick via #minecraft:tick.
-# The Settings book's click dispatcher (the /trigger relay -- see menu_tick).
+# The Settings/Debug books' click dispatcher (the /trigger relay -- see
+# menu_tick), which also fans out the Speed items' ir_click stat.
 function infinite_rail:menu_tick
+# The Debug book's "Live state" sidebar: refresh the dbg mirror while that
+# view is selected (.SIDEBAR 4 -- see sidebar_state / debug_tick).
+execute if score .SIDEBAR ir matches 4 run function infinite_rail:debug_tick
 execute if score .started ir matches 1 run function infinite_rail:main
 # .started 2 = a launch is in progress: begin seeded the ride and the runway
 # is being pre-built a slice per tick (see launch_tick / launch_done).

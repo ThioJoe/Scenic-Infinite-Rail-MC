@@ -10,9 +10,9 @@
 # scoreboards, so the distance is scaled from a fixed 0..99 roll and the
 # signed result is handed to the torch_at macro as a literal Z offset.
 execute store result score .tr ir run random value 1..100
-execute if score .tr ir > .TORCHODDS ir run return 0
+execute if score .tr ir > .TORCHODDS cfg_ride run return 0
 # Distance = 2 + roll * (range - 1) / 100, with roll = 0..99.
-scoreboard players operation .td ir = .TORCHRANGE ir
+scoreboard players operation .td ir = .TORCHRANGE cfg_ride
 execute if score .td ir matches ..2 run scoreboard players set .td ir 2
 execute if score .td ir matches 49.. run scoreboard players set .td ir 48
 scoreboard players remove .td ir 1

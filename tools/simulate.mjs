@@ -65,13 +65,18 @@ if (![...JAVA_FN, ...BEDROCK_FN].every((d) => existsSync(d))) {
 // lint guarantees shared files contain nothing else). Any line it cannot
 // parse EXACTLY is an error -- silently skipping a condition or command would
 // let a regression hide behind the interpreter's own blind spot.
+//
+// Scores are tracked PER OBJECTIVE (keyed "objective NAME"): the tunables
+// live in the three cfg_* objectives while runtime state stays in `ir`, and
+// a shared file reading a knob from the wrong objective must show up here as
+// the zero it would read in game, never be papered over by a flat namespace.
 // ---------------------------------------------------------------------------
-const CONDS_RE = /^(?:(?:if|unless) score \S+ ir (?:matches \S+|(?:<=|>=|=|<|>) \S+ ir) )+$/;
+const CONDS_RE = /^(?:(?:if|unless) score \S+ \S+ (?:matches \S+|(?:<=|>=|=|<|>) \S+ \S+) )+$/;
 
 class Sim {
   constructor(fnDirs) {
     this.fnDirs = fnDirs;
-    this.scores = new Map();
+    this.scores = new Map(); // "objective NAME" -> value
     this.fns = new Map();
   }
 
@@ -85,34 +90,41 @@ class Sim {
     return this.fns.get(name);
   }
 
-  get(name) { return this.scores.get(`.${name}`) ?? 0; }
-  set(name, v) { this.scores.set(`.${name}`, v | 0); }
+  get(name, obj = 'ir') { return this.scores.get(`${obj} .${name}`) ?? 0; }
+  set(name, v, obj = 'ir') { this.scores.set(`${obj} .${name}`, v | 0); }
 
   call(name) { for (const line of this.load(name)) this.exec(line); }
 
   exec(cmd) {
     let m;
-    if ((m = cmd.match(/^scoreboard players (set|add|remove) (\S+) ir (-?\d+)$/))) {
-      const [, op, who, val] = m;
+    if ((m = cmd.match(/^scoreboard players (set|add|remove) (\S+) (\S+) (-?\d+)$/))) {
+      const [, op, who, obj, val] = m;
+      const key = `${obj} ${who}`;
       const v = parseInt(val, 10);
-      const cur = this.scores.get(who) ?? 0;
-      this.scores.set(who, op === 'set' ? v : op === 'add' ? cur + v : cur - v);
+      const cur = this.scores.get(key) ?? 0;
+      this.scores.set(key, op === 'set' ? v : op === 'add' ? cur + v : cur - v);
       return;
     }
-    if ((m = cmd.match(/^scoreboard players reset (\S+)(?: ir)?$/))) {
-      this.scores.delete(m[1]);
+    if ((m = cmd.match(/^scoreboard players reset (\S+)(?: (\S+))?$/))) {
+      const [, who, obj] = m;
+      if (obj) this.scores.delete(`${obj} ${who}`);
+      else for (const k of [...this.scores.keys()]) {
+        if (k.endsWith(` ${who}`)) this.scores.delete(k);
+      }
       return;
     }
-    if ((m = cmd.match(/^scoreboard players operation (\S+) ir (=|\+=|-=|\*=|\/=|%=|<|>|><) (\S+) ir$/))) {
-      const [, a, op, b] = m;
-      const av = this.scores.get(a) ?? 0;
-      const bv = this.scores.get(b) ?? 0;
+    if ((m = cmd.match(/^scoreboard players operation (\S+) (\S+) (=|\+=|-=|\*=|\/=|%=|<|>|><) (\S+) (\S+)$/))) {
+      const [, a, aObj, op, b, bObj] = m;
+      const aKey = `${aObj} ${a}`;
+      const bKey = `${bObj} ${b}`;
+      const av = this.scores.get(aKey) ?? 0;
+      const bv = this.scores.get(bKey) ?? 0;
       const floordiv = (x, y) => Math.floor(x / y);
       const r = { '=': bv, '+=': av + bv, '-=': av - bv, '*=': av * bv,
         '/=': floordiv(av, bv), '%=': av - floordiv(av, bv) * bv,
         '<': Math.min(av, bv), '>': Math.max(av, bv), '><': bv }[op];
-      this.scores.set(a, r | 0);
-      if (op === '><') this.scores.set(b, av | 0);
+      this.scores.set(aKey, r | 0);
+      if (op === '><') this.scores.set(bKey, av | 0);
       return;
     }
     // Namespaced/path calls (edition-native files, e.g. the bridges) and the
@@ -134,15 +146,15 @@ class Sim {
     // Strict: the whole condition string must be well-formed if/unless-score
     // clauses; an unrecognized clause is an error, never a silent pass.
     if (!CONDS_RE.test(str)) throw new Error(`unparseable execute conditions: "${str}"`);
-    const re = /(if|unless) score (\S+) ir (?:matches (\S+)|(<=|>=|=|<|>) (\S+) ir)/g;
+    const re = /(if|unless) score (\S+) (\S+) (?:matches (\S+)|(<=|>=|=|<|>) (\S+) (\S+))/g;
     let m;
     while ((m = re.exec(str))) {
-      const [, kind, who, range, cmp, other] = m;
-      const v = this.scores.get(who) ?? 0;
+      const [, kind, who, obj, range, cmp, other, otherObj] = m;
+      const v = this.scores.get(`${obj} ${who}`) ?? 0;
       let pass;
       if (range !== undefined) pass = inRange(v, range);
       else {
-        const o = this.scores.get(other) ?? 0;
+        const o = this.scores.get(`${otherObj} ${other}`) ?? 0;
         pass = { '<': v < o, '<=': v <= o, '=': v === o, '>=': v >= o, '>': v > o }[cmp];
       }
       if (kind === 'unless') pass = !pass;
@@ -169,6 +181,13 @@ function inRange(v, range) {
 const CFG_KEYS = ['HOVER', 'DEADBAND', 'SAMEGAP', 'TURNGAP', 'UPCLAMP', 'DOWNCLAMP',
   'UPLOOK', 'UPGRACE', 'UPEARLY', 'DOWNLOOK', 'DOWNGRACE',
   'CAMBLEND', 'CAMLIFT', 'CAMSMOOTH', 'CAMAHEAD', 'SLOPECLEAR'];
+// The objective each knob lives in (the config split -- must match
+// config.mcfunction; camera knobs live in cfg_camera, the rest of CFG_KEYS
+// in cfg_terrain, and the sky knobs used by the sky-mode test in cfg_ride).
+const CFG_OBJ = Object.fromEntries(CFG_KEYS.map((k) => [
+  k, k.startsWith('CAM') ? 'cfg_camera' : 'cfg_terrain',
+]));
+const readCfg = (sim) => Object.fromEntries(CFG_KEYS.map((k) => [k, sim.get(k, CFG_OBJ[k])]));
 
 function advance(sim, S, surface, cfg) {
   const lo = S.avg - cfg.DOWNCLAMP;
@@ -242,7 +261,7 @@ function advance(sim, S, surface, cfg) {
 function runRide(fnDirs, surface, columns) {
   const sim = new Sim(fnDirs);
   sim.call('config');
-  const cfg = Object.fromEntries(CFG_KEYS.map((k) => [k, sim.get(k)]));
+  const cfg = readCfg(sim);
   sim.set('slope', 0);
   sim.set('flat', 99);
   sim.set('lastDir', 0);
@@ -473,14 +492,14 @@ console.log('\nSimulating sky mode (the fixed-altitude #SKYY override in the sha
   for (const [label, fnDirs] of [['java', JAVA_FN], ['bedrock', BEDROCK_FN]]) {
     const sim = new Sim(fnDirs);
     sim.call('config');
-    const cfg = Object.fromEntries(CFG_KEYS.map((k) => [k, sim.get(k)]));
+    const cfg = readCfg(sim);
     sim.set('slope', 0);
     sim.set('flat', 99);
     sim.set('lastDir', 0);
     sim.set('vclear', 0);
     sim.set('retro', 0);
     sim.set('SKYMODE', 1);
-    sim.set('SKYY', SKYY);
+    sim.set('SKYY', SKYY, 'cfg_ride');
     const startY = surface(0) + cfg.HOVER;
     const S = { headX: 0, railY: startY, avg: surface(0), track: [startY] };
     const log = [];

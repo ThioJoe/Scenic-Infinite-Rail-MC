@@ -12,9 +12,18 @@
 #  is to reset live tweaks (below) back to the values in this file.
 #
 #  To experiment with ONE value without editing this file, set its score
-#  directly in chat, e.g.:   /scoreboard players set .HOVER ir 8
+#  directly in chat, e.g.:   /scoreboard players set .HOVER cfg_terrain 8
 #  Live scoreboard edits take effect on the very next track column, and are
 #  reset back to the values below on the next /reload or rejoin.
+#
+#  WHERE THE VALUES LIVE: each setting sits in one of three sidebar-sized
+#  scoreboard objectives -- cfg_terrain (terrain following / slope shaping),
+#  cfg_camera (the ride rig) and cfg_ride (speed, mode knobs, performance) --
+#  so the in-game Debug menu can show any whole group on the scoreboard
+#  sidebar (a vanilla sidebar displays one objective, max 15 rows). The
+#  objective name is right there in each line below; use the same name in
+#  /scoreboard commands. (.DEBUGMODE and .AUTOSTART stay in the plain `ir`
+#  objective with the runtime state.)
 # =============================================================================
 
 
@@ -24,13 +33,13 @@
 # average terrain surface. Higher = a more sweeping, birds-eye view.
 # Keep it at least 2: the redstone power block under the rail is immune to
 # water, but the rail itself is not, so the track must stay above sea level.
-scoreboard players set .HOVER ir 2
+scoreboard players set .HOVER cfg_terrain 2
 
 # How high (in blocks above the rail) each column's clearance bore is carved --
 # i.e. the tunnel/headroom height. Slope columns automatically carve one block
 # taller. Keep it at least 3 (the tunnel light sits at rail+3). Bigger = airier
 # tunnels and cuttings at the cost of more blocks changed per column.
-scoreboard players set .TUNNEL ir 6
+scoreboard players set .TUNNEL cfg_terrain 6
 
 
 # --- Smooth camera (the ride rig) --------------------------------------------
@@ -49,7 +58,7 @@ scoreboard players set .TUNNEL ir 6
 # Also the fine-tune knob if the ride cart ever looks like it floats or sinks
 # a hair. Keep it small (<= ~5) so climb corners can't lift your head into
 # tunnel roofs.
-scoreboard players set .CAMHEIGHT ir 0
+scoreboard players set .CAMHEIGHT cfg_camera 0
 
 # Length (in blocks, EVEN numbers) of the S-curve blend at every slope
 # change. The camera transitions between "level" and "moving parallel with
@@ -59,13 +68,13 @@ scoreboard players set .CAMHEIGHT ir 0
 # it just rides parallel, however long the slope: the blend does NOT stretch
 # across the whole climb, so it never accumulates into tunnel-roof
 # collisions. Bigger = longer, lazier arcs; smaller = snappier.
-scoreboard players set .CAMBLEND ir 6
+scoreboard players set .CAMBLEND cfg_camera 6
 
 # Glide strength for DESCENTS (and settling into valleys): each tick the
 # camera closes 1/N of the remaining gap when the track drops away below it.
 # Climbs don't use this -- they follow the constructed S-curve above with no
 # lag. Higher = softer, floatier drops; lower = tighter; 1 = off.
-scoreboard players set .CAMSMOOTH ir 6
+scoreboard players set .CAMSMOOTH cfg_camera 6
 
 # How high (in TENTHS of a block) the camera rides above the rail line while
 # climbing. This is the crest-smoothing budget: the camera reaches the summit
@@ -77,7 +86,7 @@ scoreboard players set .CAMSMOOTH ir 6
 # half of .CAMBLEND (in blocks) makes summit landings progressively harder.
 # Setting this too high will probably make the camera raise too soon.
 # 25 seems to be an optimal number for smooth transitions.
-scoreboard players set .CAMLIFT ir 20
+scoreboard players set .CAMLIFT cfg_camera 20
 
 # How many blocks the viewer rides AHEAD of the hidden pace cart. Bigger
 # pushes the empty pacing cart further behind you (it's only visible looking
@@ -86,7 +95,7 @@ scoreboard players set .CAMLIFT ir 20
 # mid-ride shifts the view by the difference once.
 # (On Bedrock the pace cart is a virtual position computed by the script, so
 # there is nothing to see behind you; the knob works the same.)
-scoreboard players set .CAMAHEAD ir 64
+scoreboard players set .CAMAHEAD cfg_camera 64
 
 # BEDROCK EDITION ONLY (ignored on Java). Camera mode:
 #   0 = native rig (recommended): you sit in the gliding cart with the normal
@@ -94,7 +103,7 @@ scoreboard players set .CAMAHEAD ir 64
 #   1 = cinematic: the view is detached onto Bedrock's native camera system
 #       and eased along the path for extra glide, at the cost of your look
 #       input reaching the camera a beat (~0.15s) late.
-scoreboard players set .CAMMODE ir 0
+scoreboard players set .CAMMODE cfg_camera 0
 
 # BEDROCK EDITION ONLY (ignored on Java). Fine-tune for the minecart
 # VISUAL's height, in TENTHS of a block (negative = draw it lower). The
@@ -102,8 +111,8 @@ scoreboard players set .CAMMODE ir 0
 # purely for taste -- keep it small (within about -3..3). Large negative
 # values sink the cart ENTITY into the track blocks, where it suffocates.
 # Tune live (takes effect instantly):
-#   /scoreboard players set .CARTYOFF ir -1
-scoreboard players set .CARTYOFF ir 12
+#   /scoreboard players set .CARTYOFF cfg_camera -1
+scoreboard players set .CARTYOFF cfg_camera 12
 
 # BEDROCK EDITION ONLY (ignored on Java). 1 = hide the rider's first-person
 # arm automatically, like turning on the "Hide Hand" video setting, for a
@@ -115,7 +124,7 @@ scoreboard players set .CARTYOFF ir 12
 # in third-person / F5 view (the cart still shows). 0 = leave the arm
 # visible. Live-tunable mid-ride (takes effect within a second).
 # (Java has no equivalent mechanism; the Java rider keeps their arm.)
-scoreboard players set .HIDEHAND ir 1
+scoreboard players set .HIDEHAND cfg_camera 1
 
 
 # --- Auto-start -------------------------------------------------------------
@@ -134,24 +143,29 @@ scoreboard players set .AUTOSTART ir 1
 # the world has the "Minecart Improvements" feature enabled -- without it these
 # are harmless no-ops and the ride runs at vanilla speed.
 #
-# The default speed is applied ONCE when a ride starts; it is NOT continuously
-# enforced, so you can still change /gamerule yourself mid-ride if you like.
+# The speed applied at ride start (and restored after every ocean sprint) is
+# the ADJUSTABLE ride speed -- the .speed state score, nudged one block/s per
+# click by the "Speed -"/"Speed +" hotbar items (clamped 1..64) and reset
+# from the Settings menu. .MAXSPEED below is its DEFAULT: what .speed starts
+# out as, and what Reset returns it to. On Java it is applied once per
+# change, NOT continuously enforced, so you can still change /gamerule
+# yourself mid-ride if you like.
 
-# Default max minecart speed (blocks/second) set at ride start. Vanilla default
-# is 8; raise it for a brisker journey (valid up to 1000).
-scoreboard players set .MAXSPEED ir 8
+# Default ride speed (blocks/second). Vanilla minecart default is 8; raise
+# it for a brisker journey.
+scoreboard players set .MAXSPEED cfg_ride 8
 
 # Speed used while crossing open ocean (see below). 0 disables the whole
 # ocean speed-up feature and the speed stays at .MAXSPEED everywhere.
-scoreboard players set .OCEANSPEED ir 32
+scoreboard players set .OCEANSPEED cfg_ride 32
 
 # How many consecutive ocean-biome chunks the ride must cross before it speeds
 # up to .OCEANSPEED (a chunk is 16 blocks; the biome is sampled at the cart).
-scoreboard players set .OCEANCHUNKS ir 6
+scoreboard players set .OCEANCHUNKS cfg_ride 6
 
 # How many consecutive non-ocean chunks after a speed-up before it reverts to
 # .MAXSPEED (so brief islands/gaps don't keep flipping the speed).
-scoreboard players set .LANDCHUNKS ir 3
+scoreboard players set .LANDCHUNKS cfg_ride 3
 
 
 # --- Slope shaping (the "event" model) -------------------------------------
@@ -164,17 +178,17 @@ scoreboard players set .LANDCHUNKS ir 3
 
 # Minimum height difference (in blocks) before a new climb/descent is started.
 # Also acts as hysteresis, so small terrain noise never nudges the rail.
-scoreboard players set .DEADBAND ir 2
+scoreboard players set .DEADBAND cfg_terrain 2
 
 # Minimum flat blocks between two changes in the SAME direction.
 # Higher = fewer, longer swoops. Terrain that rises faster than this allows
 # gets tunneled through instead of climbed.
-scoreboard players set .SAMEGAP ir 40
+scoreboard players set .SAMEGAP cfg_terrain 40
 
 # Minimum flat blocks required before the rail may REVERSE direction.
 # Higher = no quick up-then-down bobbing; small bumps get tunneled through and
 # small dips get bridged across.
-scoreboard players set .TURNGAP ir 40
+scoreboard players set .TURNGAP cfg_terrain 40
 
 
 # --- Track clearing / vegetation sparing ------------------------------------
@@ -193,7 +207,7 @@ scoreboard players set .TURNGAP ir 40
 # AFTER each slope (vertically only -- left/right stay vegetation-sparing).
 # Cover at least the camera's lift-off run (roughly .CAMBLEND/2 + .CAMLIFT/10
 # + 2 blocks) and keep it <= .SAMEGAP. 0 = only the slope columns themselves.
-scoreboard players set .SLOPECLEAR ir 6
+scoreboard players set .SLOPECLEAR cfg_terrain 6
 
 
 # --- Terrain-smoothing sensitivity -----------------------------------------
@@ -209,14 +223,14 @@ scoreboard players set .SLOPECLEAR ir 6
 # everything it can (WHEN the climb starts is a separate question -- see
 # .UPEARLY below). Lowering it toward ~5 makes the desired height rise
 # sluggishly, so tall terrain gets tunneled into at mid-height instead.
-scoreboard players set .UPCLAMP ir 250
+scoreboard players set .UPCLAMP cfg_terrain 250
 
 # Terrain lower than the current line by more than this reads as only this
 # many blocks lower. This is why a narrow 60-deep ravine is crossed as a
 # dead-level bridge (it reads as a 20-deep dip diluted across the average)
 # while a broad valley still lowers the line properly. Bigger = the line
 # dives after every hole; smaller = it bridges more and descends less.
-scoreboard players set .DOWNCLAMP ir 20
+scoreboard players set .DOWNCLAMP cfg_terrain 20
 
 
 # --- Ground-aware slope timing (the near-ground scan) ------------------------
@@ -240,7 +254,7 @@ scoreboard players set .DOWNCLAMP ir 20
 # crested without any tunneling: a rise taller than this reach hits the line
 # before the ramp can finish. Effective maximum 48 (the scan's cap). 0 =
 # climb timing is ruled by the average alone (the old behavior).
-scoreboard players set .UPLOOK ir 50
+scoreboard players set .UPLOOK cfg_terrain 50
 
 # How many blocks ABOVE its average-derived target a climb may overshoot to
 # clear ground the .UPLOOK scan still sees at or above the rail line.
@@ -248,7 +262,7 @@ scoreboard players set .UPLOOK ir 50
 # and tunnels right under the summit. Bigger = hills are crested over more
 # often; smaller = ridgetops get punched through as before. 0 = climbs stop
 # exactly at the target, never overshooting.
-scoreboard players set .UPGRACE ir 10
+scoreboard players set .UPGRACE cfg_terrain 10
 
 # The climb schedule's slack, in blocks: how much sooner than STRICTLY
 # NECESSARY a climb may begin. The scan projects every surface ahead onto a
@@ -260,7 +274,7 @@ scoreboard players set .UPGRACE ir 10
 # ramps that finish about this many blocks before the crest; ~50+ =
 # no schedule at all (climbs start as soon as the average sees the mountain
 # -- the old ramp-up-way-early behavior).
-scoreboard players set .UPEARLY ir 2
+scoreboard players set .UPEARLY cfg_terrain 2
 
 # How far ahead (blocks) to scan for ground under a would-be descent step.
 # A descent never steps down into (or within .DOWNGRACE of) the TALLEST
@@ -274,14 +288,14 @@ scoreboard players set .UPEARLY ir 2
 # instead of dipped into. Bigger = a calmer line that only descends into
 # wider openings; smaller = hugs every little hollow. 0 = descent timing is
 # ruled by the average alone (the old plow-prone behavior).
-scoreboard players set .DOWNLOOK ir 50
+scoreboard players set .DOWNLOOK cfg_terrain 50
 
 # The clearance a descending step keeps above that tallest scanned surface.
 # 0 = a descent may touch down exactly onto the highest nearby ground;
 # higher values stop descents sooner / keep the line flying higher over
 # terrain it crosses. Keep it BELOW .HOVER, or descents end just short of
 # their target even over flat ground and the line rides permanently high.
-scoreboard players set .DOWNGRACE ir 1
+scoreboard players set .DOWNGRACE cfg_terrain 1
 
 
 # --- Performance / world generation ----------------------------------------
@@ -291,7 +305,7 @@ scoreboard players set .DOWNGRACE ir 1
 # them is roughly .AHEAD - .CAMAHEAD. Keep this comfortably above .CAMAHEAD,
 # and below ~250 (the rolling forceload releases chunks 256 behind the build
 # head -- the pace cart must never fall into that zone).
-scoreboard players set .AHEAD ir 224
+scoreboard players set .AHEAD cfg_ride 224
 
 # How far ahead of the track head (in blocks) terrain is force-GENERATED, so the
 # world exists before the rails reach it. Separate from .AHEAD: rails are built
@@ -300,20 +314,21 @@ scoreboard players set .AHEAD ir 224
 # Bigger = more generation time (fewer flat "not generated yet" spots if the
 # ride outruns world-gen) at the cost of more loaded chunks. Keep it above ~64
 # (the heightmap scanner samples 48 blocks past the head).
-scoreboard players set .GENAHEAD ir 192
+scoreboard players set .GENAHEAD cfg_ride 192
 
 # Maximum track columns built per game tick. Higher = better catch-up if the
 # server hitches, at the cost of more work per tick.
-scoreboard players set .MAXTICK ir 15
+scoreboard players set .MAXTICK cfg_ride 15
 
 
 # --- Ride modes (see the mode_* functions) -----------------------------------
 # The modes themselves are toggled with chat commands, not here:
 # (spell the path infinite_rail:<name> on Java, infinite_rail/<name> on Bedrock)
-#   mode_rain_on      permanent rain          (_off)
-#   mode_night_on     frozen midnight         (_off)
-#   mode_torches_on   torch-scattered track   (_off)
-#   mode_sky_on       high-altitude cruise    (_off)
+#   mode_rain_on      permanent rain            (_off)
+#   mode_night_on     night only, frozen midnight (mode_night_off = default)
+#   mode_day_on       day only, frozen noon       (mode_day_off = default)
+#   mode_torches_on   torch-scattered track     (_off)
+#   mode_sky_on       high-altitude cruise      (_off)
 #   modes             show what is currently on
 # They are STATE, not settings -- independent switches that stack freely
 # (night + torches is the lantern ride, night + rain the storm ride), stick
@@ -326,21 +341,21 @@ scoreboard players set .MAXTICK ir 15
 # default rides just above the cloud layer (Y 192). Terrain taller than this
 # is punched through like any rise the rail cannot climb over -- raise it
 # toward ~260 to clear even the tallest jagged peaks (build limit 320).
-scoreboard players set .SKYY ir 180
+scoreboard players set .SKYY cfg_ride 180
 
 # Sky mode: cruising speed (blocks/second) while the mode is on. There is
 # nothing nearby to look at up there, so it defaults to ocean pace. Applied
 # when the mode is toggled on (and at ride start if the mode was left on);
 # mode_sky_off restores .MAXSPEED. The ocean speed-up is paused while sky
 # mode owns the speed.
-scoreboard players set .SKYSPEED ir 18
+scoreboard players set .SKYSPEED cfg_ride 18
 
 # Torch mode: the percent chance (0-100) that each newly built column plants
 # a torch somewhere beside the track (.TORCHRANGE below controls how far
 # out). 10 = on average about one torch per 10 blocks of line. Torches are
 # only placed where one can actually stand (never on water, ice or snow
 # layers), and only on NEW track built while the mode is on.
-scoreboard players set .TORCHODDS ir 35
+scoreboard players set .TORCHODDS cfg_ride 35
 
 # Torch mode: how far (in blocks) a torch may land from the track's
 # centerline. Each torch rolls a random distance from 2 up to this, on a
@@ -348,7 +363,7 @@ scoreboard players set .TORCHODDS ir 35
 # values above 8 automatically widen the rolling forceload corridor so the
 # whole torch band stays loaded and generated (a few more chunks in memory
 # while torch mode is on); both editions cap the effective value at 48.
-scoreboard players set .TORCHRANGE ir 32
+scoreboard players set .TORCHRANGE cfg_ride 32
 
 
 # --- Debugging --------------------------------------------------------------
@@ -356,7 +371,10 @@ scoreboard players set .TORCHRANGE ir 32
 # 1 = print chat messages about the minecart-speed system: the default speed
 # applied at start, each ocean-biome / land chunk crossed (with the running
 # counters), and every speed change. Use this to see whether ocean detection is
-# firing. 0 = silent (normal play).
+# firing. 0 = silent (normal play). Also togglable in-game from the Debug
+# menu item (the hotbar book/menu next to Settings), which additionally
+# offers the scoreboard sidebar views of the three settings groups above and
+# of the live ride state.
 #
 # NOTE: the speed only actually changes the ride if the world has the vanilla
 # "Minecart Improvements" feature enabled (that's what adds the

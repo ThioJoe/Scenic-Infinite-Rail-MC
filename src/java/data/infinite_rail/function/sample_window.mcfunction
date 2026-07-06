@@ -9,9 +9,9 @@
 # mountains still raise it early for a "one swoop" climb. A reading at or
 # below Y-63 (void / ungenerated chunk) is discarded entirely.
 scoreboard players operation .lo ir = .avg ir
-scoreboard players operation .lo ir -= .DOWNCLAMP ir
+scoreboard players operation .lo ir -= .DOWNCLAMP cfg_terrain
 scoreboard players operation .hi ir = .avg ir
-scoreboard players operation .hi ir += .UPCLAMP ir
+scoreboard players operation .hi ir += .UPCLAMP cfg_terrain
 execute positioned ~4 ~ ~ positioned over motion_blocking_no_leaves run tp @e[type=marker,tag=ir_probe,limit=1] ~ ~ ~
 execute store result score .s ir run data get entity @e[type=marker,tag=ir_probe,limit=1] Pos[1]
 execute if score .s ir matches ..-63 run scoreboard players operation .s ir = .avg ir

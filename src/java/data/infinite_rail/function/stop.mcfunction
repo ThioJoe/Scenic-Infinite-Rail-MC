@@ -3,8 +3,10 @@
 scoreboard players set .started ir 0
 tag @a remove ir_rider
 effect clear @a[gamemode=adventure]
-# Take the Settings book (the mode-menu item) back -- the ride is over.
+# Take the hotbar items back -- the Settings/Debug books and the Speed +/-
+# items (re-modeled carrot_on_a_sticks) -- the ride is over.
 clear @a[gamemode=adventure] minecraft:written_book
+clear @a[gamemode=adventure] minecraft:carrot_on_a_stick
 execute as @a[gamemode=adventure] run ride @s dismount
 kill @e[type=minecart,tag=ir_cart]
 kill @e[type=minecart,tag=ir_ride]

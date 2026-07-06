@@ -44,5 +44,5 @@ execute if score .mx ir matches ..10 run data merge entity @e[type=minecart,tag=
 execute if entity @e[type=minecart,tag=ir_cart,limit=1] run function infinite_rail:cam_follow
 
 # Extend the track ahead of the pace cart, up to .MAXTICK columns this tick.
-scoreboard players operation .budget ir = .MAXTICK ir
+scoreboard players operation .budget ir = .MAXTICK cfg_ride
 function infinite_rail:build_loop

@@ -6,4 +6,4 @@ scoreboard players set .flat ir 0
 # Keep clearing the full center bore (no vegetation sparing) for the next
 # .SLOPECLEAR columns -- the camera is still gliding down onto the new level
 # here, floating above the rail line (see decide's carve-mode block).
-scoreboard players operation .vclear ir = .SLOPECLEAR ir
+scoreboard players operation .vclear ir = .SLOPECLEAR cfg_terrain

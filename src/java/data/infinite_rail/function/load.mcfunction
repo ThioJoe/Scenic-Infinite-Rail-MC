@@ -2,12 +2,31 @@
 # applies the tunable settings from config.mcfunction (edit THAT file to change
 # defaults). Nothing user-facing lives here.
 scoreboard objectives add ir dummy
-# The Settings book's click channel: a trigger-criteria objective that
+# The tunable settings live in three sidebar-sized objectives -- cfg_terrain
+# (terrain following / slope shaping), cfg_camera (the ride rig) and cfg_ride
+# (speed, mode knobs, performance) -- grouped so the Debug book can put any
+# one of them on the scoreboard sidebar: a vanilla sidebar shows at most 15
+# rows and only ONE objective at a time, and there are 30+ knobs. Runtime
+# state, the mode toggles and the two knobs that aren't worth a sidebar row
+# (.DEBUGMODE, .AUTOSTART) stay in the classic `ir` objective.
+scoreboard objectives add cfg_terrain dummy "Terrain settings"
+scoreboard objectives add cfg_camera dummy "Camera settings"
+scoreboard objectives add cfg_ride dummy "Ride settings"
+# The Debug book's "Live state" sidebar view: a curated <=15-row mirror of
+# the most useful runtime scores, refreshed every tick by debug_tick while
+# that view is selected (.SIDEBAR 4). Real state stays in `ir`; this
+# objective exists only to be displayed.
+scoreboard objectives add dbg dummy "Live state"
+# The Settings/Debug books' click channel: a trigger-criteria objective that
 # players may set with /trigger at permission level 0 -- which is what lets
-# the book's links work without operator AND without 1.21.6+'s "elevated
+# the books' links work without operator AND without 1.21.6+'s "elevated
 # permissions" confirmation screen popping on every click. menu_tick
 # dispatches the values (see give_menu / menu_tick).
 scoreboard objectives add ir_menu trigger
+# The Speed +/- hotbar items' click channel: both items are re-modeled
+# carrot_on_a_sticks, so a right-click bumps this stat objective and
+# menu_tick hands it to speed_click (which tells them apart by custom_data).
+scoreboard objectives add ir_click minecraft.used:minecraft.carrot_on_a_stick
 
 # Internal constant: number of heightmap samples averaged per column. This is
 # fixed by the sample count in sample_window.mcfunction -- do not change it
@@ -35,7 +54,7 @@ function infinite_rail:modes_init
 # Derived from the tunables above: slope columns carve one block taller than
 # flat ones for extra headroom as the cart rises/falls. Recomputed here so it
 # tracks .TUNNEL on every /reload.
-scoreboard players operation .TUNNELUP ir = .TUNNEL ir
+scoreboard players operation .TUNNELUP ir = .TUNNEL cfg_terrain
 scoreboard players add .TUNNELUP ir 1
 
 # Load the version-specific command/gamerule names (e.g. the minecart max-speed

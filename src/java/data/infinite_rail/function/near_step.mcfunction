@@ -15,9 +15,9 @@ scoreboard players operation .pmin ir < .sprev ir
 scoreboard players operation .prj ir = .pmin ir
 scoreboard players operation .prj ir -= .nk ir
 scoreboard players add .prj ir 2
-execute if score .s ir matches -62.. if score .sprev ir matches -62.. if score .nk ir <= .DOWNLOOK ir run scoreboard players operation .gfloor ir > .pmin ir
-execute if score .s ir matches -62.. if score .sprev ir matches -62.. if score .nk ir <= .UPLOOK ir run scoreboard players operation .gmax ir > .pmin ir
-execute if score .s ir matches -62.. if score .sprev ir matches -62.. if score .nk ir <= .UPLOOK ir if score .pmin ir > .gbase ir run scoreboard players operation .gcone ir > .prj ir
+execute if score .s ir matches -62.. if score .sprev ir matches -62.. if score .nk ir <= .DOWNLOOK cfg_terrain run scoreboard players operation .gfloor ir > .pmin ir
+execute if score .s ir matches -62.. if score .sprev ir matches -62.. if score .nk ir <= .UPLOOK cfg_terrain run scoreboard players operation .gmax ir > .pmin ir
+execute if score .s ir matches -62.. if score .sprev ir matches -62.. if score .nk ir <= .UPLOOK cfg_terrain if score .pmin ir > .gbase ir run scoreboard players operation .gcone ir > .prj ir
 execute if score .s ir matches -62.. run scoreboard players add .gnu ir 1
 execute if score .s ir matches -62.. run scoreboard players operation .sprev ir = .s ir
 execute if score .s ir matches ..-63 run scoreboard players set .sprev ir -32000

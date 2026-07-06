@@ -6,8 +6,11 @@ One repository produces two packs: a **Java Edition data pack** and a **Bedrock 
 src/
   shared/functions/     .mcfunction files used VERBATIM by both editions:
                         the event-model brain (decide, consider_start,
-                        start_event, end_event), config (every tunable) and
-                        modes_init (ride-mode toggle seeding)
+                        start_event, end_event), config (every tunable),
+                        modes_init (mode-toggle + ride-speed seeding),
+                        speed_step (the adjustable ride speed's state
+                        machine) and debug_state (the live-state sidebar
+                        mirror)
   java/                 the Java data pack, minus the shared files
                         (pack.mcmeta, data/, overlay_snake/ -- including the
                         ir_* call bridges in data/minecraft/function/ and the
@@ -60,7 +63,7 @@ Shared files must parse on **both** command engines — *byte-identical*, no bui
 
 Two conventions make the identical-copy guarantee possible — this replaces the old build-time dialect rewriting:
 
-1. **Score holders use the `.` prefix everywhere.** `#NAME` fake players are a Java-only convention (Bedrock's parser rejects `#`); `.`-prefixed fake players parse on both engines, so *both* editions now use `.HOVER`, `.slope`, `.dir`, … — same variables, same objective `ir`, same spelling. Live-tweaking from chat is identical on both editions: `/scoreboard players set .HOVER ir 8`.
+1. **Score holders use the `.` prefix everywhere.** `#NAME` fake players are a Java-only convention (Bedrock's parser rejects `#`); `.`-prefixed fake players parse on both engines, so *both* editions now use `.HOVER`, `.slope`, `.dir`, … — same variables, same objectives (runtime state in `ir`, the tunables in the three sidebar-sized groups `cfg_terrain`/`cfg_camera`/`cfg_ride` — see CONTEXT.md §4.1), same spelling. Live-tweaking from chat is identical on both editions: `/scoreboard players set .HOVER cfg_terrain 8`.
 2. **Shared-to-shared function calls go through bare-name bridges.** Java spells a function path `infinite_rail:end_event`, Bedrock spells it `infinite_rail/end_event` — so shared files spell neither. They call the bare name `ir_end_event`, the one function-call form both engines accept: Java resolves it in the `minecraft` namespace, Bedrock from the `functions/` root, and each edition supplies a one-line trampoline there (`src/java/data/minecraft/function/ir_*.mcfunction`, `src/bedrock/bp/functions/ir_*.mcfunction`) that hops into the real shared file. Three calls are bridged this way: `ir_consider_start`, `ir_start_event`, `ir_end_event`. The assembled-pack validation checks every bridge resolves on both sides.
 
 `tools/simulate.mjs` guards the whole arrangement: it interprets the **emitted** Java and Bedrock copies (each resolved through its own edition's bridges) over nine synthetic terrains and fails if their decisions ever diverge or the algorithm breaks an invariant (contiguous 45° events, deadband, gap spacing, the climb schedule, the descent floor and runway rules, terrain convergence, the `.veg`/`.retro` carve-mode contract, camera floor/flats/parallel-climb guarantees).

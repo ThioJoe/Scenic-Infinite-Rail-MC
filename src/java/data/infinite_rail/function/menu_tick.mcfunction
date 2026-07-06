@@ -1,13 +1,20 @@
-# The Settings book's click dispatcher, run from tick EVERY tick (ride or
-# no ride, so a click can never sit stale in the objective).
+# The Settings/Debug books' click dispatcher, run from tick EVERY tick (ride
+# or no ride, so a click can never sit stale in the objective).
 #
 # WHY /trigger: since 1.21.6, clicking a run_command link that needs
 # elevated permissions (like /function) pops a "command requires elevated
 # permissions" confirmation screen on every single click -- even for
 # operators. /trigger is the one command every player may run at permission
-# level 0, so the book's links only ever do  `trigger ir_menu set <n>`  (no
+# level 0, so the books' links only ever do  `trigger ir_menu set <n>`  (no
 # confirmation, no operator requirement), and this dispatcher turns the
-# number into the real mode call, executed at function permission level.
+# number into the real call at function permission level.
+#
+# The number map (give_menu writes these into the books' links):
+#   1/2      rain on/off                 11/12/13  speed -/+/reset
+#   3/10/4   time night/day/default      14/15     debug chat on/off
+#   5/6      torches on/off              16-19     sidebar terrain/camera/
+#   7/8      sky on/off                            ride/live-state
+#   9       modes printout               20/21     sidebar off / command help
 execute as @a[scores={ir_menu=1}] run function infinite_rail:mode_rain_on
 execute as @a[scores={ir_menu=2}] run function infinite_rail:mode_rain_off
 execute as @a[scores={ir_menu=3}] run function infinite_rail:mode_night_on
@@ -17,6 +24,22 @@ execute as @a[scores={ir_menu=6}] run function infinite_rail:mode_torches_off
 execute as @a[scores={ir_menu=7}] run function infinite_rail:mode_sky_on
 execute as @a[scores={ir_menu=8}] run function infinite_rail:mode_sky_off
 execute as @a[scores={ir_menu=9}] run function infinite_rail:modes
+execute as @a[scores={ir_menu=10}] run function infinite_rail:mode_day_on
+execute as @a[scores={ir_menu=11}] run function infinite_rail:speed_dec
+execute as @a[scores={ir_menu=12}] run function infinite_rail:speed_inc
+execute as @a[scores={ir_menu=13}] run function infinite_rail:speed_reset
+execute as @a[scores={ir_menu=14}] run function infinite_rail:debug
+execute as @a[scores={ir_menu=15}] run function infinite_rail:debug_off
+execute as @a[scores={ir_menu=16}] run function infinite_rail:sidebar_terrain
+execute as @a[scores={ir_menu=17}] run function infinite_rail:sidebar_camera
+execute as @a[scores={ir_menu=18}] run function infinite_rail:sidebar_ride
+execute as @a[scores={ir_menu=19}] run function infinite_rail:sidebar_state
+execute as @a[scores={ir_menu=20}] run function infinite_rail:sidebar_off
+execute as @a[scores={ir_menu=21}] run function infinite_rail:cmd_help
+# The Speed hotbar items' clicks: the carrot_on_a_stick "used" statistic
+# (ir_click, a stat-criteria objective) fans out to speed_click, which reads
+# the held item's custom_data to tell + from - and resets the count.
+execute as @a[scores={ir_click=1..}] run function infinite_rail:speed_click
 # Consume the click and re-arm the trigger for everyone (a trigger objective
 # disables itself for a player after each use, and reset drops the enabled
 # flag with the score -- so both lines run, in this order, every tick).

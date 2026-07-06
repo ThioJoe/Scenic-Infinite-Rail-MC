@@ -45,7 +45,7 @@ scoreboard players operation .ci ir = .cxm ir
 scoreboard players operation .ci ir -= .fx ir
 scoreboard players operation .ci ir /= .C1000 ir
 scoreboard players operation .ci ir -= .trackBase ir
-scoreboard players operation .ci ir += .CAMAHEAD ir
+scoreboard players operation .ci ir += .CAMAHEAD cfg_camera
 scoreboard players operation .cmaxi ir = .headX ir
 scoreboard players operation .cmaxi ir -= .trackBase ir
 execute if score .ci ir matches ..-1 run scoreboard players set .ci ir 0
@@ -53,9 +53,9 @@ execute if score .ci ir > .cmaxi ir run scoreboard players operation .ci ir = .c
 
 # --- Precompute: .lift in milliblocks; .wmax = how far each lifted() sample
 # scans ahead (further is pointless -- the +.CAMLIFT cap clips it anyway) ---
-scoreboard players operation .lift ir = .CAMLIFT ir
+scoreboard players operation .lift ir = .CAMLIFT cfg_camera
 scoreboard players operation .lift ir *= .C100 ir
-scoreboard players operation .wmax ir = .CAMLIFT ir
+scoreboard players operation .wmax ir = .CAMLIFT cfg_camera
 scoreboard players operation .wmax ir /= .C10 ir
 scoreboard players add .wmax ir 2
 
@@ -67,7 +67,7 @@ scoreboard players operation .linem ir = .sm ir
 # --- c1: the S-curve -- average lifted() over the +/-.CAMBLEND/2 window ---
 scoreboard players set .tsum ir 0
 scoreboard players set .tn ir 0
-scoreboard players operation .half ir = .CAMBLEND ir
+scoreboard players operation .half ir = .CAMBLEND cfg_camera
 scoreboard players operation .half ir /= .C2 ir
 scoreboard players set .j ir 0
 scoreboard players operation .j ir -= .half ir
@@ -79,7 +79,7 @@ scoreboard players operation .c1 ir /= .tn ir
 # while the line drops away, converges and holds on flats) ---
 scoreboard players operation .dy ir = .linem ir
 scoreboard players operation .dy ir -= .s2 ir
-scoreboard players operation .dy ir /= .CAMSMOOTH ir
+scoreboard players operation .dy ir /= .CAMSMOOTH cfg_camera
 scoreboard players operation .s2 ir += .dy ir
 
 # --- Final height: the higher of the two curves, never below the rail line ---

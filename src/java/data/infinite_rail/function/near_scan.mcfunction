@@ -22,14 +22,14 @@
 # missing terrain reverts to plain average-driven behavior. Must run
 # positioned at the head marker, like sample_window. Capped at 48 blocks --
 # the sample window's own reach, always inside the generated corridor.
-scoreboard players operation .nw ir = .UPLOOK ir
-scoreboard players operation .nw ir > .DOWNLOOK ir
+scoreboard players operation .nw ir = .UPLOOK cfg_terrain
+scoreboard players operation .nw ir > .DOWNLOOK cfg_terrain
 execute if score .nw ir matches 49.. run scoreboard players set .nw ir 48
 scoreboard players set .gfloor ir -10000
 scoreboard players set .gmax ir -10000
 scoreboard players set .gcone ir -10000
 scoreboard players operation .gbase ir = .railY ir
-scoreboard players operation .gbase ir -= .HOVER ir
+scoreboard players operation .gbase ir -= .HOVER cfg_terrain
 scoreboard players set .gnu ir 0
 scoreboard players set .sprev ir -32000
 scoreboard players set .nk ir 1
