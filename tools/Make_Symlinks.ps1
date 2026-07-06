@@ -10,7 +10,7 @@ $javaDir = "InfiniteRail_Java"
 
 # --- Helper Functions ---
 
-# Dynamically calculates the relative path and creates a file symlink
+# Creates a file symlink using absolute paths
 function New-FileSymlink {
     param (
         [string]$LinkPath,
@@ -18,26 +18,22 @@ function New-FileSymlink {
     )
     
     $linkFull = Join-Path $repoRoot $LinkPath
-    $linkDir = Split-Path $linkFull -Parent
     $targetFull = Join-Path $repoRoot $TargetPath
     
-    # Calculate relative path from link directory to target file (PS 5.1 compatible)
-    $fromUri = [System.Uri]"$linkDir\"
-    $toUri = [System.Uri]"$targetFull"
-    $relUri = $fromUri.MakeRelativeUri($toUri)
-    $relPath = [System.Uri]::UnescapeDataString($relUri.ToString()).Replace('/', '\')
-    
-    cmd /c mklink "$LinkPath" "$relPath" | Out-Null
+    cmd /c mklink "$linkFull" "$targetFull" | Out-Null
 }
 
-# Creates a Directory Junction (Does NOT require Admin or Developer Mode!)
-function New-DirJunction {
+# Creates a directory symlink using absolute paths (Requires Admin or Developer Mode)
+function New-DirSymlink {
     param (
         [string]$LinkPath,
         [string]$TargetPath
     )
+    
+    $linkFull = Join-Path $repoRoot $LinkPath
     $targetFull = Join-Path $repoRoot $TargetPath
-    New-Item -ItemType Junction -Path $LinkPath -Target $targetFull | Out-Null
+    
+    cmd /c mklink /d "$linkFull" "$targetFull" | Out-Null
 }
 
 # --- Script Execution ---
@@ -52,13 +48,13 @@ if (Test-Path $outDir) {
 New-Item -ItemType Directory -Path $outDir | Out-Null
 
 Write-Host "Setting up Resource Pack ($rpDir) symlinks..."
-New-DirJunction -LinkPath "$outDir\$rpDir" -TargetPath "src\bedrock\rp"
+New-DirSymlink -LinkPath "$outDir\$rpDir" -TargetPath "src\bedrock\rp"
 
 Write-Host "Setting up Behavior Pack ($bpDir) shadow tree..."
 New-Item -ItemType Directory -Force -Path "$outDir\$bpDir\functions\infinite_rail" | Out-Null
-New-DirJunction -LinkPath "$outDir\$bpDir\blocks" -TargetPath "src\bedrock\bp\blocks"
-New-DirJunction -LinkPath "$outDir\$bpDir\entities" -TargetPath "src\bedrock\bp\entities"
-New-DirJunction -LinkPath "$outDir\$bpDir\scripts" -TargetPath "src\bedrock\bp\scripts"
+New-DirSymlink -LinkPath "$outDir\$bpDir\blocks" -TargetPath "src\bedrock\bp\blocks"
+New-DirSymlink -LinkPath "$outDir\$bpDir\entities" -TargetPath "src\bedrock\bp\entities"
+New-DirSymlink -LinkPath "$outDir\$bpDir\scripts" -TargetPath "src\bedrock\bp\scripts"
 New-FileSymlink -LinkPath "$outDir\$bpDir\manifest.json" -TargetPath "src\bedrock\bp\manifest.json"
 
 # Link native BP functions (including the new ir_* trampolines in the root functions folder)
@@ -74,14 +70,14 @@ foreach ($file in $bpNative) {
 
 Write-Host "Setting up Java Data Pack ($javaDir) shadow tree..."
 New-Item -ItemType Directory -Force -Path "$outDir\$javaDir\data\infinite_rail\function" | Out-Null
-New-DirJunction -LinkPath "$outDir\$javaDir\overlay_snake" -TargetPath "src\java\overlay_snake"
+New-DirSymlink -LinkPath "$outDir\$javaDir\overlay_snake" -TargetPath "src\java\overlay_snake"
 
 # We must construct the intermediate folders for Java to use directory symlinks deeper down
 New-Item -ItemType Directory -Force -Path "$outDir\$javaDir\data" | Out-Null
-New-DirJunction -LinkPath "$outDir\$javaDir\data\minecraft" -TargetPath "src\java\data\minecraft"
+New-DirSymlink -LinkPath "$outDir\$javaDir\data\minecraft" -TargetPath "src\java\data\minecraft"
 
 New-Item -ItemType Directory -Force -Path "$outDir\$javaDir\data\infinite_rail" | Out-Null
-New-DirJunction -LinkPath "$outDir\$javaDir\data\infinite_rail\tags" -TargetPath "src\java\data\infinite_rail\tags"
+New-DirSymlink -LinkPath "$outDir\$javaDir\data\infinite_rail\tags" -TargetPath "src\java\data\infinite_rail\tags"
 
 New-FileSymlink -LinkPath "$outDir\$javaDir\pack.mcmeta" -TargetPath "src\java\pack.mcmeta"
 
