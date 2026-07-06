@@ -8,9 +8,10 @@ src/
                         the event-model brain (decide, consider_start,
                         start_event, end_event), config (every tunable),
                         modes_init (mode-toggle + ride-speed seeding),
-                        speed_step (the adjustable ride speed's state
-                        machine) and debug_state (the live-state sidebar
-                        mirror)
+                        consts (fixed cross-edition constants, e.g. the
+                        Speed items' .SPEEDSTEP increment), speed_step (the
+                        adjustable ride speed's state machine) and
+                        debug_state (the live-state sidebar mirror)
   java/                 the Java data pack, minus the shared files
                         (pack.mcmeta, data/, overlay_snake/ -- including the
                         ir_* call bridges in data/minecraft/function/ and the

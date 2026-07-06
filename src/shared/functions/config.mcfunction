@@ -144,9 +144,10 @@ scoreboard players set .AUTOSTART ir 1
 # are harmless no-ops and the ride runs at vanilla speed.
 #
 # The speed applied at ride start (and restored after every ocean sprint) is
-# the ADJUSTABLE ride speed -- the .speed state score, nudged one block/s per
-# click by the "Speed -"/"Speed +" hotbar items (clamped 1..64) and reset
-# from the Settings menu. .MAXSPEED below is its DEFAULT: what .speed starts
+# the ADJUSTABLE ride speed -- the .speed state score, nudged .SPEEDSTEP
+# blocks/s per click by the "Speed -"/"Speed +" hotbar items (clamped 1..64)
+# and reset from the Settings menu. (.SPEEDSTEP is a fixed cross-edition
+# constant in the shared consts.mcfunction, deliberately not a setting here.) .MAXSPEED below is its DEFAULT: what .speed starts
 # out as, and what Reset returns it to. On Java it is applied once per
 # change, NOT continuously enforced, so you can still change /gamerule
 # yourself mid-ride if you like.

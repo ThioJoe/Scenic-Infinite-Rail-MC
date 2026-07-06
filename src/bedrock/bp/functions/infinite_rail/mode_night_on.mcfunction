@@ -8,4 +8,4 @@
 scoreboard players set .NIGHTMODE ir 1
 gamerule dodaylightcycle false
 time set midnight
-tellraw @a {"rawtext":[{"text":"§6[Infinite Rail]§r §7Time: night only - frozen at midnight. §b/function infinite_rail/mode_night_off§7 restores the normal cycle."}]}
+tellraw @a {"rawtext":[{"text":"§6[Infinite Rail]§r §7Time: night only - frozen at midnight."}]}

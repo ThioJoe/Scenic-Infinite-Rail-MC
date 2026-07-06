@@ -43,6 +43,10 @@ scoreboard players set .C1000 ir 1000
 # Blocks per chunk -- the divisor for the ocean-biome chunk counter.
 scoreboard players set .C16 ir 16
 
+# Cross-edition internal constants (the shared consts.mcfunction -- the
+# Bedrock script runs the same file from its init): .SPEEDSTEP & co.
+function infinite_rail:consts
+
 # Apply all tunable settings.
 function infinite_rail:config
 

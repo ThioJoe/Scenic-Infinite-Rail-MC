@@ -1,7 +1,10 @@
 # The adjustable ride speed's shared state machine (both editions).
 #
-# Input:  .spdir (ir)  --  +1 = one block/s faster, -1 = one slower,
-#                           0 = reset to the config default.
+# Input:  .spdir (ir)  --  the change in blocks/s: positive = faster,
+#                          negative = slower (speed_inc/speed_dec pass
+#                          +/-.SPEEDSTEP from the shared consts.mcfunction;
+#                          Bedrock's settings slider passes an exact delta),
+#                          0 = reset to the config default.
 # Output: .speed (ir)  --  the ride's LAND cruising speed. STATE, not
 #                          config: it survives /reload, ride restarts and
 #                          rejoins (seeded from .MAXSPEED by modes_init the

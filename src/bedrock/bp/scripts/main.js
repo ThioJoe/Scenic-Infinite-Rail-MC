@@ -145,8 +145,8 @@ const DBG = '§3[IR debug]§r ';
 // clears everything else every tick) and matched by type + name in the
 // itemUse handler, so a random picked-up item could never trigger them.
 // Mirrors Java's give_menu slot for slot:
-//   0  "Speed -"   one block/s slower  (runs infinite_rail/speed_dec)
-//   1  "Speed +"   one block/s faster  (runs infinite_rail/speed_inc)
+//   0  "Speed -"   .SPEEDSTEP blocks/s slower  (runs infinite_rail/speed_dec)
+//   1  "Speed +"   .SPEEDSTEP blocks/s faster  (runs infinite_rail/speed_inc)
 //   7  "Debug"     opens the native debug form (chat output, sidebar views)
 //   8  "Settings"  opens the native ride-mode form (the classic)
 // The books are plain books (no vanilla use action of their own) and the
@@ -164,8 +164,8 @@ const DEBUG_NAME = '§3Debug';
 const SPEED_UP_NAME = '§aSpeed +';
 const SPEED_DOWN_NAME = '§cSpeed -';
 const PINNED = [
-  { slot: 0, type: 'minecraft:red_dye', name: SPEED_DOWN_NAME, lore: ['§7One block/s slower'] },
-  { slot: 1, type: 'minecraft:emerald', name: SPEED_UP_NAME, lore: ['§7One block/s faster'] },
+  { slot: 0, type: 'minecraft:red_dye', name: SPEED_DOWN_NAME, lore: ['§7Ride speed down'] },
+  { slot: 1, type: 'minecraft:emerald', name: SPEED_UP_NAME, lore: ['§7Ride speed up'] },
   { slot: 7, type: 'minecraft:book', name: DEBUG_NAME, lore: ['§7Use to open the', '§7debug menu'] },
   { slot: 8, type: 'minecraft:book', name: SETTINGS_NAME, lore: ['§7Use to open the', '§7ride mode menu'] },
 ];
@@ -1812,6 +1812,10 @@ function init() {
   // are state, not config: they live outside config.mcfunction so a /reload
   // never resets an enabled mode.
   runCmd(`function ${NS}/modes_init`);
+  // Cross-edition internal constants (the shared consts.mcfunction, same
+  // call Java makes from load.mcfunction): .SPEEDSTEP & co. -- fixed
+  // numbers deliberately kept out of the user config.
+  runCmd(`function ${NS}/consts`);
 
   loadState();
   if (S.started) say('§7Ride resumed. Run §b/function infinite_rail/stop§7 to end it.');
@@ -1863,7 +1867,7 @@ system.afterEvents.scriptEventReceive.subscribe((ev) => {
 // use action competing for the interaction; matched by type + name + rider
 // so nothing else can trigger anything. The speed items get a short
 // cooldown -- holding the use button fires itemUse repeatedly, and one
-// click should mean one block/s.
+// click should mean one .SPEEDSTEP notch.
 let lastSpeedUseAt = -1e9;
 world.afterEvents.itemUse.subscribe((ev) => {
   try {

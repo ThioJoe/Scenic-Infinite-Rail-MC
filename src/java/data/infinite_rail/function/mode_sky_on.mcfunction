@@ -12,4 +12,4 @@
 scoreboard players set .SKYMODE ir 1
 scoreboard players set .fast ir 0
 function infinite_rail:sky_speed
-tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Sky mode ON - climbing to cruising altitude. ","color":"gray"},{"text":"/function infinite_rail:mode_sky_off","color":"aqua"},{"text":" brings the line back down.","color":"gray"}]
+tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Sky mode ON - climbing to cruising altitude.","color":"gray"}]
