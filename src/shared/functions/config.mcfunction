@@ -193,7 +193,7 @@ scoreboard players set .TURNGAP ir 40
 # AFTER each slope (vertically only -- left/right stay vegetation-sparing).
 # Cover at least the camera's lift-off run (roughly .CAMBLEND/2 + .CAMLIFT/10
 # + 2 blocks) and keep it <= .SAMEGAP. 0 = only the slope columns themselves.
-scoreboard players set .SLOPECLEAR ir 8
+scoreboard players set .SLOPECLEAR ir 6
 
 
 # --- Terrain-smoothing sensitivity -----------------------------------------
@@ -260,7 +260,7 @@ scoreboard players set .UPGRACE ir 10
 # ramps that finish about this many blocks before the crest; ~50+ =
 # no schedule at all (climbs start as soon as the average sees the mountain
 # -- the old ramp-up-way-early behavior).
-scoreboard players set .UPEARLY ir 6
+scoreboard players set .UPEARLY ir 2
 
 # How far ahead (blocks) to scan for ground under a would-be descent step.
 # A descent never steps down into (or within .DOWNGRACE of) the TALLEST
@@ -274,7 +274,7 @@ scoreboard players set .UPEARLY ir 6
 # instead of dipped into. Bigger = a calmer line that only descends into
 # wider openings; smaller = hugs every little hollow. 0 = descent timing is
 # ruled by the average alone (the old plow-prone behavior).
-scoreboard players set .DOWNLOOK ir 16
+scoreboard players set .DOWNLOOK ir 50
 
 # The clearance a descending step keeps above that tallest scanned surface.
 # 0 = a descent may touch down exactly onto the highest nearby ground;
