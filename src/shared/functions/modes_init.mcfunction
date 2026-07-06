@@ -12,6 +12,10 @@ scoreboard players add .RAINMODE ir 0
 scoreboard players add .NIGHTMODE ir 0
 scoreboard players add .TORCHMODE ir 0
 scoreboard players add .SKYMODE ir 0
+# .HIDECART: 1 = the visible minecart is removed and the rider floats on the
+# invisible seat alone (Java re-seats the rider onto the seat itself;
+# Bedrock just stops spawning the scenery cart prop).
+scoreboard players add .HIDECART ir 0
 
 # The adjustable ride speed (.speed -- see the shared speed_step) is state
 # like the modes: seed it from the config default only when it has never

@@ -16,7 +16,9 @@
 # during the ride (mount events flash the vanilla "press X to dismount"
 # hint, which can't be hidden).
 execute at @e[type=player,tag=ir_rider,limit=1] run summon minecraft:item_display ~ ~1 ~ {Tags:["ir_seat"],teleport_duration:1}
-execute at @e[type=player,tag=ir_rider,limit=1] run summon minecraft:minecart ~ ~1 ~ {Tags:["ir_ride"],Invulnerable:1b,Rotation:[90f,0f]}
+# Hide-cart mode (.HIDECART 1 -- mode_hidecart_on): no ride cart at all; the
+# rider mounts the seat itself below and floats on air.
+execute if score .HIDECART ir matches 0 at @e[type=player,tag=ir_rider,limit=1] run summon minecraft:minecart ~ ~1 ~ {Tags:["ir_ride"],Invulnerable:1b,Rotation:[90f,0f]}
 ride @e[type=minecart,tag=ir_ride,limit=1] mount @e[type=item_display,tag=ir_seat,limit=1]
 # Adventure mode is applied BEFORE the mount on purpose: the per-tick rider
 # keeper (main) recaptures dismounted ADVENTURE players, so even if the
@@ -29,7 +31,8 @@ execute as @e[type=player,tag=ir_rider,limit=1] run effect give @s minecraft:sat
 # The rider is visible (they sit in a real cart) -- clear any leftover
 # invisibility from rides started on older pack versions.
 execute as @e[type=player,tag=ir_rider,limit=1] run effect clear @s minecraft:invisibility
-execute as @e[type=player,tag=ir_rider,limit=1] run ride @s mount @e[type=minecart,tag=ir_ride,limit=1]
+execute if score .HIDECART ir matches 0 as @e[type=player,tag=ir_rider,limit=1] run ride @s mount @e[type=minecart,tag=ir_ride,limit=1]
+execute if score .HIDECART ir matches 1 as @e[type=player,tag=ir_rider,limit=1] run ride @s mount @e[type=item_display,tag=ir_seat,limit=1]
 
 # --- Snap the rig (rider aboard) to its cruising position and hand off ---
 # The S-curve (c1) is stateless; only the descent chaser (.s2) needs seeding.

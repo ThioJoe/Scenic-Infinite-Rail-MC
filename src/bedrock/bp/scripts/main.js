@@ -194,6 +194,13 @@ const ACCEL = 0.4;
 // on a rail (Java uses the same 62 milliblocks in cam_move).
 const CART_REST = 0.062;
 
+// Hide-minecart mode's cart offset, in tenths of a block (the .CARTYOFF
+// scale): while .HIDECART is on, camMove glides the cart prop at this fixed
+// offset INSTEAD of .CARTYOFF, sinking it below the track line where the
+// track blocks hide it from the rider's perspective. Toggling off simply
+// resumes reading the config .CARTYOFF, so "restore" is automatic.
+const HIDE_CARTYOFF = -5;
+
 // In-memory track history is trimmed behind the ride so an endless ride can't
 // grow memory forever (an improvement over Java's ever-growing storage list;
 // the camera only ever reads a few hundred columns around the rig).
@@ -458,6 +465,7 @@ function showMenu(player) {
     torches: modeOn('TORCHMODE'),
     dens: densIdx >= 0 ? densIdx : 1,
     sky: modeOn('SKYMODE'),
+    hidecart: modeOn('HIDECART'),
     // Clamped to the slider's 1..64 range -- a hand-set out-of-range .speed
     // must not make the form throw on its default value.
     speed: Math.min(64, Math.max(1, landSpeed())),
@@ -469,17 +477,31 @@ function showMenu(player) {
     .toggle('Torches (scattered along new track)', { defaultValue: current.torches })
     .dropdown('Torch density', TORCH_DENSITY.map((d) => d.label), { defaultValueIndex: current.dens })
     .toggle('Sky (high-altitude cruise)', { defaultValue: current.sky })
+    .toggle('Hide minecart (unobstructed view)', { defaultValue: current.hidecart })
     .slider(`Ride speed, blocks/s (default ${cfg('MAXSPEED')})`, 1, 64, { defaultValue: current.speed, valueStep: 1 })
     .submitButton('Apply');
   form.show(player).then((r) => {
     if (r.canceled || !r.formValues) return;
-    const [rain, night, torches, dens, sky, speed] = r.formValues;
+    const [rain, night, torches, dens, sky, hidecart, speed] = r.formValues;
     const apply = (was, wanted, fn) => {
       if (was !== !!wanted) runCmd(`function ${NS}/mode_${fn}_${wanted ? 'on' : 'off'}`);
     };
     apply(current.rain, rain, 'rain');
     apply(current.torches, torches, 'torches');
     apply(current.sky, sky, 'sky');
+    if (current.hidecart !== !!hidecart) {
+      runCmd(`function ${NS}/mode_hidecart_${hidecart ? 'on' : 'off'}`);
+      // Belt + suspenders: a pack update installed over the SAME manifest
+      // version can leave Bedrock's function registry stale, so the new
+      // mode_hidecart_* files silently don't exist and the score never
+      // flips. If the score didn't take, write it directly (API mode only
+      // -- on cmd-bridge worlds the read lies, and there the function
+      // route is the working one anyway).
+      if (bridgeMode === 'api' && getScore('HIDECART', 0) !== (hidecart ? 1 : 0)) {
+        setScore('HIDECART', hidecart ? 1 : 0);
+        say(hidecart ? '§7Minecart hidden - enjoy the unobstructed view.' : '§7Minecart visible again.');
+      }
+    }
     const nightWant = night | 0;
     if (nightWant !== current.night) {
       runCmd(`function ${NS}/${['mode_night_off', 'mode_night_on', 'mode_day_on'][nightWant] ?? 'mode_night_off'}`);
@@ -489,7 +511,14 @@ function showMenu(player) {
       runCmd(`function ${NS}/torch_density_${TORCH_DENSITY[densWant]?.fn ?? 'medium'}`);
     }
     const speedWant = Math.round(+speed);
-    if (speedWant !== current.speed) adjustSpeed(speedWant - current.speed);
+    // The slider is an ABSOLUTE setter riding a delta-based state machine:
+    // detect an untouched slider against the DISPLAYED value (an over-64
+    // .speed shows clamped at 64), but compute the applied delta against
+    // the REAL live speed -- deltaing against the clamped display made
+    // "set 8 while cruising at 76" land at 20 instead of 8. (One blind
+    // spot remains by construction: at over-64 speeds, sliding exactly to
+    // 64 reads as untouched -- pick 63, or use the Speed - item.)
+    if (speedWant !== current.speed) adjustSpeed(speedWant - landSpeed());
   }).catch((e) => reportError('settings menu', e));
 }
 
@@ -1351,8 +1380,15 @@ function camMove(seat, cart, sy) {
     // remains as a small fine-tune; large offsets would sink the cart
     // ENTITY into the track blocks, where it suffocates. The
     // vanilla-minecart fallback renders true and gets no offset.
+    // Hide-minecart mode (.HIDECART -- mode_hidecart_*): the prop is kept
+    // but glided at the fixed HIDE_CARTYOFF sink instead, below the track
+    // line and out of the rider's view (both cart types).
     let cy = target.y;
-    try { if (cart.typeId === CART_TYPE) cy += cfg('CARTYOFF') / 10; } catch { /* stale */ }
+    if (modeOn('HIDECART')) {
+      cy += HIDE_CARTYOFF / 10;
+    } else {
+      try { if (cart.typeId === CART_TYPE) cy += cfg('CARTYOFF') / 10; } catch { /* stale */ }
+    }
     glide(cart, { x: target.x, y: cy, z: target.z });
   }
 
@@ -1376,22 +1412,10 @@ function camMove(seat, cart, sy) {
   }
 }
 
-// Spawn the two-piece rig at a position: the invisible seat (which the
-// player will ride) and the unmounted cart prop that camMove glides along
-// with it. Returns the seat (the mover), or throws if the chunk isn't
-// ready. Any prior rig pieces are removed first so this can never duplicate.
-function spawnRig(pos) {
-  const oldSeat = findSeat();
-  if (oldSeat) { try { oldSeat.remove(); } catch { /* gone */ } }
-  const oldCart = findCart();
-  if (oldCart) { try { oldCart.remove(); } catch { /* gone */ } }
-  S.seatId = '';
-  S.cartId = '';
-
-  const seat = dim.spawnEntity(SEAT_TYPE, pos);
-  seat.addTag(TAG_SEAT);
-  S.seatId = seat.id;
-
+// Spawn just the scenery cart prop at a position (see spawnRig). Split out
+// so a lost prop can be rebuilt alone, without touching the seat the rider
+// is mounted on (the tick loop's cart-only heal).
+function spawnCartProp(pos) {
   let cart;
   try {
     cart = dim.spawnEntity(CART_TYPE, pos, { initialRotation: CART_YAW });
@@ -1406,6 +1430,26 @@ function spawnRig(pos) {
   }
   cart.addTag(TAG_RIDE);
   S.cartId = cart.id;
+  return cart;
+}
+
+// Spawn the rig at a position: the invisible seat (which the player will
+// ride) and the unmounted cart prop that camMove glides along with it.
+// Returns the seat (the mover), or throws if the chunk isn't ready. Any
+// prior rig pieces are removed first so this can never duplicate.
+function spawnRig(pos) {
+  const oldSeat = findSeat();
+  if (oldSeat) { try { oldSeat.remove(); } catch { /* gone */ } }
+  const oldCart = findCart();
+  if (oldCart) { try { oldCart.remove(); } catch { /* gone */ } }
+  S.seatId = '';
+  S.cartId = '';
+
+  const seat = dim.spawnEntity(SEAT_TYPE, pos);
+  seat.addTag(TAG_SEAT);
+  S.seatId = seat.id;
+
+  spawnCartProp(pos);
   return seat;
 }
 
@@ -1426,6 +1470,10 @@ function spawnRig(pos) {
 // re-mount.
 const ASTRAY_TICKS = 4; // consecutive too-far ticks before a re-mount
 let riderAstray = 0;
+// Anti-duplicate grace for the cart-only heal (hide-cart toggle-off, or a
+// lost prop): ~1 s of "missing" before a new prop is spawned, so a
+// merely-still-loading original is never doubled.
+let cartMissing = 0;
 
 // Is this player still "on the ride" for keeper purposes? Rides now run in
 // SURVIVAL (adventure suppresses Bedrock's natural mob spawning), but
@@ -1995,12 +2043,27 @@ function tick() {
   tickScout();                      // 1b. keep terrain open ahead of the head
   let seat = findSeat();
   let cart = findCart();
-  if (!seat || !cart) {
-    // A rig piece got lost (killed, or its chunk hasn't loaded back in after
+  // A lost cart prop (killed by something) heals CART-ONLY, at the rig,
+  // after a short anti-duplicate grace -- never via spawnRig, which would
+  // unseat the rider. (Hide-cart mode doesn't remove the prop; camMove just
+  // sinks it below the track line.)
+  if (seat && !cart) {
+    cartMissing += 1;
+    if (cartMissing > 20) {
+      cartMissing = 0;
+      try { cart = spawnCartProp(seat.location); } catch { /* chunk not ready */ }
+    }
+  } else {
+    cartMissing = 0;
+  }
+  if (!seat) {
+    // The seat got lost (killed, or its chunk hasn't loaded back in after
     // a rejoin). Wait a grace period before rebuilding the rig -- respawning
     // instantly while the original was merely still loading is exactly what
     // used to duplicate carts -- then re-summon on the rig position, the same
-    // self-healing job as Java's mount keepers.
+    // self-healing job as Java's mount keepers. (A missing CART with the
+    // seat intact never lands here -- the cart-only heal above rebuilds it
+    // without unseating the rider.)
     S.rigMissing += 1;
     if (S.rigMissing > 40) {
       const sy = camFollow();
@@ -2032,11 +2095,11 @@ function tick() {
   } else {
     S.rigMissing = 0;
   }
-  if (seat && cart) {
+  if (seat) {
     keepers(seat);                  // 2-4. eject strangers, re-seat the rider
     sweepDrops(seat);               // 5.  no pickup sounds: drops die early
     const sy = camFollow();         // 6.  the smoothed rail-line height
-    if (sy !== undefined) camMove(seat, cart, sy); // glide seat + cart prop
+    if (sy !== undefined) camMove(seat, cart, sy); // glide seat (+ prop if shown)
   }
   buildLoop();                      // 7.  extend the track
   tickStateSidebar();               // 8.  the Debug menu's Live state mirror

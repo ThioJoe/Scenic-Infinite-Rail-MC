@@ -14,10 +14,17 @@ function infinite_rail:ocean_check
 execute as @e[type=minecart,tag=ir_cart,limit=1] on passengers unless entity @s[type=item_display,tag=ir_plug] run ride @s dismount
 execute as @e[type=minecart,tag=ir_ride,limit=1] on passengers unless entity @s[type=player] run ride @s dismount
 
-# Keeper: re-mount a dismounted rider (sneak-dismounts, relogs) into the ride
-# cart. (This re-triggers the vanilla dismount hint -- unavoidable, but it
-# only ever happens when the rider left the ride themselves.)
-execute as @a[gamemode=adventure] unless data entity @s RootVehicle run ride @s mount @e[type=minecart,tag=ir_ride,limit=1]
+# Keeper: re-mount a dismounted rider (sneak-dismounts, relogs) -- into the
+# ride cart normally, or straight onto the seat while the cart is hidden
+# (.HIDECART -- mode_hidecart_on; the seat is also how the rider changes
+# perch on each toggle). (This re-triggers the vanilla dismount hint --
+# unavoidable, but it only ever happens on a self-dismount or a toggle.)
+execute if score .HIDECART ir matches 0 as @a[gamemode=adventure] unless data entity @s RootVehicle run ride @s mount @e[type=minecart,tag=ir_ride,limit=1]
+execute if score .HIDECART ir matches 1 as @a[gamemode=adventure] unless data entity @s RootVehicle run ride @s mount @e[type=item_display,tag=ir_seat,limit=1]
+
+# Keeper: while the cart is hidden, no ride cart may linger (belt +
+# suspenders -- mode_hidecart_on already kills it).
+execute if score .HIDECART ir matches 1 run kill @e[type=minecart,tag=ir_ride]
 
 # Keeper: prevent the ride cart from visually tilting due to the minecart_improvements experiment.
 execute as @e[type=minecart,tag=ir_ride,limit=1] run data modify entity @s Rotation[1] set value 0.0f
