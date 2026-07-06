@@ -1,0 +1,340 @@
+{
+    "values": [
+        {
+            "id": "#infinite_rail:keep",
+            "required": false
+        },
+        {
+            "id": "minecraft:air",
+            "required": false
+        },
+        {
+            "id": "minecraft:cave_air",
+            "required": false
+        },
+        {
+            "id": "minecraft:void_air",
+            "required": false
+        },
+        {
+            "id": "minecraft:snow",
+            "required": false
+        },
+        {
+            "id": "#minecraft:planks",
+            "required": false
+        },
+        {
+            "id": "#minecraft:fences",
+            "required": false
+        },
+        {
+            "id": "#minecraft:fence_gates",
+            "required": false
+        },
+        {
+            "id": "#minecraft:stairs",
+            "required": false
+        },
+        {
+            "id": "#minecraft:slabs",
+            "required": false
+        },
+        {
+            "id": "#minecraft:walls",
+            "required": false
+        },
+        {
+            "id": "#minecraft:doors",
+            "required": false
+        },
+        {
+            "id": "#minecraft:trapdoors",
+            "required": false
+        },
+        {
+            "id": "#minecraft:impermeable",
+            "required": false
+        },
+        {
+            "id": "#minecraft:wool",
+            "required": false
+        },
+        {
+            "id": "#minecraft:wool_carpets",
+            "required": false
+        },
+        {
+            "id": "#minecraft:beds",
+            "required": false
+        },
+        {
+            "id": "#minecraft:campfires",
+            "required": false
+        },
+        {
+            "id": "#minecraft:candles",
+            "required": false
+        },
+        {
+            "id": "#minecraft:anvil",
+            "required": false
+        },
+        {
+            "id": "minecraft:tinted_glass",
+            "required": false
+        },
+        {
+            "id": "minecraft:glass_pane",
+            "required": false
+        },
+        {
+            "id": "minecraft:white_stained_glass_pane",
+            "required": false
+        },
+        {
+            "id": "minecraft:orange_stained_glass_pane",
+            "required": false
+        },
+        {
+            "id": "minecraft:magenta_stained_glass_pane",
+            "required": false
+        },
+        {
+            "id": "minecraft:light_blue_stained_glass_pane",
+            "required": false
+        },
+        {
+            "id": "minecraft:yellow_stained_glass_pane",
+            "required": false
+        },
+        {
+            "id": "minecraft:lime_stained_glass_pane",
+            "required": false
+        },
+        {
+            "id": "minecraft:pink_stained_glass_pane",
+            "required": false
+        },
+        {
+            "id": "minecraft:gray_stained_glass_pane",
+            "required": false
+        },
+        {
+            "id": "minecraft:light_gray_stained_glass_pane",
+            "required": false
+        },
+        {
+            "id": "minecraft:cyan_stained_glass_pane",
+            "required": false
+        },
+        {
+            "id": "minecraft:purple_stained_glass_pane",
+            "required": false
+        },
+        {
+            "id": "minecraft:blue_stained_glass_pane",
+            "required": false
+        },
+        {
+            "id": "minecraft:brown_stained_glass_pane",
+            "required": false
+        },
+        {
+            "id": "minecraft:green_stained_glass_pane",
+            "required": false
+        },
+        {
+            "id": "minecraft:red_stained_glass_pane",
+            "required": false
+        },
+        {
+            "id": "minecraft:black_stained_glass_pane",
+            "required": false
+        },
+        {
+            "id": "minecraft:iron_bars",
+            "required": false
+        },
+        {
+            "id": "minecraft:cobblestone",
+            "required": false
+        },
+        {
+            "id": "minecraft:mossy_cobblestone",
+            "required": false
+        },
+        {
+            "id": "minecraft:stone_bricks",
+            "required": false
+        },
+        {
+            "id": "minecraft:mossy_stone_bricks",
+            "required": false
+        },
+        {
+            "id": "minecraft:cracked_stone_bricks",
+            "required": false
+        },
+        {
+            "id": "minecraft:chiseled_stone_bricks",
+            "required": false
+        },
+        {
+            "id": "minecraft:bricks",
+            "required": false
+        },
+        {
+            "id": "minecraft:mud_bricks",
+            "required": false
+        },
+        {
+            "id": "minecraft:packed_mud",
+            "required": false
+        },
+        {
+            "id": "minecraft:polished_granite",
+            "required": false
+        },
+        {
+            "id": "minecraft:polished_diorite",
+            "required": false
+        },
+        {
+            "id": "minecraft:polished_andesite",
+            "required": false
+        },
+        {
+            "id": "minecraft:smooth_stone",
+            "required": false
+        },
+        {
+            "id": "minecraft:smooth_sandstone",
+            "required": false
+        },
+        {
+            "id": "minecraft:cut_sandstone",
+            "required": false
+        },
+        {
+            "id": "minecraft:chiseled_sandstone",
+            "required": false
+        },
+        {
+            "id": "minecraft:smooth_red_sandstone",
+            "required": false
+        },
+        {
+            "id": "minecraft:cut_red_sandstone",
+            "required": false
+        },
+        {
+            "id": "minecraft:chiseled_red_sandstone",
+            "required": false
+        },
+        {
+            "id": "minecraft:hay_block",
+            "required": false
+        },
+        {
+            "id": "minecraft:bell",
+            "required": false
+        },
+        {
+            "id": "minecraft:lantern",
+            "required": false
+        },
+        {
+            "id": "minecraft:soul_lantern",
+            "required": false
+        },
+        {
+            "id": "minecraft:jack_o_lantern",
+            "required": false
+        },
+        {
+            "id": "minecraft:carved_pumpkin",
+            "required": false
+        },
+        {
+            "id": "minecraft:bookshelf",
+            "required": false
+        },
+        {
+            "id": "minecraft:chest",
+            "required": false
+        },
+        {
+            "id": "minecraft:trapped_chest",
+            "required": false
+        },
+        {
+            "id": "minecraft:barrel",
+            "required": false
+        },
+        {
+            "id": "minecraft:crafting_table",
+            "required": false
+        },
+        {
+            "id": "minecraft:furnace",
+            "required": false
+        },
+        {
+            "id": "minecraft:smoker",
+            "required": false
+        },
+        {
+            "id": "minecraft:blast_furnace",
+            "required": false
+        },
+        {
+            "id": "minecraft:composter",
+            "required": false
+        },
+        {
+            "id": "minecraft:lectern",
+            "required": false
+        },
+        {
+            "id": "minecraft:cartography_table",
+            "required": false
+        },
+        {
+            "id": "minecraft:fletching_table",
+            "required": false
+        },
+        {
+            "id": "minecraft:smithing_table",
+            "required": false
+        },
+        {
+            "id": "minecraft:loom",
+            "required": false
+        },
+        {
+            "id": "minecraft:stonecutter",
+            "required": false
+        },
+        {
+            "id": "minecraft:grindstone",
+            "required": false
+        },
+        {
+            "id": "minecraft:cauldron",
+            "required": false
+        },
+        {
+            "id": "minecraft:water_cauldron",
+            "required": false
+        },
+        {
+            "id": "minecraft:lava_cauldron",
+            "required": false
+        },
+        {
+            "id": "minecraft:powder_snow_cauldron",
+            "required": false
+        }
+    ]
+}

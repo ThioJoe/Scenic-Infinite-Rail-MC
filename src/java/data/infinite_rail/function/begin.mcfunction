@@ -44,7 +44,9 @@ forceload add ~-16 ~-8 ~ ~8
 function infinite_rail:forceload_here
 
 # --- Initial rail elevation = terrain surface here + hover altitude ---
-execute positioned over motion_blocking_no_leaves run tp @e[type=marker,tag=ir_probe,limit=1] ~ ~ ~
+# probe_surface = heightmap snap + the not-terrain dig-down, so starting the
+# ride while standing on a roof or under a tree still anchors to the ground.
+function infinite_rail:probe_surface
 execute store result score .railY ir run data get entity @e[type=marker,tag=ir_probe,limit=1] Pos[1]
 scoreboard players operation .railY ir += .HOVER cfg_terrain
 execute store result storage infinite_rail:tmp y double 1 run scoreboard players get .railY ir

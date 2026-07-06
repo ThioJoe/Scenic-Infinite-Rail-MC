@@ -1,12 +1,14 @@
 # The near-ground scan feeding the shared brain's slope-timing guards
 # (decide's .dig/.dig2/.push/.due and consider_start's start rules --
-# CONTEXT.md section 7j). Probes the surface heightmap every 2 blocks over
-# the next max(.UPLOOK, .DOWNLOOK) blocks east of the head (odd offsets +1,
-# +3, +5, ...). Consecutive probes are folded into PAIRS -- min(this, prev)
-# -- because the heightmap counts tree trunks as ground: a 1-2 block wide
-# spike only ever catches one probe of a pair, so the min erases it, while
-# real terrain (4+ blocks wide) spans both probes and registers. The pairs
-# boil down to three scores for the shared decide:
+# CONTEXT.md section 7j). Probes the surface every 2 blocks over the next
+# max(.UPLOOK, .DOWNLOOK) blocks east of the head (odd offsets +1, +3, +5,
+# ...) via probe_surface (heightmap + the not-terrain dig-down, so trees
+# and structures are already invisible). Consecutive probes are folded into
+# PAIRS -- min(this, prev) -- to erase what the dig-down can't: a 1-2 block
+# wide spike of REAL terrain (rock fins, lone pillars) only ever catches
+# one probe of a pair, so the min drops it, while real ground (4+ blocks
+# wide) spans both probes and registers. The pairs boil down to three
+# scores for the shared decide:
 #   .gfloor = highest pair within .DOWNLOOK (the descent guard: a down-step
 #             may never land below .gfloor + .DOWNGRACE)
 #   .gmax   = highest pair within .UPLOOK (the climb contact trigger)

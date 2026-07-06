@@ -1,14 +1,15 @@
 # One probe of the near-ground scan (see near_scan): snaps the probe marker
-# onto the surface at the current position (same heightmap trick as
-# sample_window -- ignores leaves, counts water surfaces), pairs the read
+# onto the surface at the current position (probe_surface -- the same
+# heightmap + not-terrain dig-down as sample_window: ignores leaves, tree
+# trunks and man-made structures, counts water surfaces), pairs the read
 # with the previous probe (.pmin = min of the two, which erases 1-2 block
-# wide spikes like tree trunks), folds the pair into .gfloor / .gmax /
+# wide spikes of real terrain), folds the pair into .gfloor / .gmax /
 # .gcone, then hops 2 blocks east and recurses while .nk <= .nw.
 # The pair's distance is its NEAR end (.nk - 2, via .prj). A void /
 # ungenerated read (<= -63) breaks the pair chain and is skipped entirely;
 # .gnu counts valid probes so near_scan can fail the schedule open when
 # there were none.
-execute positioned over motion_blocking_no_leaves run tp @e[type=marker,tag=ir_probe,limit=1] ~ ~ ~
+function infinite_rail:probe_surface
 execute store result score .s ir run data get entity @e[type=marker,tag=ir_probe,limit=1] Pos[1]
 scoreboard players operation .pmin ir = .s ir
 scoreboard players operation .pmin ir < .sprev ir

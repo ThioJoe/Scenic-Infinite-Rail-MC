@@ -10,8 +10,9 @@
 # spacing gaps get a say in whether a new event may begin.
 #
 # Besides .target and .railY, the native side supplies three GROUND-CONTACT
-# inputs each column from its near scan (CONTEXT.md section 7j; the scan
-# reads terrain in probe PAIRS so 1-2 block spikes like tree trunks are
+# inputs each column from its near scan (CONTEXT.md section 7j; the probe
+# digs through the not-terrain list -- trees, structures -- and the scan
+# reads the rest in probe PAIRS so 1-2 block spikes of real terrain are
 # invisible to all three):
 #   .gfloor = highest ground within .DOWNLOOK  (the descent floor's basis)
 #   .gmax   = highest ground within .UPLOOK    (the climb contact trigger)

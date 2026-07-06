@@ -241,9 +241,11 @@ for (const file of walk(BEDROCK_RP_OUT)) {
 // would silently no-op Java's carve checks at runtime, so fail here instead.
 if (!existsSync(join(JAVA_OUT, 'pack.mcmeta'))) fail('Java pack has no pack.mcmeta');
 if (!existsSync(join(JAVA_OUT, 'data', 'infinite_rail', 'tags', 'block', 'keep.json'))) fail('Java pack has no tags/block/keep.json (the carve\'s vegetation list)');
+if (!existsSync(join(JAVA_OUT, 'data', 'infinite_rail', 'tags', 'block', 'not_terrain.json'))) fail('Java pack has no tags/block/not_terrain.json (the surface probe\'s dig-down list)');
 if (!existsSync(join(BEDROCK_OUT, 'manifest.json'))) fail('Bedrock BP has no manifest.json');
 if (!existsSync(join(BEDROCK_OUT, 'scripts', 'main.js'))) fail('Bedrock BP has no scripts/main.js');
 if (!existsSync(join(BEDROCK_OUT, 'scripts', 'vegetation.js'))) fail('Bedrock BP has no scripts/vegetation.js (the carve\'s vegetation list)');
+if (!existsSync(join(BEDROCK_OUT, 'scripts', 'not_terrain.js'))) fail('Bedrock BP has no scripts/not_terrain.js (the surface probe\'s dig-down list)');
 if (!existsSync(join(BEDROCK_RP_OUT, 'manifest.json'))) fail('Bedrock RP has no manifest.json');
 
 // ---------------------------------------------------------------------------

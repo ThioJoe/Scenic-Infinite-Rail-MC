@@ -12,10 +12,12 @@
 //    Java jank (why it existed)                ->  Bedrock native replacement
 //    -------------------------------------------------------------------------
 //    ir_probe marker + "positioned over"       ->  dimension.getTopmostBlock()
-//      (only way to read heightmaps into           + walk down past foliage +
-//       scoreboards)                               climb back up liquid columns
-//                                                  (Bedrock's topmost probe
-//                                                  skips liquids entirely)
+//      + #infinite_rail:not_terrain dig-down       + walk down past foliage and
+//      (only way to read heightmaps into           not-terrain blocks (trees,
+//       scoreboards)                               village houses) + climb back
+//                                                  up liquid columns (Bedrock's
+//                                                  topmost probe skips liquids
+//                                                  entirely)
 //    storage infinite_rail:track y + cam_get   ->  plain JS array (trackY),
 //      macro (only array vanilla Java has)         trimmed + persisted
 //    build_loop <-> build_step recursion       ->  a JS while loop
@@ -77,6 +79,12 @@ import { camHeight } from './cam_math.js';
 // realization of the same policy). Bedrock commands have no block tags, so
 // the classification runs at runtime instead.
 import { isVegetation } from './vegetation.js';
+// What the surface probe must NOT count as terrain -- vegetation plus
+// man-made structure blocks (village houses etc.); probeSurface() digs down
+// through these to the real ground. The pair of Java's
+// tags/block/not_terrain.json, hand-maintained in policy sync like the
+// vegetation pair.
+import { isNotTerrain } from './not_terrain.js';
 
 // --- Constants ---------------------------------------------------------------
 
@@ -630,8 +638,13 @@ function loadState() {
 //      when there is one) -- Java's heightmap counts liquid surfaces as
 //      terrain, which is what makes oceans read as sea level and get
 //      bridged instead of dived into;
-//   3. a short walk DOWN past anything Java's motion_blocking_no_leaves
-//      heightmap would also ignore (leaves, collision-less foliage).
+//   3. a walk DOWN past anything Java's probe also ignores: leaves and
+//      collision-less foliage (like motion_blocking_no_leaves), plus the
+//      not-terrain list (isNotTerrain -- tree trunks, giant mushrooms and
+//      man-made structure blocks like village houses; Java digs through the
+//      same set via #infinite_rail:not_terrain), so trees and buildings
+//      never read as terrain height. Water is not in the list: a liquid
+//      surface still counts as terrain.
 // Returns the Y one above the (possibly liquid) surface -- the same convention
 // as the Java heightmap -- or undefined for void/unloaded reads.
 
@@ -682,11 +695,15 @@ function probeSurface(x, z) {
       // A liquid surface counts as terrain, exactly like Java's heightmap --
       // this is what makes oceans read as sea level and get bridged.
       surf = block.y + 1;
-    } else if (id.includes('leaves') || block.isSolid === false) {
-      // Skip what Java's motion_blocking_no_leaves skips: leaves, and blocks
-      // the engine reports as explicitly NON-solid (foliage, snow layers).
-      // The comparisons are deliberately against literal true/false: if
-      // isSolid / isLiquid are unavailable on this module version they read
+    } else if (id.includes('leaves') || block.isSolid === false || isNotTerrain(id)) {
+      // Skip what Java's probe skips: leaves, blocks the engine reports as
+      // explicitly NON-solid (foliage, snow layers), and everything the
+      // not-terrain list names -- tree trunks, giant mushrooms, and man-made
+      // structure blocks (village roofs, planks, glass, wool...), so trees
+      // and buildings never read as ground; non-solid covers the air pockets
+      // under them (house interiors), so the walk reaches the real floor.
+      // The isSolid/isLiquid comparisons are deliberately against literal
+      // true/false: if they are unavailable on this module version they read
       // undefined, and the block is ACCEPTED as surface -- a flower
       // miscounted as ground costs a block of noise (well inside .DEADBAND),
       // whereas skipping everything would freeze the terrain average and
@@ -730,10 +747,12 @@ function sampleWindow() {
 // The near-ground scan feeding the shared brain's slope-timing guards
 // (decide's .dig/.dig2/.push/.due and consider_start's start rules --
 // CONTEXT.md section 7j): probed every 2 blocks at odd offsets +1, +3, +5,
-// ... exactly like Java's near_scan/near_step. Consecutive probes fold into
-// PAIRS -- min(this, prev) -- because the surface probe counts tree trunks
-// as ground: a 1-2 block spike only catches one probe of a pair, so the min
-// erases it, while real terrain (4+ wide) spans both probes and registers.
+// ... exactly like Java's near_scan/near_step. The probe itself digs
+// through the not-terrain list (trees, structures -- isNotTerrain), and
+// consecutive probes fold into PAIRS -- min(this, prev) -- to erase what
+// the dig-down can't: a 1-2 block spike of REAL terrain (rock fins) only
+// catches one probe of a pair, so the min drops it, while real ground
+// (4+ wide) spans both probes and registers.
 // Three scores result: .gfloor (highest pair within .DOWNLOOK -- the
 // descent guard), .gmax (highest pair within .UPLOOK -- the climb contact
 // trigger) and .gcone (the climb schedule: over pairs actually in the way,
