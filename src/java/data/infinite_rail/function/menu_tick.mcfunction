@@ -15,8 +15,8 @@
 #   5/6      torches on/off                        the hotbar items cover it)
 #   7/8      sky on/off                  14/15     debug chat on/off
 #   9        modes printout              16-19     sidebar terrain/camera/
-#                                                  ride/live-state
-#                                        20/21     sidebar off / command help
+#   22-25    torch density                         ride/live-state
+#            low/medium/high/max         20/21     sidebar off / command help
 execute as @a[scores={ir_menu=1}] run function infinite_rail:mode_rain_on
 execute as @a[scores={ir_menu=2}] run function infinite_rail:mode_rain_off
 execute as @a[scores={ir_menu=3}] run function infinite_rail:mode_night_on
@@ -36,6 +36,10 @@ execute as @a[scores={ir_menu=18}] run function infinite_rail:sidebar_ride
 execute as @a[scores={ir_menu=19}] run function infinite_rail:sidebar_state
 execute as @a[scores={ir_menu=20}] run function infinite_rail:sidebar_off
 execute as @a[scores={ir_menu=21}] run function infinite_rail:cmd_help
+execute as @a[scores={ir_menu=22}] run function infinite_rail:torch_density_low
+execute as @a[scores={ir_menu=23}] run function infinite_rail:torch_density_medium
+execute as @a[scores={ir_menu=24}] run function infinite_rail:torch_density_high
+execute as @a[scores={ir_menu=25}] run function infinite_rail:torch_density_max
 # The Speed hotbar items' clicks: the carrot_on_a_stick "used" statistic
 # (ir_click, a stat-criteria objective) fans out to speed_click, which reads
 # the held item's custom_data to tell + from - and resets the count.

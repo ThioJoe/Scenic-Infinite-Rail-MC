@@ -413,6 +413,23 @@ function landSpeed() {
   return v >= 1 ? v : cfg('MAXSPEED');
 }
 
+// Torch-mode density: the .torchdens state score (the Settings form's
+// Low/Medium/High/Max presets -- the torch_density_* function files; seeded
+// from config .TORCHODDS by the shared modes_init), read the same way as
+// .speed. Falls back to the config default where the score is unreadable
+// (cmd-bridge worlds -- there a chosen preset degrades to the config value,
+// like every other live tweak).
+const TORCH_DENSITY = [
+  { fn: 'low', label: 'Low', v: 15 },
+  { fn: 'medium', label: 'Medium (default)', v: 35 },
+  { fn: 'high', label: 'High', v: 70 },
+  { fn: 'max', label: 'Max', v: 100 },
+];
+function torchDensity() {
+  const v = getScore('torchdens', 0);
+  return v >= 1 ? v : cfg('TORCHODDS');
+}
+
 // Route a speed change through the shared speed_step state machine (clamp
 // 1..64 + default detection) by feeding it a delta, then let speed_msg
 // report -- the same path as the +/- items and Java, so the feedback and
@@ -429,10 +446,17 @@ function adjustSpeed(delta) {
 // so the menu, the commands and Java behave identically, tellraw feedback
 // included. Only actual changes run anything.
 function showMenu(player) {
+  // The density dropdown shows the preset matching the live .torchdens; a
+  // hand-set / config-seeded value that matches no preset displays as
+  // Medium but is only overwritten if the player actively picks something
+  // (change detection runs against the DISPLAYED index, so an untouched
+  // submit never clobbers a custom value).
+  const densIdx = TORCH_DENSITY.findIndex((d) => d.v === torchDensity());
   const current = {
     rain: modeOn('RAINMODE'),
     night: nightMode(),
     torches: modeOn('TORCHMODE'),
+    dens: densIdx >= 0 ? densIdx : 1,
     sky: modeOn('SKYMODE'),
     // Clamped to the slider's 1..64 range -- a hand-set out-of-range .speed
     // must not make the form throw on its default value.
@@ -443,12 +467,13 @@ function showMenu(player) {
     .toggle('Rain (permanent rain)', { defaultValue: current.rain })
     .dropdown('Time', ['Default (day/night cycle)', 'Night only (frozen midnight)', 'Day only (frozen noon)'], { defaultValueIndex: current.night })
     .toggle('Torches (scattered along new track)', { defaultValue: current.torches })
+    .dropdown('Torch density', TORCH_DENSITY.map((d) => d.label), { defaultValueIndex: current.dens })
     .toggle('Sky (high-altitude cruise)', { defaultValue: current.sky })
     .slider(`Ride speed, blocks/s (default ${cfg('MAXSPEED')})`, 1, 64, { defaultValue: current.speed, valueStep: 1 })
     .submitButton('Apply');
   form.show(player).then((r) => {
     if (r.canceled || !r.formValues) return;
-    const [rain, night, torches, sky, speed] = r.formValues;
+    const [rain, night, torches, dens, sky, speed] = r.formValues;
     const apply = (was, wanted, fn) => {
       if (was !== !!wanted) runCmd(`function ${NS}/mode_${fn}_${wanted ? 'on' : 'off'}`);
     };
@@ -458,6 +483,10 @@ function showMenu(player) {
     const nightWant = night | 0;
     if (nightWant !== current.night) {
       runCmd(`function ${NS}/${['mode_night_off', 'mode_night_on', 'mode_day_on'][nightWant] ?? 'mode_night_off'}`);
+    }
+    const densWant = dens | 0;
+    if (densWant !== current.dens) {
+      runCmd(`function ${NS}/torch_density_${TORCH_DENSITY[densWant]?.fn ?? 'medium'}`);
     }
     const speedWant = Math.round(+speed);
     if (speedWant !== current.speed) adjustSpeed(speedWant - current.speed);
@@ -864,7 +893,7 @@ function placeColumn(x, y, dir, veg) {
 // left whole snowfields torchless). The 48 cap matches Java's (its widened
 // forceload corridor's ceiling); here the scout bubble covers +-96 anyway.
 function maybeTorch(x) {
-  if (Math.random() * 100 >= cfg('TORCHODDS')) return;
+  if (Math.random() * 100 >= torchDensity()) return;
   const side = Math.random() < 0.5 ? -1 : 1;
   let range = cfg('TORCHRANGE');
   if (range < 2) range = 2;   // 2 keeps torches out of the carved bore

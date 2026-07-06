@@ -20,3 +20,11 @@ scoreboard players add .SKYMODE ir 0
 # config on both editions, so .MAXSPEED is already applied here.
 scoreboard players add .speed ir 0
 execute if score .speed ir matches ..0 run scoreboard players operation .speed ir = .MAXSPEED cfg_ride
+
+# Torch density (.torchdens -- the roll place_torch/maybeTorch actually
+# uses) follows the same pattern: seeded from the config default .TORCHODDS
+# only when never set, then owned by the Settings menu's presets (the
+# torch_density_* functions: Low 15 / Medium 35 / High 70 / Max 100), so a
+# chosen density survives /reload, ride restarts and rejoins.
+scoreboard players add .torchdens ir 0
+execute if score .torchdens ir matches ..0 run scoreboard players operation .torchdens ir = .TORCHODDS cfg_ride

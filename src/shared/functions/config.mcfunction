@@ -352,11 +352,14 @@ scoreboard players set .SKYY cfg_ride 180
 # mode owns the speed.
 scoreboard players set .SKYSPEED cfg_ride 18
 
-# Torch mode: the percent chance (0-100) that each newly built column plants
-# a torch somewhere beside the track (.TORCHRANGE below controls how far
-# out). 10 = on average about one torch per 10 blocks of line. Torches are
-# only placed where one can actually stand (never on water, ice or snow
-# layers), and only on NEW track built while the mode is on.
+# Torch mode: the DEFAULT percent chance (0-100) that each newly built
+# column plants a torch somewhere beside the track (.TORCHRANGE below
+# controls how far out). This is only the SEED for the .torchdens state
+# score (modes_init copies it once, on the first load): the Settings menu's
+# density presets -- Low 15 / Medium 35 / High 70 / Max 100 -- own the live
+# value afterwards, and a chosen density survives reloads, rejoins and ride
+# restarts like every mode. Torches skip water/lava ground, and only NEW
+# track built while the mode is on gets them.
 scoreboard players set .TORCHODDS cfg_ride 35
 
 # Torch mode: how far (in blocks) a torch may land from the track's

@@ -1,7 +1,9 @@
 # Torch mode (.TORCHMODE -- see mode_torches_on): sprinkle torches on the
 # terrain around the line as it is built. Runs positioned at the head, once
 # per column, from advance. Three rolls:
-#   1. does this column get a torch at all? (.TORCHODDS percent chance)
+#   1. does this column get a torch at all? (.torchdens percent chance --
+#      the state score behind the Settings book's density presets, seeded
+#      from config .TORCHODDS by modes_init)
 #   2. how far out does it land? (uniform 2...TORCHRANGE blocks -- the floor
 #      of 2 keeps clear of the 3-wide carve; clamped to 48, the ceiling the
 #      widened forceload corridor supports -- see forceload_here)
@@ -10,7 +12,7 @@
 # scoreboards, so the distance is scaled from a fixed 0..99 roll and the
 # signed result is handed to the torch_at macro as a literal Z offset.
 execute store result score .tr ir run random value 1..100
-execute if score .tr ir > .TORCHODDS cfg_ride run return 0
+execute if score .tr ir > .torchdens ir run return 0
 # Distance = 2 + roll * (range - 1) / 100, with roll = 0..99.
 scoreboard players operation .td ir = .TORCHRANGE cfg_ride
 execute if score .td ir matches ..2 run scoreboard players set .td ir 2
