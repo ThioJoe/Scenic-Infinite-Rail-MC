@@ -10,4 +10,4 @@ function infinite_rail:set_speed with storage infinite_rail:speed
 scoreboard players set .fast ir 0
 scoreboard players set .oceanRun ir 0
 scoreboard players set .landRun ir 0
-tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Sky mode OFF - gliding back down to the terrain.","color":"gray"}]
+tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Sky mode OFF - gliding back down to the terrain.","color":"gray"}]

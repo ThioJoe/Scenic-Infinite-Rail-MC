@@ -9,4 +9,4 @@ data modify storage infinite_rail:rule rule set from storage infinite_rail:names
 data modify storage infinite_rail:rule v set value "false"
 function infinite_rail:set_rule with storage infinite_rail:rule
 time set noon
-tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Time: day only - frozen at noon.","color":"gray"}]
+tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Time: day only - frozen at noon.","color":"gray"}]

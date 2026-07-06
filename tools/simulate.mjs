@@ -43,12 +43,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 // infinite_rail functions themselves, plus the edition's home for the bare
 // ir_* call bridges (Java: the minecraft namespace; Bedrock: functions/ root).
 const JAVA_FN = [
-  join(ROOT, 'dist', 'java', 'infinite_rail', 'data', 'infinite_rail', 'function'),
-  join(ROOT, 'dist', 'java', 'infinite_rail', 'data', 'minecraft', 'function'),
+  join(ROOT, 'dist', 'java', 'Scenic_Infinite_Rail_Mode', 'data', 'infinite_rail', 'function'),
+  join(ROOT, 'dist', 'java', 'Scenic_Infinite_Rail_Mode', 'data', 'minecraft', 'function'),
 ];
 const BEDROCK_FN = [
-  join(ROOT, 'dist', 'bedrock', 'InfiniteRail_BP', 'functions', 'infinite_rail'),
-  join(ROOT, 'dist', 'bedrock', 'InfiniteRail_BP', 'functions'),
+  join(ROOT, 'dist', 'bedrock', 'Scenic_Infinite_Rail_Mode_BP', 'functions', 'infinite_rail'),
+  join(ROOT, 'dist', 'bedrock', 'Scenic_Infinite_Rail_Mode_BP', 'functions'),
 ];
 
 let failures = 0;

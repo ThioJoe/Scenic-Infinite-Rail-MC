@@ -5,9 +5,9 @@ Set-Location $repoRoot
 # --- Configuration ---
 $useJunctions = $true
 $outDir  = "dist_links"
-$rpDir   = "InfiniteRail_RP"
-$bpDir   = "InfiniteRail_BP"
-$javaDir = "InfiniteRail_Java"
+$rpDir   = "Scenic_Infinite_Rail_Mode_RP"
+$bpDir   = "Scenic_Infinite_Rail_Mode_BP"
+$javaDir = "Scenic_Infinite_Rail_Mode"
 
 # --- Helper Functions ---
 

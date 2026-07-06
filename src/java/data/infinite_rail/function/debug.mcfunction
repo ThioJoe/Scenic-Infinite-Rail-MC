@@ -5,4 +5,4 @@
 # untouched here because its name differs across the supported versions;
 # toggle it manually if you want /scoreboard results echoed.
 scoreboard players set .DEBUGMODE ir 1
-tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Debug mode ON.","color":"gray"}]
+tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Debug mode ON.","color":"gray"}]

@@ -1,8 +1,8 @@
 {
   "format_version": 2,
   "header": {
-    "name": "Infinite Rail (Slow TV) Resources",
-    "description": "Invisible camera-seat entity for the Infinite Rail ride",
+    "name": "Scenic Infinite Rail Mode Resources",
+    "description": "Invisible camera-seat entity for the Scenic Rail ride",
     "uuid": "23d216b2-863c-43db-bdec-c0dc4d586ce3",
     "version": [1, 2, 2],
     "min_engine_version": [1, 21, 120]

@@ -1,4 +1,4 @@
-# Building Infinite Rail
+# Building Scenic Infinite Rail Mode
 
 One repository produces two packs: a **Java Edition data pack** and a **Bedrock Edition behavior pack**. Nothing in `src/` is playable directly — the build assembles the shippable packs from three source folders.
 
@@ -44,13 +44,13 @@ Outputs, all under `dist/` (gitignored):
 
 | Output | What to do with it |
 | ------ | ------------------ |
-| `dist/java/infinite_rail/` | Drop the folder into a world's `datapacks/` folder |
-| `dist/InfiniteRail-Java-v*.zip` | Or drag this zip onto the Data Packs screen |
-| `dist/bedrock/InfiniteRail_BP/` | The behavior pack as a folder (for `development_behavior_packs`) |
-| `dist/bedrock/InfiniteRail_RP/` | The resource pack as a folder (for `development_resource_packs`) |
-| `dist/InfiniteRail-Bedrock-v*.mcaddon` | Double-click to import into Bedrock (BP + RP in one file) |
+| `dist/java/Scenic_Infinite_Rail_Mode/` | Drop the folder into a world's `datapacks/` folder |
+| `dist/ScenicInfiniteRailMode-Java-v*.zip` | Or drag this zip onto the Data Packs screen |
+| `dist/bedrock/Scenic_Infinite_Rail_Mode_BP/` | The behavior pack as a folder (for `development_behavior_packs`) |
+| `dist/bedrock/Scenic_Infinite_Rail_Mode_RP/` | The resource pack as a folder (for `development_resource_packs`) |
+| `dist/ScenicInfiniteRailMode-Bedrock-v*.mcaddon` | Double-click to import into Bedrock (BP + RP in one file) |
 
-GitHub Actions runs the same two commands on every push and uploads three artifacts, each suffixed with the run number so successive test builds are easy to tell apart: `InfiniteRail-Java-N` (the datapack folder), `InfiniteRail-Bedrock-N` (the `.mcaddon`), and `InfiniteRail-Bedrock-Folder-N` (the unzipped BP + RP folders, for dropping straight into `development_behavior_packs` / `development_resource_packs` while testing). Pushing a `v*` tag attaches the `.zip` + `.mcaddon` to a GitHub release. The release version comes from `header.version` in `src/bedrock/bp/manifest.json` (the RP manifest and the BP's RP-dependency entry must carry the same version; the build enforces this).
+GitHub Actions runs the same two commands on every push and uploads three artifacts, each suffixed with the run number so successive test builds are easy to tell apart: `ScenicInfiniteRailMode-Java-N` (the datapack folder), `ScenicInfiniteRailMode-Bedrock-N` (the `.mcaddon`), and `ScenicInfiniteRailMode-Bedrock-Folder-N` (the unzipped BP + RP folders, for dropping straight into `development_behavior_packs` / `development_resource_packs` while testing). Pushing a `v*` tag attaches the `.zip` + `.mcaddon` to a GitHub release. The release version comes from `header.version` in `src/bedrock/bp/manifest.json` (the RP manifest and the BP's RP-dependency entry must carry the same version; the build enforces this).
 
 ## How sharing works (and its limits)
 

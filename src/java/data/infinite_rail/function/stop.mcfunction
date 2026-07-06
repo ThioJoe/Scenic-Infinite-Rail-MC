@@ -15,4 +15,4 @@ kill @e[type=item_display,tag=ir_plug]
 kill @e[type=marker,tag=ir_head]
 kill @e[type=marker,tag=ir_probe]
 forceload remove all
-tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Ride stopped.","color":"gray"}]
+tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Ride stopped.","color":"gray"}]

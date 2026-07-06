@@ -8,4 +8,4 @@ data modify storage infinite_rail:rule rule set from storage infinite_rail:names
 data modify storage infinite_rail:rule v set value "true"
 function infinite_rail:set_rule with storage infinite_rail:rule
 time set day
-tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Time: default - normal day/night cycle restored.","color":"gray"}]
+tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Time: default - normal day/night cycle restored.","color":"gray"}]

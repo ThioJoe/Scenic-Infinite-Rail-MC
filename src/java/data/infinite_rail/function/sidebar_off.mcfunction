@@ -2,4 +2,4 @@
 # mirror -- .SIDEBAR 0 gates debug_tick off).
 scoreboard objectives setdisplay sidebar
 scoreboard players set .SIDEBAR ir 0
-tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Sidebar hidden.","color":"gray"}]
+tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Sidebar hidden.","color":"gray"}]

@@ -42,7 +42,7 @@ execute if score .DEBUGMODE ir matches 1 store result score .dbgmx ir run data g
 execute if score .isOcean ir matches 1 run scoreboard players add .oceanRun ir 1
 execute if score .isOcean ir matches 1 run scoreboard players set .landRun ir 0
 # Debug: report only while counting up to the threshold, then go quiet.
-execute if score .DEBUGMODE ir matches 1 if score .isOcean ir matches 1 if score .oceanRun ir <= .OCEANCHUNKS cfg_ride run tellraw @a [{"text":"[IR debug] ","color":"dark_aqua"},{"text":"ocean chunk - oceanRun=","color":"aqua"},{"score":{"name":".oceanRun","objective":"ir"},"color":"white"},{"text":"/","color":"aqua"},{"score":{"name":".OCEANCHUNKS","objective":"cfg_ride"},"color":"white"},{"text":"  cartx100=","color":"gray"},{"score":{"name":".dbgmx","objective":"ir"},"color":"white"}]
+execute if score .DEBUGMODE ir matches 1 if score .isOcean ir matches 1 if score .oceanRun ir <= .OCEANCHUNKS cfg_ride run tellraw @a [{"text":"[SR Debug] ","color":"dark_aqua"},{"text":"ocean chunk - oceanRun=","color":"aqua"},{"score":{"name":".oceanRun","objective":"ir"},"color":"white"},{"text":"/","color":"aqua"},{"score":{"name":".OCEANCHUNKS","objective":"cfg_ride"},"color":"white"},{"text":"  cartx100=","color":"gray"},{"score":{"name":".dbgmx","objective":"ir"},"color":"white"}]
 # Past the ocean threshold -> enforce .OCEANSPEED (re-applied every ocean chunk).
 # (.OCEANSPEED 0 disables the feature, so it never triggers then.)
 execute if score .isOcean ir matches 1 if score .OCEANSPEED cfg_ride matches 1.. if score .oceanRun ir >= .OCEANCHUNKS cfg_ride run function infinite_rail:speed_up
@@ -51,6 +51,6 @@ execute if score .isOcean ir matches 1 if score .OCEANSPEED cfg_ride matches 1..
 execute if score .isOcean ir matches 0 run scoreboard players add .landRun ir 1
 execute if score .isOcean ir matches 0 run scoreboard players set .oceanRun ir 0
 # Debug: report only while counting up to the threshold, then go quiet.
-execute if score .DEBUGMODE ir matches 1 if score .isOcean ir matches 0 if score .landRun ir <= .LANDCHUNKS cfg_ride run tellraw @a [{"text":"[IR debug] ","color":"dark_aqua"},{"text":"land chunk - landRun=","color":"yellow"},{"score":{"name":".landRun","objective":"ir"},"color":"white"},{"text":"/","color":"yellow"},{"score":{"name":".LANDCHUNKS","objective":"cfg_ride"},"color":"white"},{"text":"  cartx100=","color":"gray"},{"score":{"name":".dbgmx","objective":"ir"},"color":"white"}]
+execute if score .DEBUGMODE ir matches 1 if score .isOcean ir matches 0 if score .landRun ir <= .LANDCHUNKS cfg_ride run tellraw @a [{"text":"[SR Debug] ","color":"dark_aqua"},{"text":"land chunk - landRun=","color":"yellow"},{"score":{"name":".landRun","objective":"ir"},"color":"white"},{"text":"/","color":"yellow"},{"score":{"name":".LANDCHUNKS","objective":"cfg_ride"},"color":"white"},{"text":"  cartx100=","color":"gray"},{"score":{"name":".dbgmx","objective":"ir"},"color":"white"}]
 # Enough consecutive non-ocean chunks after a fast stretch -> restore .MAXSPEED once.
 execute if score .isOcean ir matches 0 if score .fast ir matches 1 if score .landRun ir >= .LANDCHUNKS cfg_ride run function infinite_rail:speed_down

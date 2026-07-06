@@ -37,7 +37,7 @@ scoreboard players operation .s2 ir = .railY ir
 scoreboard players operation .s2 ir *= .C1000 ir
 function infinite_rail:cam_follow
 scoreboard players set .started ir 1
-tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Enjoy the ride.","color":"gray"}]
+tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Enjoy the ride.","color":"gray"}]
 # Loud diagnostic instead of a silent no-op: if the rider still is not
 # seated, say so. The keeper retries the mount every tick regardless.
-execute as @e[type=player,tag=ir_rider,limit=1] unless data entity @s RootVehicle run tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Warning: could not seat the rider yet (retrying every tick). If this persists, please report it with your exact Minecraft version.","color":"yellow"}]
+execute as @e[type=player,tag=ir_rider,limit=1] unless data entity @s RootVehicle run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Warning: could not seat the rider yet (retrying every tick). If this persists, please report it with your exact Minecraft version.","color":"yellow"}]

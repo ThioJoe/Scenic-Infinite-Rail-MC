@@ -1,4 +1,4 @@
-# CONTEXT.md — How the Infinite Rail pack works
+# CONTEXT.md — How the Scenic Infinite Rail Mode pack works
 
 A complete technical reference for the project: the architecture, the shared state, every file, and the algorithms. Written for a developer (or an AI) who needs to understand or modify the pack. For the repository layout and build workflow see `BUILDING.md`.
 
@@ -9,6 +9,8 @@ Sections 1–10 document the **Java Edition** data pack (the original and riches
 ## 1. What it is
 
 A **100% vanilla Minecraft: Java Edition data pack** (no mods, no resource pack) that turns the game into an endless, relaxing "Slow TV" minecart ride. Inspired by "Slow TV" train journey videos, the player glides over plains, bridges ravines and oceans, and tunnels through mountains, forever. (A Bedrock behavior-pack port built from the same sources is covered in §11.)
+
+**Branding vs. internals:** the public-facing name is **Scenic Infinite Rail Mode** (shortened where space demands: "Scenic Rail Mode", or "Scenic Rail" — the chat message prefix is `[Scenic Rail]`, debug lines use `[SR Debug]`). Everything internal keeps the original `infinite_rail` identity: the function namespace, folder `data/infinite_rail/`, the `ir`/`ir_*` scoreboard objectives, entity tags and score-holder names are all unchanged — only user-visible strings (pack names/descriptions, chat prefixes, menu titles, shipped folder/file names) carry the new brand.
 
 The ride starts by itself in a fresh world (or via one command): the player is placed on a self-building, permanently-powered rail line heading **due east forever**, while an algorithm lays smooth track over the procedurally generated terrain — bridging valleys and oceans, tunneling through mountains, and hovering a few blocks above the ground the rest of the time. The player sits in a real minecart — but not the one on the rails: their cart is glued to an invisible, interpolated **camera seat** that flies a pre-smoothed S-curve computed from the track's own recorded profile, while a hidden **pace cart** rides the physical rails behind them and sets the speed. Slope corners and rail physics never reach the player's eyes, and they mount exactly once per ride (§7g).
 
@@ -24,10 +26,10 @@ Key design facts to keep in mind while reading:
 
 ## 2. Data pack anatomy & how Minecraft bootstraps it
 
-The **shipped** Java pack (what `tools/build.mjs` assembles into `dist/java/infinite_rail/`) looks like this:
+The **shipped** Java pack (what `tools/build.mjs` assembles into `dist/java/Scenic_Infinite_Rail_Mode/`) looks like this:
 
 ```
-infinite_rail/
+Scenic_Infinite_Rail_Mode/
   pack.mcmeta                                   # pack metadata + version compat + overlays
   data/
     minecraft/tags/function/

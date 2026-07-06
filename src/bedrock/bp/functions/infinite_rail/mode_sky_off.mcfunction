@@ -4,4 +4,4 @@
 # landscape. scripts/main.js sees the toggle-off transition and hands the
 # speed back to the ocean system with fresh counters.
 scoreboard players set .SKYMODE ir 0
-tellraw @a {"rawtext":[{"text":"§6[Infinite Rail]§r §7Sky mode OFF - gliding back down to the terrain."}]}
+tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Sky mode OFF - gliding back down to the terrain."}]}

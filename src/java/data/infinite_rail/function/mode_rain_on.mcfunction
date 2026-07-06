@@ -11,4 +11,4 @@ data modify storage infinite_rail:rule rule set from storage infinite_rail:names
 data modify storage infinite_rail:rule v set value "false"
 function infinite_rail:set_rule with storage infinite_rail:rule
 weather rain
-tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Rain mode ON - permanent rain.","color":"gray"}]
+tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Rain mode ON - permanent rain.","color":"gray"}]

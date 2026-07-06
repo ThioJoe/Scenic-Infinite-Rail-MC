@@ -9,15 +9,15 @@
 //    src/bedrock/** -> Bedrock Edition behavior pack
 //
 //  Outputs (all under dist/):
-//    dist/java/infinite_rail/                       ready-to-drop datapack folder
-//    dist/InfiniteRail-Java-v<version>.zip          drag-and-drop datapack zip
-//    dist/bedrock/InfiniteRail_BP/                  behavior pack folder
-//    dist/bedrock/InfiniteRail_RP/                  resource pack folder (the
+//    dist/java/Scenic_Infinite_Rail_Mode/           ready-to-drop datapack folder
+//    dist/ScenicInfiniteRailMode-Java-v<version>.zip  drag-and-drop datapack zip
+//    dist/bedrock/Scenic_Infinite_Rail_Mode_BP/     behavior pack folder
+//    dist/bedrock/Scenic_Infinite_Rail_Mode_RP/     resource pack folder (the
 //                                                   invisible seat entity)
-//    dist/InfiniteRail-Bedrock-v<version>.mcaddon   double-click-to-import
-//                                                   (BP+RP; the BP manifest
-//                                                   depends on the RP, so
-//                                                   activating one pulls both)
+//    dist/ScenicInfiniteRailMode-Bedrock-v<version>.mcaddon  double-click-to-
+//                                                   import (BP+RP; the BP
+//                                                   manifest depends on the RP,
+//                                                   so activating one pulls both)
 //
 //  Zero dependencies: the .zip/.mcpack writer below uses only node:zlib.
 //  Usage: node tools/build.mjs [--check]   (--check = lint/validate only)
@@ -131,9 +131,9 @@ for (const f of sharedFiles) {
 // ---------------------------------------------------------------------------
 // 2. Assemble the output trees.
 // ---------------------------------------------------------------------------
-const JAVA_OUT = join(DIST, 'java', 'infinite_rail');
-const BEDROCK_OUT = join(DIST, 'bedrock', 'InfiniteRail_BP');
-const BEDROCK_RP_OUT = join(DIST, 'bedrock', 'InfiniteRail_RP');
+const JAVA_OUT = join(DIST, 'java', 'Scenic_Infinite_Rail_Mode');
+const BEDROCK_OUT = join(DIST, 'bedrock', 'Scenic_Infinite_Rail_Mode_BP');
+const BEDROCK_RP_OUT = join(DIST, 'bedrock', 'Scenic_Infinite_Rail_Mode_RP');
 
 if (!CHECK_ONLY) {
   rmSync(DIST, { recursive: true, force: true });
@@ -323,13 +323,13 @@ function zipDirectory(srcDir, outFile) {
   writeFileSync(outFile, Buffer.concat([...chunks, cdBuf, end]));
 }
 
-const javaZip = join(DIST, `InfiniteRail-Java-v${VERSION}.zip`);
-const bedrockAddon = join(DIST, `InfiniteRail-Bedrock-v${VERSION}.mcaddon`);
+const javaZip = join(DIST, `ScenicInfiniteRailMode-Java-v${VERSION}.zip`);
+const bedrockAddon = join(DIST, `ScenicInfiniteRailMode-Bedrock-v${VERSION}.mcaddon`);
 zipDirectory(JAVA_OUT, javaZip);                    // pack.mcmeta at zip root
 zipDirectory(join(DIST, 'bedrock'), bedrockAddon);  // BP + RP folders at zip root
 
 const count = (d) => [...walk(d)].length;
-console.log(`Infinite Rail v${VERSION}`);
+console.log(`Scenic Infinite Rail Mode v${VERSION}`);
 console.log(`  shared functions injected: ${sharedFiles.length} (${sharedFiles.map((f) => f.replace('.mcfunction', '')).join(', ')})`);
 console.log(`  Java pack:    ${relative(ROOT, JAVA_OUT)} (${count(JAVA_OUT)} files) -> ${relative(ROOT, javaZip)} (${statSync(javaZip).size} bytes)`);
 console.log(`  Bedrock BP+RP: ${relative(ROOT, join(DIST, 'bedrock'))} (${count(join(DIST, 'bedrock'))} files) -> ${relative(ROOT, bedrockAddon)} (${statSync(bedrockAddon).size} bytes)`);

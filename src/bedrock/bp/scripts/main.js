@@ -146,8 +146,8 @@ const BUILD_MARGIN = 17;
 const SAMPLE_REACH = 48;
 // Ticking-area names from older versions of this pack, removed on cleanup.
 const LEGACY_AREAS = ['ir_area_a', 'ir_area_b', 'ir_t0', 'ir_t1', 'ir_t2', 'ir_t3'];
-const PREFIX = '§6[Infinite Rail]§r ';
-const DBG = '§3[IR debug]§r ';
+const PREFIX = '§6[Scenic Rail]§r ';
+const DBG = '§3[SR Debug]§r ';
 
 // The PINNED HOTBAR ITEMS -- kept in place by the inventory keeper (which
 // clears everything else every tick) and matched by type + name in the
@@ -439,7 +439,7 @@ function showMenu(player) {
     speed: Math.min(64, Math.max(1, landSpeed())),
   };
   const form = new ModalFormData()
-    .title('Infinite Rail Settings')
+    .title('Scenic Rail Mode Settings')
     .toggle('Rain (permanent rain)', { defaultValue: current.rain })
     .dropdown('Time', ['Default (day/night cycle)', 'Night only (frozen midnight)', 'Day only (frozen noon)'], { defaultValueIndex: current.night })
     .toggle('Torches (scattered along new track)', { defaultValue: current.torches })
@@ -478,7 +478,7 @@ function showDebugMenu(player) {
     sidebar: Math.min(4, Math.max(0, getScore('SIDEBAR', 0))),
   };
   const form = new ModalFormData()
-    .title('Infinite Rail Debug')
+    .title('Scenic Rail Mode Debug')
     .toggle('Debug chat output (speed system, chunk status)', { defaultValue: current.chat })
     .dropdown('Scoreboard sidebar', [
       'Hidden',
@@ -1513,7 +1513,7 @@ function begin(player) {
     sc.addTag(TAG_SCOUT);
     S.scoutId = sc.id;
   } catch (e) {
-    say(`§eCould not summon the chunk scout (${e}). The ride still works, but the track will build much less far ahead -- make sure BOTH Infinite Rail packs are installed and up to date.`);
+    say(`§eCould not summon the chunk scout (${e}). The ride still works, but the track will build much less far ahead -- make sure BOTH Scenic Rail packs are installed and up to date.`);
   }
 
   S.paceSpeed = 0;
@@ -1618,7 +1618,7 @@ function beginPhase2(startX) {
     // Rig chunk still not generated after the 50 s wait, the player portaled
     // away mid-launch, or the seat entity is unavailable: give up cleanly
     // instead of dying half-done, and say which it was.
-    abortLaunch(`could not spawn the ride rig (${e}). If the terrain was still generating, run the start command again; otherwise make sure BOTH Infinite Rail packs (behavior + resource) are active and check the Content Log.`);
+    abortLaunch(`could not spawn the ride rig (${e}). If the terrain was still generating, run the start command again; otherwise make sure BOTH Scenic Rail packs (behavior + resource) are active and check the Content Log.`);
     return;
   }
 

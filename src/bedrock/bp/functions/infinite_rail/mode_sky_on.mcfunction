@@ -6,4 +6,4 @@
 # speed system while the mode owns the speed -- so this file only needs to
 # flip the score.
 scoreboard players set .SKYMODE ir 1
-tellraw @a {"rawtext":[{"text":"§6[Infinite Rail]§r §7Sky mode ON - climbing to cruising altitude."}]}
+tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Sky mode ON - climbing to cruising altitude."}]}

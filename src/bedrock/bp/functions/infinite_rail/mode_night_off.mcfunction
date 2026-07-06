@@ -5,4 +5,4 @@
 scoreboard players set .NIGHTMODE ir 0
 gamerule dodaylightcycle true
 time set day
-tellraw @a {"rawtext":[{"text":"§6[Infinite Rail]§r §7Time: default - normal day/night cycle restored."}]}
+tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Time: default - normal day/night cycle restored."}]}

@@ -7,4 +7,4 @@
 # placement itself happens in place_torch/torch_at/torch_try, hooked into
 # advance.
 scoreboard players set .TORCHMODE ir 1
-tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Torch mode ON - new track will be dotted with torches.","color":"gray"}]
+tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Torch mode ON - new track will be dotted with torches.","color":"gray"}]

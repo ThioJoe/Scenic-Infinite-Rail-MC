@@ -5,4 +5,4 @@
 # once. .SIDEBAR remembers the choice (0 off, 1-3 the cfg groups, 4 state).
 scoreboard objectives setdisplay sidebar cfg_terrain
 scoreboard players set .SIDEBAR ir 1
-tellraw @a {"rawtext":[{"text":"§6[Infinite Rail]§r §7Sidebar: terrain settings."}]}
+tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Sidebar: terrain settings."}]}

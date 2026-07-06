@@ -5,4 +5,4 @@
 # view is selected (that's what .SIDEBAR 4 gates).
 scoreboard objectives setdisplay sidebar dbg
 scoreboard players set .SIDEBAR ir 4
-tellraw @a [{"text":"[Infinite Rail] ","color":"gold"},{"text":"Sidebar: live ride state (refreshed every tick).","color":"gray"}]
+tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Sidebar: live ride state (refreshed every tick).","color":"gray"}]

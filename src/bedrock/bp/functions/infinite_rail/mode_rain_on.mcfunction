@@ -8,4 +8,4 @@
 scoreboard players set .RAINMODE ir 1
 gamerule doweathercycle false
 weather rain
-tellraw @a {"rawtext":[{"text":"§6[Infinite Rail]§r §7Rain mode ON - permanent rain."}]}
+tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Rain mode ON - permanent rain."}]}

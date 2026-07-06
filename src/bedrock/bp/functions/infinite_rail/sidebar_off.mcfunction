@@ -2,4 +2,4 @@
 # mirror -- .SIDEBAR 0 gates it off).
 scoreboard objectives setdisplay sidebar
 scoreboard players set .SIDEBAR ir 0
-tellraw @a {"rawtext":[{"text":"§6[Infinite Rail]§r §7Sidebar hidden."}]}
+tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Sidebar hidden."}]}

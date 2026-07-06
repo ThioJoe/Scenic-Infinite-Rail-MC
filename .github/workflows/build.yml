@@ -1,9 +1,10 @@
 name: Build packs
 
 # Builds both release packs from the split src/ tree on every push and PR:
-#   - InfiniteRail-Java     -> the infinite_rail/ datapack folder (drag into
-#                              the world's datapacks screen / folder)
-#   - InfiniteRail-Bedrock  -> the .mcpack file (double-click to import)
+#   - ScenicInfiniteRailMode-Java     -> the Scenic_Infinite_Rail_Mode/ datapack
+#                                        folder (drag into the world's
+#                                        datapacks screen / folder)
+#   - ScenicInfiniteRailMode-Bedrock  -> the .mcpack file (double-click to import)
 # Pushing a v* tag additionally attaches the .zip and .mcpack to a GitHub
 # Release.
 
@@ -43,11 +44,11 @@ jobs:
       # easy to tell apart (the number increments on failed runs too).
 
       # Downloading this artifact yields a zip that extracts to the
-      # ready-to-use infinite_rail/ datapack FOLDER.
+      # ready-to-use Scenic_Infinite_Rail_Mode/ datapack FOLDER.
       - name: Upload Java datapack (folder)
         uses: actions/upload-artifact@v4
         with:
-          name: InfiniteRail-Java-${{ github.run_number }}
+          name: ScenicInfiniteRailMode-Java-${{ github.run_number }}
           path: dist/java/
           if-no-files-found: error
 
@@ -56,17 +57,17 @@ jobs:
       - name: Upload Bedrock pack (.mcaddon)
         uses: actions/upload-artifact@v4
         with:
-          name: InfiniteRail-Bedrock-${{ github.run_number }}
+          name: ScenicInfiniteRailMode-Bedrock-${{ github.run_number }}
           path: dist/*.mcaddon
           if-no-files-found: error
 
       # The unzipped Bedrock packs, for development testing: extract and drop
-      # InfiniteRail_BP / InfiniteRail_RP into com.mojang's
-      # development_behavior_packs / development_resource_packs.
+      # Scenic_Infinite_Rail_Mode_BP / Scenic_Infinite_Rail_Mode_RP into
+      # com.mojang's development_behavior_packs / development_resource_packs.
       - name: Upload Bedrock packs (folders, for development)
         uses: actions/upload-artifact@v4
         with:
-          name: InfiniteRail-Bedrock-Folder-${{ github.run_number }}
+          name: ScenicInfiniteRailMode-Bedrock-Folder-${{ github.run_number }}
           path: dist/bedrock/
           if-no-files-found: error
 
