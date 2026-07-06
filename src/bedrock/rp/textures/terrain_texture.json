@@ -6,6 +6,12 @@
   "texture_data": {
     "ir_smooth_stone": {
       "textures": "textures/blocks/stone_slab_top"
+    },
+    "rail_golden": {
+      "textures": "textures/blocks/rail_normal"
+    },
+    "rail_golden_powered": {
+      "textures": "textures/blocks/rail_normal"
     }
   }
 }
