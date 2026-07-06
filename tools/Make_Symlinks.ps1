@@ -3,6 +3,7 @@ $repoRoot = (Get-Item "$PSScriptRoot\..").FullName
 Set-Location $repoRoot
 
 # --- Configuration ---
+$useJunctions = $true
 $outDir  = "dist_links"
 $rpDir   = "InfiniteRail_RP"
 $bpDir   = "InfiniteRail_BP"
@@ -33,7 +34,11 @@ function New-DirSymlink {
     $linkFull = Join-Path $repoRoot $LinkPath
     $targetFull = Join-Path $repoRoot $TargetPath
     
-    cmd /c mklink /d "$linkFull" "$targetFull" | Out-Null
+    if ($useJunctions) {
+        cmd /c mklink /j "$linkFull" "$targetFull" | Out-Null
+    } else {
+        cmd /c mklink /d "$linkFull" "$targetFull" | Out-Null
+    }
 }
 
 # --- Script Execution ---
