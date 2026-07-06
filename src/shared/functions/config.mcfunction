@@ -33,7 +33,7 @@
 # average terrain surface. Higher = a more sweeping, birds-eye view.
 # Keep it at least 2: the redstone power block under the rail is immune to
 # water, but the rail itself is not, so the track must stay above sea level.
-scoreboard players set .HOVER cfg_terrain 2
+scoreboard players set .HOVER cfg_terrain 1
 
 # How high (in blocks above the rail) each column's clearance bore is carved --
 # i.e. the tunnel/headroom height. Slope columns automatically carve one block
@@ -231,7 +231,7 @@ scoreboard players set .UPCLAMP cfg_terrain 250
 # dead-level bridge (it reads as a 20-deep dip diluted across the average)
 # while a broad valley still lowers the line properly. Bigger = the line
 # dives after every hole; smaller = it bridges more and descends less.
-scoreboard players set .DOWNCLAMP cfg_terrain 20
+scoreboard players set .DOWNCLAMP cfg_terrain 30
 
 
 # --- Ground-aware slope timing (the near-ground scan) ------------------------
@@ -255,7 +255,7 @@ scoreboard players set .DOWNCLAMP cfg_terrain 20
 # crested without any tunneling: a rise taller than this reach hits the line
 # before the ramp can finish. Effective maximum 48 (the scan's cap). 0 =
 # climb timing is ruled by the average alone (the old behavior).
-scoreboard players set .UPLOOK cfg_terrain 50
+scoreboard players set .UPLOOK cfg_terrain 75
 
 # How many blocks ABOVE its average-derived target a climb may overshoot to
 # clear ground the .UPLOOK scan still sees at or above the rail line.
@@ -289,7 +289,7 @@ scoreboard players set .UPEARLY cfg_terrain 2
 # instead of dipped into. Bigger = a calmer line that only descends into
 # wider openings; smaller = hugs every little hollow. 0 = descent timing is
 # ruled by the average alone (the old plow-prone behavior).
-scoreboard players set .DOWNLOOK cfg_terrain 50
+scoreboard players set .DOWNLOOK cfg_terrain 250
 
 # The clearance a descending step keeps above that tallest scanned surface.
 # 0 = a descent may touch down exactly onto the highest nearby ground;
