@@ -68,11 +68,12 @@
 // =============================================================================
 
 import { world, system, BlockPermutation, BlockVolume, EasingType, GameMode, ItemStack } from '@minecraft/server';
-// The native pop-up used by the Settings book's mode menu. Safe as a static
-// import: the manifest declares the @minecraft/server-ui 2.0.0 dependency
-// (stable well before this pack's 1.21.120 floor), so the module is always
-// provided wherever the pack loads at all.
-import { ModalFormData } from '@minecraft/server-ui';
+// The native pop-ups used by the settings items' menus (ModalForm) and the
+// Tips item's read-only page (ActionForm). Safe as a static import: the
+// manifest declares the @minecraft/server-ui 2.0.0 dependency (stable well
+// before this pack's 1.21.120 floor), so the module is always provided
+// wherever the pack loads at all.
+import { ActionFormData, ModalFormData } from '@minecraft/server-ui';
 import { camHeight } from './cam_math.js';
 // The vegetation the carve spares -- Bedrock's own hand-maintained list
 // (keep it in sync with Java's tags/block/keep.json, the other edition's
@@ -151,31 +152,42 @@ const DBG = '§3[SR Debug]§r ';
 
 // The PINNED HOTBAR ITEMS -- kept in place by the inventory keeper (which
 // clears everything else every tick) and matched by type + name in the
-// itemUse handler, so a random picked-up item could never trigger them.
-// Mirrors Java's give_menu slot for slot:
-//   0  "Speed -"   .SPEEDSTEP blocks/s slower  (runs infinite_rail/speed_dec)
-//   1  "Speed +"   .SPEEDSTEP blocks/s faster  (runs infinite_rail/speed_inc)
-//   7  "Debug"     opens the native debug form (chat output, sidebar views)
-//   8  "Settings"  opens the native ride-mode form (the classic)
-// The books are plain books (no vanilla use action of their own) and the
-// speed items are inert non-placeables, so "using" any of them just fires
-// itemUse. Java's twins are clickable written books + re-modeled
-// carrot_on_a_sticks (give_menu.mcfunction) since Java has no native forms.
+// use handlers, so a random picked-up item could never trigger them.
+// Mirrors Java's give_menu slot for slot -- settings menus far left, Debug
+// far right, the speed pair in between with empty slots as separators:
+//   0  "Ride Settings"    opens the native ride form (speed, sky, sound, hide cart)
+//   1  "Visual Settings"  opens the native visual form (rain, time, torches)
+//   3  "Speed -"   .SPEEDSTEP blocks/s slower  (runs infinite_rail/speed_dec)
+//   4  "Speed +"   .SPEEDSTEP blocks/s faster  (runs infinite_rail/speed_inc)
+//   7  "Tips"      opens the recommended-settings page
+//   8  "Debug"     opens the native debug form (chat output, sidebar views)
+// Most of these items are placeable blocks/carts chosen for their icons
+// (rails, the smithing table, the soul campfire, the chest minecart), so a
+// use can arrive through TWO events: itemUse (aiming at air) and
+// playerInteractWithBlock (aiming at a block -- which must also be
+// CANCELLED before the survival rider builds the icon into the world).
+// Both paths funnel through handlePinnedUse with a shared debounce. Java's twins are clickable written
+// books + re-modeled carrot_on_a_sticks (give_menu.mcfunction) since Java
+// has no native forms.
 //
 // Deliberately NOT slot-locked (ItemLockMode.slot): Bedrock decorates
 // locked items with a lock badge and a "Can't be moved / dropped /
 // removed / crafted with" tooltip block, which reads as clutter. The
 // inventory keeper re-pins every item every tick, so a moved or dropped
 // one heals itself within a tick anyway.
-const SETTINGS_NAME = '§6Settings';
+const RIDE_NAME = '§6Ride Settings';
+const VISUAL_NAME = '§bVisual Settings';
+const TIPS_NAME = '§eTips';
 const DEBUG_NAME = '§3Debug';
 const SPEED_UP_NAME = '§aSpeed +';
 const SPEED_DOWN_NAME = '§cSpeed -';
 const PINNED = [
-  { slot: 0, type: 'minecraft:red_dye', name: SPEED_DOWN_NAME, lore: ['§7Ride speed down'] },
-  { slot: 1, type: 'minecraft:emerald', name: SPEED_UP_NAME, lore: ['§7Ride speed up'] },
-  { slot: 7, type: 'minecraft:book', name: DEBUG_NAME, lore: ['§7Use to open the', '§7debug menu'] },
-  { slot: 8, type: 'minecraft:book', name: SETTINGS_NAME, lore: ['§7Use to open the', '§7ride mode menu'] },
+  { slot: 0, type: 'minecraft:chest_minecart', name: RIDE_NAME, lore: ['§7Use to open the', '§7ride settings menu'] },
+  { slot: 1, type: 'minecraft:soul_campfire', name: VISUAL_NAME, lore: ['§7Use to open the', '§7visual settings menu'] },
+  { slot: 3, type: 'minecraft:rail', name: SPEED_DOWN_NAME, lore: ['§7Ride speed down'] },
+  { slot: 4, type: 'minecraft:golden_rail', name: SPEED_UP_NAME, lore: ['§7Ride speed up'] },
+  { slot: 7, type: 'minecraft:book', name: TIPS_NAME, lore: ['§7Recommended settings', '§7for the best ride'] },
+  { slot: 8, type: 'minecraft:smithing_table', name: DEBUG_NAME, lore: ['§7Use to open the', '§7debug menu'] },
 ];
 
 function makePinnedItem(def) {
@@ -252,15 +264,17 @@ const OBJ_DISPLAY = {
   dbg: 'Live state',
 };
 
-// The vanilla ocean biomes (Bedrock has no biome tags, so #minecraft:is_ocean
-// becomes an explicit id set; deep_warm_ocean exists only on Bedrock).
+// The vanilla ocean biomes the speed-up counts (Bedrock has no biome tags,
+// so Java's tag check becomes an explicit id set; deep_warm_ocean exists
+// only on Bedrock). The FROZEN oceans (frozen_ocean, deep_frozen_ocean,
+// legacy_frozen_ocean) are deliberately absent -- they're treated like land:
+// their icebergs and pack ice are scenery worth watching, not an empty
+// stretch to sprint across (Java's ocean_check excludes them the same way).
 const OCEAN_BIOMES = new Set([
   'minecraft:ocean', 'minecraft:deep_ocean',
   'minecraft:warm_ocean', 'minecraft:deep_warm_ocean',
   'minecraft:lukewarm_ocean', 'minecraft:deep_lukewarm_ocean',
   'minecraft:cold_ocean', 'minecraft:deep_cold_ocean',
-  'minecraft:frozen_ocean', 'minecraft:deep_frozen_ocean',
-  'minecraft:legacy_frozen_ocean',
 ]);
 
 // Column block palette (resolved once; golden_rail is Bedrock's powered rail;
@@ -417,7 +431,7 @@ function nightMode() {
 }
 
 // The ride's land cruising speed: the .speed state score (adjusted by the
-// Speed +/- items and the Settings form's slider; seeded from .MAXSPEED by
+// Speed +/- items and the Ride Settings form's slider; seeded from .MAXSPEED by
 // the shared modes_init, clamped 1..64 by the shared speed_step). Falls
 // back to the config default where the score is unreadable (cmd-bridge
 // worlds -- there live speed changes degrade to the config value, like
@@ -427,7 +441,7 @@ function landSpeed() {
   return v >= 1 ? v : cfg('MAXSPEED');
 }
 
-// Torch-mode density: the .torchdens state score (the Settings form's
+// Torch-mode density: the .torchdens state score (the Visual Settings form's
 // Low/Medium/High/Max presets -- the torch_density_* function files; seeded
 // from config .TORCHODDS by the shared modes_init), read the same way as
 // .speed. Falls back to the config default where the score is unreadable
@@ -454,12 +468,68 @@ function adjustSpeed(delta) {
   runCmd(`function ${NS}/speed_msg`);
 }
 
-// The native mode menu (@minecraft/server-ui), opened by using the Settings
-// book: one ModalFormData pre-set from the live scores, applied on submit by
-// running the same mode_* / speed function files the chat commands use --
-// so the menu, the commands and Java behave identically, tellraw feedback
-// included. Only actual changes run anything.
-function showMenu(player) {
+// The native settings menus (@minecraft/server-ui), split in two like
+// Java's book pair -- "Ride Settings" (how the ride moves and sounds) and
+// "Visual Settings" (what the world looks like). Each is one ModalFormData
+// pre-set from the live scores, applied on submit by running the same
+// mode_* / speed function files the chat commands use -- so the menus, the
+// commands and Java behave identically, tellraw feedback included. Only
+// actual changes run anything.
+function showRideMenu(player) {
+  const current = {
+    sky: modeOn('SKYMODE'),
+    sound: modeOn('SOUNDMODE'),
+    hidecart: modeOn('HIDECART'),
+    // Clamped to the slider's 1..64 range -- a hand-set out-of-range .speed
+    // must not make the form throw on its default value.
+    speed: Math.min(64, Math.max(1, landSpeed())),
+  };
+  const form = new ModalFormData()
+    .title('Scenic Rail Ride Settings')
+    .toggle('Sky mode (high-altitude cruise)', { defaultValue: current.sky })
+    .toggle('Cart sound (rolling loop)', { defaultValue: current.sound })
+    .toggle('Hide minecart (unobstructed view)', { defaultValue: current.hidecart })
+    .slider(`Ride speed, blocks/s (default ${cfg('MAXSPEED')})`, 1, 64, { defaultValue: current.speed, valueStep: 1 })
+    .submitButton('Apply');
+  form.show(player).then((r) => {
+    if (r.canceled || !r.formValues) return;
+    const [sky, sound, hidecart, speed] = r.formValues;
+    if (current.sky !== !!sky) runCmd(`function ${NS}/mode_sky_${sky ? 'on' : 'off'}`);
+    if (current.sound !== !!sound) {
+      runCmd(`function ${NS}/mode_sound_${sound ? 'on' : 'off'}`);
+      // Belt + suspenders: a pack update installed over the SAME manifest
+      // version can leave Bedrock's function registry stale, so the new
+      // mode_sound_* files silently don't exist and the score never flips.
+      // If the score didn't take, write it directly (API mode only -- on
+      // cmd-bridge worlds the read lies, and there the function route is
+      // the working one anyway).
+      if (bridgeMode === 'api' && getScore('SOUNDMODE', 0) !== (sound ? 1 : 0)) {
+        setScore('SOUNDMODE', sound ? 1 : 0);
+        if (!sound) runCmd('stopsound @a ir.cart_roll');
+        say(sound ? '§7Minecart sound on.' : '§7Minecart sound off.');
+      }
+    }
+    if (current.hidecart !== !!hidecart) {
+      runCmd(`function ${NS}/mode_hidecart_${hidecart ? 'on' : 'off'}`);
+      // Same stale-function-registry belt + suspenders as the sound toggle.
+      if (bridgeMode === 'api' && getScore('HIDECART', 0) !== (hidecart ? 1 : 0)) {
+        setScore('HIDECART', hidecart ? 1 : 0);
+        say(hidecart ? '§7Minecart hidden - enjoy the unobstructed view.' : '§7Minecart visible again.');
+      }
+    }
+    const speedWant = Math.round(+speed);
+    // The slider is an ABSOLUTE setter riding a delta-based state machine:
+    // detect an untouched slider against the DISPLAYED value (an over-64
+    // .speed shows clamped at 64), but compute the applied delta against
+    // the REAL live speed -- deltaing against the clamped display made
+    // "set 8 while cruising at 76" land at 20 instead of 8. (One blind
+    // spot remains by construction: at over-64 speeds, sliding exactly to
+    // 64 reads as untouched -- pick 63, or use the Speed - item.)
+    if (speedWant !== current.speed) adjustSpeed(speedWant - landSpeed());
+  }).catch((e) => reportError('ride settings menu', e));
+}
+
+function showVisualMenu(player) {
   // The density dropdown shows the preset matching the live .torchdens; a
   // hand-set / config-seeded value that matches no preset displays as
   // Medium but is only overwritten if the player actively picks something
@@ -471,55 +541,19 @@ function showMenu(player) {
     night: nightMode(),
     torches: modeOn('TORCHMODE'),
     dens: densIdx >= 0 ? densIdx : 1,
-    sky: modeOn('SKYMODE'),
-    hidecart: modeOn('HIDECART'),
-    sound: modeOn('SOUNDMODE'),
-    // Clamped to the slider's 1..64 range -- a hand-set out-of-range .speed
-    // must not make the form throw on its default value.
-    speed: Math.min(64, Math.max(1, landSpeed())),
   };
   const form = new ModalFormData()
-    .title('Scenic Rail Mode Settings')
+    .title('Scenic Rail Visual Settings')
     .toggle('Rain (permanent rain)', { defaultValue: current.rain })
     .dropdown('Time', ['Default (day/night cycle)', 'Night only (frozen midnight)', 'Day only (frozen noon)'], { defaultValueIndex: current.night })
     .toggle('Torches (scattered along new track)', { defaultValue: current.torches })
     .dropdown('Torch density', TORCH_DENSITY.map((d) => d.label), { defaultValueIndex: current.dens })
-    .toggle('Sky (high-altitude cruise)', { defaultValue: current.sky })
-    .toggle('Hide minecart (unobstructed view)', { defaultValue: current.hidecart })
-    .toggle('Minecart rolling sound', { defaultValue: current.sound })
-    .slider(`Ride speed, blocks/s (default ${cfg('MAXSPEED')})`, 1, 64, { defaultValue: current.speed, valueStep: 1 })
     .submitButton('Apply');
   form.show(player).then((r) => {
     if (r.canceled || !r.formValues) return;
-    const [rain, night, torches, dens, sky, hidecart, sound, speed] = r.formValues;
-    const apply = (was, wanted, fn) => {
-      if (was !== !!wanted) runCmd(`function ${NS}/mode_${fn}_${wanted ? 'on' : 'off'}`);
-    };
-    apply(current.rain, rain, 'rain');
-    apply(current.torches, torches, 'torches');
-    apply(current.sky, sky, 'sky');
-    if (current.hidecart !== !!hidecart) {
-      runCmd(`function ${NS}/mode_hidecart_${hidecart ? 'on' : 'off'}`);
-      // Belt + suspenders: a pack update installed over the SAME manifest
-      // version can leave Bedrock's function registry stale, so the new
-      // mode_hidecart_* files silently don't exist and the score never
-      // flips. If the score didn't take, write it directly (API mode only
-      // -- on cmd-bridge worlds the read lies, and there the function
-      // route is the working one anyway).
-      if (bridgeMode === 'api' && getScore('HIDECART', 0) !== (hidecart ? 1 : 0)) {
-        setScore('HIDECART', hidecart ? 1 : 0);
-        say(hidecart ? '§7Minecart hidden - enjoy the unobstructed view.' : '§7Minecart visible again.');
-      }
-    }
-    if (current.sound !== !!sound) {
-      runCmd(`function ${NS}/mode_sound_${sound ? 'on' : 'off'}`);
-      // Same stale-function-registry belt + suspenders as hide-cart above.
-      if (bridgeMode === 'api' && getScore('SOUNDMODE', 0) !== (sound ? 1 : 0)) {
-        setScore('SOUNDMODE', sound ? 1 : 0);
-        if (!sound) runCmd('stopsound @a ir.cart_roll');
-        say(sound ? '§7Minecart sound on.' : '§7Minecart sound off.');
-      }
-    }
+    const [rain, night, torches, dens] = r.formValues;
+    if (current.rain !== !!rain) runCmd(`function ${NS}/mode_rain_${rain ? 'on' : 'off'}`);
+    if (current.torches !== !!torches) runCmd(`function ${NS}/mode_torches_${torches ? 'on' : 'off'}`);
     const nightWant = night | 0;
     if (nightWant !== current.night) {
       runCmd(`function ${NS}/${['mode_night_off', 'mode_night_on', 'mode_day_on'][nightWant] ?? 'mode_night_off'}`);
@@ -528,16 +562,32 @@ function showMenu(player) {
     if (densWant !== current.dens) {
       runCmd(`function ${NS}/torch_density_${TORCH_DENSITY[densWant]?.fn ?? 'medium'}`);
     }
-    const speedWant = Math.round(+speed);
-    // The slider is an ABSOLUTE setter riding a delta-based state machine:
-    // detect an untouched slider against the DISPLAYED value (an over-64
-    // .speed shows clamped at 64), but compute the applied delta against
-    // the REAL live speed -- deltaing against the clamped display made
-    // "set 8 while cruising at 76" land at 20 instead of 8. (One blind
-    // spot remains by construction: at over-64 speeds, sliding exactly to
-    // 64 reads as untouched -- pick 63, or use the Speed - item.)
-    if (speedWant !== current.speed) adjustSpeed(speedWant - landSpeed());
-  }).catch((e) => reportError('settings menu', e));
+  }).catch((e) => reportError('visual settings menu', e));
+}
+
+// The Tips page, opened by using the Tips item: a read-only ActionForm with
+// the recommended game/video settings for the best Slow-TV experience
+// (Java's twin is a plain written book with the same advice, plus its own
+// Java-only video tips instead of the Bedrock ones).
+function showTips(player) {
+  const form = new ActionFormData()
+    .title('Scenic Rail Tips')
+    .body([
+      '§lRecommended settings§r',
+      '',
+      '§7- Hide the HUD (F1 on a keyboard)',
+      '§7- FOV: §f100+',
+      '§7- Simulation distance: §fas low as possible',
+      '§7- Render distance: §f16-24 chunks§7, or more if your hardware keeps up',
+      '',
+      '§lSettings > General§r',
+      '',
+      '§7- Disable §f"Enable Game Pause"§7 (also stops the screen dimming while AFK)',
+      '§7- Disable §f"Show Pause Menu on Focus Lost"',
+      '§7- Disable §f"Lower Framerate when Controller is Disconnected"§7 (if applicable)',
+    ].join('\n'))
+    .button('Close');
+  form.show(player).catch((e) => reportError('tips page', e));
 }
 
 // The native debug menu, opened by using the Debug book: the .DEBUGMODE
@@ -1254,10 +1304,16 @@ function oceanCheck() {
       dbg(`§bocean chunk - oceanRun=§f${S.oceanRun}§b/§f${cfg('OCEANCHUNKS')}§7  speed=§f${(S.paceSpeed * 20).toFixed(1)}`);
     }
     if (cfg('OCEANSPEED') >= 1 && S.oceanRun >= cfg('OCEANCHUNKS')) {
-      // speed_up: re-asserted every ocean chunk so the configured speed always
-      // wins; the debug line and flag flip only fire on the transition.
-      S.targetSpeed = cfg('OCEANSPEED') / 20;
-      if (!S.fast) dbg(`§bswitching to fast ocean mode, speed §f${cfg('OCEANSPEED')}`);
+      // speed_up -- which may only ever SPEED the ride UP: the target is
+      // max(.OCEANSPEED, .speed), so a land speed raised past the ocean
+      // speed with the Speed + item is kept over the water too (the ocean
+      // never slows the cart down). Re-asserted every ocean chunk so the
+      // winning speed always sticks (and a mid-sprint .speed change takes
+      // effect at the next chunk); the debug line and flag flip only fire
+      // on the transition.
+      const oceanSpeed = Math.max(cfg('OCEANSPEED'), landSpeed());
+      S.targetSpeed = oceanSpeed / 20;
+      if (!S.fast) dbg(`§bswitching to fast ocean mode, speed §f${oceanSpeed}`);
       S.fast = true;
     }
   } else {
@@ -1416,37 +1472,46 @@ function sweepDrops(seat) {
 // Nothing on Bedrock rolls on rails (the pace is virtual, the cart prop is
 // scripted scenery with none of the minecart's client-side behavior), so the
 // sound a rider expects is re-created: while .SOUNDMODE is on
-// (mode_sound_on/_off, the Settings form's Sound toggle; config .CARTSOUND
+// (mode_sound_on/_off, the Ride Settings form's Sound toggle; config .CARTSOUND
 // is only the first-load default, seeded by the shared modes_init), the
-// vanilla FIRST-PERSON riding sample is played at the rider -- ONCE. Three
-// facts make that single play a perfect endless loop:
-//   1. vanilla's sounds/minecart/inside FSB carries a baked-in FMOD LOOP
-//      flag (samples 0..187760): ANY playback of it loops forever until
-//      explicitly stopped. (This is also how the engine loops the cart
-//      sounds natively -- and it is why an earlier version of this feature,
-//      which re-triggered the sample on a timer, stacked a new immortal
-//      copy every cycle into a hundred-cart phasing chorus.)
+// vanilla FIRST-PERSON riding sample is RE-TRIGGERED at the rider every
+// SOUND_LOOP_TICKS (115 -- the sample is 5.77 s = 115.4 ticks, so each copy
+// starts just as the last one ends), exactly like Java's sound_loop clock.
+// An earlier version played it ONCE and trusted the FSB's baked-in FMOD
+// loop flag to run forever -- in practice the loop did NOT reliably engage
+// when the file is played through the pack's own definition: the sample
+// ended after one 5.8 s play and the ride went silent until the next
+// 256-block re-anchor ("stops randomly, pops back on ~30 s later"), and a
+// play emitted at a just-(re)joining client was dropped outright, leaving
+// the whole ride mute while the script believed a loop was running. The
+// fixed-cadence clock self-heals all of that within one cycle.
+// Details that make it work:
+//   1. every play is PRECEDED by a stopsound (the one-instance invariant):
+//      if the FMOD loop flag does engage, the old copy dies at what is a
+//      sample boundary anyway -- so no phasing stack can ever build up (the
+//      original sin of the first timer-based attempt, which skipped the
+//      stop and stacked an immortal looping copy every cycle);
 //   2. the sound id is the RP's OWN definition (ir.cart_roll) pointing at
-//      that vanilla file -- both because the global minecart.base EVENT is
+//      the vanilla file -- both because the global minecart.base EVENT is
 //      silenced by this pack (the phantom-noise fixes) and because only a
 //      pack-own definition can carry its own attenuation settings;
 //   3. that definition sets min_distance 512: within that range the engine
-//      applies NO distance attenuation, so the playing loop holds constant
-//      volume as the ride glides away from where it was emitted.
-// The emission point IS still fixed in the world, so the loop is
-// RE-ANCHORED -- stopped and started fresh at the rider -- after every
-// SOUND_REANCHOR blocks of travel (half the min_distance guard band; a
-// barely-audible sample restart every ~30 s at cruise instead of a fade).
-// Every play is preceded by a stop, and the rider-offline path resets
-// soundOn (a rejoining client has no sound instances), so exactly one
-// loop instance can ever exist. stop() and mode_sound_off also stopsound.
-// (Java data packs can't define or re-tune sounds at all -- the Java
-// edition instead relies on the pace cart's native loop plus the pack's
-// own dual-purpose assets/ half, enabled as a resource pack, which
-// extends that loop's falloff; see the Java files.)
+//      applies NO distance attenuation, so a playing copy holds constant
+//      volume as the ride glides away from where it was emitted -- and each
+//      re-trigger re-anchors the emission at the rider, so drift can never
+//      accumulate at any cruise speed (the SOUND_REANCHOR distance check
+//      only matters beyond ~89 blocks/s, where one cycle outruns half the
+//      guard band mid-sample).
+// The rider-offline path resets soundOn so the clock restarts immediately
+// when the ride resumes; stop() and mode_sound_off also stopsound. (Java
+// data packs can't define or re-tune sounds at all -- Java instead
+// /playsounds the same sample at volume 100 on its own 115-tick clock; the
+// two editions now share the same cadence.)
+const SOUND_LOOP_TICKS = 115; // the sample's length, 5.77 s, in ticks
 const SOUND_REANCHOR = 256;
-let soundOn = false;   // a native loop instance is (believed) playing
-let soundAnchorX = 0;  // world X where it was emitted
+let soundOn = false;      // a copy is (believed) playing
+let soundAnchorX = 0;     // world X where it was emitted
+let soundStartedAt = -1e9; // tickN of the last (re)trigger
 function resetSound() { soundOn = false; }
 function tickSound() {
   if (!modeOn('SOUNDMODE')) {
@@ -1457,7 +1522,9 @@ function tickSound() {
   if (!rider) return;
   let x;
   try { x = rider.location.x; } catch { return; }
-  if (soundOn && Math.abs(x - soundAnchorX) < SOUND_REANCHOR) return;
+  if (soundOn
+    && tickN - soundStartedAt < SOUND_LOOP_TICKS
+    && Math.abs(x - soundAnchorX) < SOUND_REANCHOR) return;
   runCmd('stopsound @a ir.cart_roll'); // the one-instance invariant
   try {
     rider.playSound('ir.cart_roll', { volume: 0.7, pitch: 1 });
@@ -1468,6 +1535,7 @@ function tickSound() {
   }
   soundOn = true;
   soundAnchorX = x;
+  soundStartedAt = tickN;
 }
 
 function camMove(seat, cart, sy) {
@@ -1664,8 +1732,8 @@ function keepers(seat) {
   }
 
   // Keep the rider's inventory empty -- except the pinned hotbar items
-  // (Settings/Debug books, Speed +/-) -- hiding held items and stopping
-  // item pickup.
+  // (the Ride/Visual Settings, Tips and Debug menu items, Speed +/-) --
+  // hiding held items and stopping item pickup.
   try {
     const inv = rider.getComponent('minecraft:inventory')?.container;
     if (inv) {
@@ -1870,7 +1938,7 @@ function stop(silent) {
   if (rider) {
     try { rider.camera.clear(); } catch { /* not set */ }
     try { rider.runCommand('effect @s clear'); } catch { /* none */ }
-    // Take the pinned hotbar items (Settings/Debug books, Speed +/-) back
+    // Take the pinned hotbar items (the menu items, Tips, Speed +/-) back
     // -- the ride is over.
     try {
       const inv = rider.getComponent('minecraft:inventory')?.container;
@@ -2115,30 +2183,69 @@ system.afterEvents.scriptEventReceive.subscribe((ev) => {
 }, { namespaces: [NS] });
 
 // The pinned hotbar items: using one (right-click / hold) opens its menu or
-// nudges the speed. itemUse fires for all four because none has a vanilla
-// use action competing for the interaction; matched by type + name + rider
-// so nothing else can trigger anything. The speed items get a short
-// cooldown -- holding the use button fires itemUse repeatedly, and one
-// click should mean one .SPEEDSTEP notch.
-let lastSpeedUseAt = -1e9;
+// nudges the speed. Because most of the items are placeable blocks/carts
+// chosen for their icons (rails, smithing table, soul campfire, chest
+// minecart), one click can arrive through TWO events -- itemUse (aiming at
+// air) and playerInteractWithBlock (aiming at a block, which is also
+// CANCELLED so the survival rider can't build the icon into the world; the
+// old itemUseOn events were REMOVED in @minecraft/server 2.0.0) -- so both paths
+// funnel through one handler behind one shared debounce (a single click
+// must mean a single action / one .SPEEDSTEP notch, and holding the use
+// button re-fires the events). Matched by type + name + rider so nothing
+// else can trigger anything.
+let lastPinnedUseAt = -1e9;
+function handlePinnedUse(player, item) {
+  if (!inited || !S.started) return;
+  if (!item || player?.typeId !== 'minecraft:player' || player.name !== S.riderName) return;
+  const def = PINNED.find((d) => d.type === item.typeId && d.name === item.nameTag);
+  if (!def) return;
+  if (tickN - lastPinnedUseAt < 4) return;
+  lastPinnedUseAt = tickN;
+  if (def.name === RIDE_NAME) showRideMenu(player);
+  else if (def.name === VISUAL_NAME) showVisualMenu(player);
+  else if (def.name === TIPS_NAME) showTips(player);
+  else if (def.name === DEBUG_NAME) showDebugMenu(player);
+  else if (def.name === SPEED_UP_NAME) runCmd(`function ${NS}/speed_inc`);
+  else if (def.name === SPEED_DOWN_NAME) runCmd(`function ${NS}/speed_dec`);
+}
 world.afterEvents.itemUse.subscribe((ev) => {
   try {
-    if (!inited || !S.started) return;
-    const item = ev.itemStack;
-    if (!item || ev.source?.typeId !== 'minecraft:player' || ev.source.name !== S.riderName) return;
-    const def = PINNED.find((d) => d.type === item.typeId && d.name === item.nameTag);
-    if (!def) return;
-    if (def.name === SETTINGS_NAME) { showMenu(ev.source); return; }
-    if (def.name === DEBUG_NAME) { showDebugMenu(ev.source); return; }
-    if (def.name === SPEED_UP_NAME || def.name === SPEED_DOWN_NAME) {
-      if (tickN - lastSpeedUseAt < 4) return;
-      lastSpeedUseAt = tickN;
-      runCmd(`function ${NS}/${def.name === SPEED_UP_NAME ? 'speed_inc' : 'speed_dec'}`);
-    }
+    handlePinnedUse(ev.source, ev.itemStack);
   } catch (e) {
     reportError('hotbar menu', e);
   }
 });
+// NOTE: this is playerInteractWithBlock, NOT itemUseOn -- @minecraft/server
+// 2.0.0 (the manifest's dependency line) removed the itemUseOn before/after
+// events in favor of this one. The subscribe itself is guarded: a missing
+// event signal would throw HERE, at module load, and kill the entire script
+// (no tick loop, no autostart, no keeper -- everything registered below it
+// would silently never run), so a future rename degrades to losing only the
+// aim-at-a-block path instead of the whole pack.
+try {
+  world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
+    try {
+      if (!inited || !S.started) return;
+      const item = ev.itemStack; // optional: empty-hand interactions carry none
+      const player = ev.player;
+      if (!item || player?.name !== S.riderName) return;
+      if (!PINNED.some((d) => d.type === item.typeId && d.name === item.nameTag)) return;
+      // Never place the pinned item's block/cart; run the real action outside
+      // the before-event's read-only window (forms can't open inside it).
+      // Every event in the gesture's chain is cancelled (not just
+      // isFirstEvent); the debounce in handlePinnedUse keeps the action
+      // single-fire.
+      ev.cancel = true;
+      system.run(() => {
+        try { handlePinnedUse(player, item); } catch (e) { reportError('hotbar menu', e); }
+      });
+    } catch (e) {
+      reportError('hotbar menu', e);
+    }
+  });
+} catch (e) {
+  console.warn(`[Scenic Rail] playerInteractWithBlock unavailable (${e}); pinned items only respond when aimed at air`);
+}
 
 system.runInterval(() => {
   tickN += 1;

@@ -2,7 +2,7 @@
 # terrain around the line as it is built. Runs positioned at the head, once
 # per column, from advance. Three rolls:
 #   1. does this column get a torch at all? (.torchdens percent chance --
-#      the state score behind the Settings book's density presets, seeded
+#      the state score behind the Visual Settings book's density presets, seeded
 #      from config .TORCHODDS by modes_init)
 #   2. how far out does it land? (uniform 2...TORCHRANGE blocks -- the floor
 #      of 2 keeps clear of the 3-wide carve; clamped to 48, the ceiling the

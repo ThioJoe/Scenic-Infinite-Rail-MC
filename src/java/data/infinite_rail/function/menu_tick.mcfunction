@@ -1,4 +1,4 @@
-# The Settings/Debug books' click dispatcher, run from tick EVERY tick (ride
+# The menu books' (Ride/Visual Settings, Debug) click dispatcher, run from tick EVERY tick (ride
 # or no ride, so a click can never sit stale in the objective).
 #
 # WHY /trigger: since 1.21.6, clicking a run_command link that needs

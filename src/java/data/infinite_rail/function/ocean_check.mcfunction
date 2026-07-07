@@ -1,14 +1,16 @@
-# Ocean speed-up. When the ride crosses a run of ocean-biome chunks, raise the
-# minecart max-speed gamerule to .OCEANSPEED; after a run of non-ocean chunks,
-# drop back to the land cruising speed (.speed -- the config default .MAXSPEED
+# Ocean speed-up. When the ride crosses a run of ocean-biome chunks (frozen
+# oceans excluded -- they read as land), raise the minecart max-speed gamerule
+# to max(.OCEANSPEED, .speed) -- the ocean may speed the ride up but never slow
+# it below the chosen land speed; after a run of non-ocean chunks, drop back to
+# the land cruising speed (.speed -- the config default .MAXSPEED
 # unless adjusted with the Speed +/- items). Sampled once per chunk, at the RIDER'S position (the
 # seat carries the player, .CAMAHEAD blocks ahead of the pace cart), so the
 # speed reflects the biome the viewer is actually flying over -- not the pace
 # cart trailing far behind.
 #
 # Over ocean the target speed is RE-APPLIED every chunk (see speed_up), so the
-# configured .OCEANSPEED always wins and any manual /gamerule change or desynced
-# state self-heals. The land speed (.speed) is restored only once, on the
+# winning speed -- max(.OCEANSPEED, .speed) -- always sticks and any manual
+# /gamerule change or desynced state self-heals. The land speed (.speed) is restored only once, on the
 # transition back, so you can still tweak the gamerule by hand on land.
 #
 # Requires the minecart max-speed gamerule to exist (see set_speed); on worlds
@@ -29,9 +31,11 @@ execute if score .chunkNow ir = .lastChunk ir run return 0
 scoreboard players operation .lastChunk ir = .chunkNow ir
 
 # Sample the biome under the rider: ocean or not? #minecraft:is_ocean covers
-# every ocean-named biome (ocean, deep/warm/lukewarm/cold/frozen variants, ...).
+# every ocean-named biome -- but the FROZEN oceans are excluded (treated like
+# land): their icebergs and pack ice are scenery worth watching, not an empty
+# stretch to sprint across.
 scoreboard players set .isOcean ir 0
-execute at @e[type=item_display,tag=ir_seat,limit=1] if biome ~ ~ ~ #minecraft:is_ocean run scoreboard players set .isOcean ir 1
+execute at @e[type=item_display,tag=ir_seat,limit=1] if biome ~ ~ ~ #minecraft:is_ocean unless biome ~ ~ ~ minecraft:frozen_ocean unless biome ~ ~ ~ minecraft:deep_frozen_ocean run scoreboard players set .isOcean ir 1
 
 # Debug helper: the pace cart's actual eastward speed x100 (0.4/tick ~= 40 at
 # vanilla 8 m/s, ~160 at 32 m/s). If this never climbs after a speed change, the

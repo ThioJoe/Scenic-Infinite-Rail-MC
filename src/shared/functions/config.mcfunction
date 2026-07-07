@@ -147,7 +147,7 @@ scoreboard players set .AUTOSTART ir 1
 # The speed applied at ride start (and restored after every ocean sprint) is
 # the ADJUSTABLE ride speed -- the .speed state score, nudged .SPEEDSTEP
 # blocks/s per click by the "Speed -"/"Speed +" hotbar items (clamped 1..64)
-# and reset from the Settings menu. (.SPEEDSTEP is a fixed cross-edition
+# and reset from the Ride Settings menu. (.SPEEDSTEP is a fixed cross-edition
 # constant in the shared consts.mcfunction, deliberately not a setting here.) .MAXSPEED below is its DEFAULT: what .speed starts
 # out as, and what Reset returns it to. On Java it is applied once per
 # change, NOT continuously enforced, so you can still change /gamerule
@@ -356,7 +356,7 @@ scoreboard players set .SKYSPEED cfg_ride 18
 # Torch mode: the DEFAULT percent chance (0-100) that each newly built
 # column plants a torch somewhere beside the track (.TORCHRANGE below
 # controls how far out). This is only the SEED for the .torchdens state
-# score (modes_init copies it once, on the first load): the Settings menu's
+# score (modes_init copies it once, on the first load): the Visual Settings menu's
 # density presets -- Low 15 / Medium 35 / High 70 / Max 100 -- own the live
 # value afterwards, and a chosen density survives reloads, rejoins and ride
 # restarts like every mode. Torches skip lava ground (and plant a sea pickle

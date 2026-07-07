@@ -17,7 +17,7 @@ scoreboard objectives add cfg_ride dummy "Ride settings"
 # that view is selected (.SIDEBAR 4). Real state stays in `ir`; this
 # objective exists only to be displayed.
 scoreboard objectives add dbg dummy "Live state"
-# The Settings/Debug books' click channel: a trigger-criteria objective that
+# The menu books' (Ride/Visual Settings, Debug) click channel: a trigger-criteria objective that
 # players may set with /trigger at permission level 0 -- which is what lets
 # the books' links work without operator AND without 1.21.6+'s "elevated
 # permissions" confirmation screen popping on every click. menu_tick

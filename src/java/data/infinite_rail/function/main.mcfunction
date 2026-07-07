@@ -53,7 +53,7 @@ execute at @e[type=minecart,tag=ir_cart,limit=1] align xyz run fill ~ ~ ~ ~1 ~1 
 execute at @e[type=item_display,tag=ir_seat,limit=1] run kill @e[type=item,distance=..16]
 execute at @e[type=item_display,tag=ir_seat,limit=1] run kill @e[type=experience_orb,distance=..16]
 
-# Keeper: police the rider's inventory (give_menu): anything beyond the four
+# Keeper: police the rider's inventory (give_menu): anything beyond the six
 # pinned hotbar items is wiped, and a missing/wrong pinned item is re-pinned
 # in place. (A blanket clear + re-give every tick used to re-fire the
 # client's item-pickup animation nonstop, freezing every hotbar icon on the
