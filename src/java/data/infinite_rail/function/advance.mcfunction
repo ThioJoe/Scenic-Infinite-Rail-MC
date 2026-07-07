@@ -49,7 +49,9 @@ data modify storage infinite_rail:track y append value 0
 execute store result storage infinite_rail:track y[-1] int 1 run scoreboard players get .railY ir
 
 # --- 5b. Torch mode: maybe plant a torch on the terrain beside this column ---
-execute if score .TORCHMODE ir matches 1 at @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:place_torch
+# (tri-state: 1 = always, 2 = auto -- place_torch's shared torch_auto gate
+# decides whether it is currently night; plain off skips the call entirely)
+execute if score .TORCHMODE ir matches 1.. at @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:place_torch
 
 # --- 6. Rolling chunk management every 16 blocks ---
 execute if score .headX ir >= .nextLoad ir at @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:roll_chunks

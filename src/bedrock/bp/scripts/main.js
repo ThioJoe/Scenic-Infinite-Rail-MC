@@ -155,7 +155,7 @@ const DBG = '§3[SR Debug]§r ';
 // use handlers, so a random picked-up item could never trigger them.
 // Mirrors Java's give_menu slot for slot -- settings menus far left, Debug
 // far right, the speed pair in between with empty slots as separators:
-//   0  "Ride Settings"    opens the native ride form (speed, sky, sound, hide cart)
+//   0  "Ride Settings"    opens the native ride form (speed, sky, sound, hide cart, mobs aggro)
 //   1  "Visual Settings"  opens the native visual form (rain, time, torches)
 //   3  "Speed -"   .SPEEDSTEP blocks/s slower  (runs infinite_rail/speed_dec)
 //   4  "Speed +"   .SPEEDSTEP blocks/s faster  (runs infinite_rail/speed_inc)
@@ -226,7 +226,7 @@ const HIST_PERSIST = 1024;
 // .HOVER ir 8" tweaks work mid-ride exactly like Java.
 const CONFIG_DEFAULTS = {
   HOVER: 2, TUNNEL: 6, CAMHEIGHT: 0, CAMBLEND: 6, CAMSMOOTH: 6, CAMLIFT: 20,
-  CAMAHEAD: 64, CAMMODE: 0, CARTYOFF: 12, HIDEHAND: 1, AUTOSTART: 1,
+  CAMAHEAD: 64, CAMMODE: 0, CARTYOFF: 12, AUTOSTART: 1,
   MAXSPEED: 8, OCEANSPEED: 32, OCEANCHUNKS: 6, LANDCHUNKS: 3, DEADBAND: 2,
   SAMEGAP: 40, TURNGAP: 40, SLOPECLEAR: 8, UPCLAMP: 250, DOWNCLAMP: 20,
   UPLOOK: 50, UPGRACE: 10, UPEARLY: 6, DOWNLOOK: 16, DOWNGRACE: 1,
@@ -245,7 +245,7 @@ const CFG_GROUPS = {
     'SLOPECLEAR', 'UPCLAMP', 'DOWNCLAMP', 'UPLOOK', 'UPGRACE', 'UPEARLY',
     'DOWNLOOK', 'DOWNGRACE'],
   cfg_camera: ['CAMHEIGHT', 'CAMBLEND', 'CAMSMOOTH', 'CAMLIFT', 'CAMAHEAD',
-    'CAMMODE', 'CARTYOFF', 'HIDEHAND'],
+    'CAMMODE', 'CARTYOFF'],
   cfg_ride: ['MAXSPEED', 'OCEANSPEED', 'OCEANCHUNKS', 'LANDCHUNKS', 'SKYY',
     'SKYSPEED', 'TORCHODDS', 'TORCHRANGE', 'SEAPICKLE', 'AHEAD', 'GENAHEAD',
     'MAXTICK', 'CARTSOUND'],
@@ -401,12 +401,13 @@ function debugOn() {
 }
 function dbg(msg) { if (debugOn()) world.sendMessage(DBG + msg); }
 
-// Is a ride-mode toggle on? (.SKYMODE / .TORCHMODE -- the two modes the
-// script acts on; rain and night are pure command files and never read
-// here.) The mode functions only flip scoreboard scores, so reads go
-// through the same bridge as the brain flags: the native API normally, a
-// successCount probe on cmd-bridge worlds -- cached for a second there,
-// because tickPace asks every tick.
+// Is a ride-mode toggle on? (.SKYMODE / .SOUNDMODE / .HIDECART -- the 0/1
+// modes the script acts on; rain and night are pure command files and never
+// read here, and the tri-state torch mode has its own reader below.) The
+// mode functions only flip scoreboard scores, so reads go through the same
+// bridge as the brain flags: the native API normally, a successCount probe
+// on cmd-bridge worlds -- cached for a second there, because tickPace asks
+// every tick.
 const modeCache = new Map(); // name -> { at, v }
 function modeOn(name) {
   if (bridgeMode === 'api') return getScore(name, 0) === 1;
@@ -428,6 +429,58 @@ function nightMode() {
   if ((runCmd(`execute if score ${P}NIGHTMODE ir matches 1 run scoreboard players add ${P}probe ir 1`)?.successCount ?? 0) > 0) return 1;
   if ((runCmd(`execute if score ${P}NIGHTMODE ir matches 2 run scoreboard players add ${P}probe ir 1`)?.successCount ?? 0) > 0) return 2;
   return 0;
+}
+
+// The tri-state torch mode (.TORCHMODE: 0 = off, 1 = always on, 2 = auto --
+// torches only at night; the default, seeded by the shared modes_init).
+// Read exactly like nightMode() -- two successCount probes on cmd-bridge
+// worlds -- but cached ~1 s there, because advance() asks per column.
+let tmCache = 0;
+let tmCacheAt = -100;
+function torchMode() {
+  if (bridgeMode === 'api') {
+    const v = getScore('TORCHMODE', 0);
+    return v >= 0 && v <= 2 ? v : 0;
+  }
+  if (tickN - tmCacheAt <= 20) return tmCache;
+  tmCacheAt = tickN;
+  if ((runCmd(`execute if score ${P}TORCHMODE ir matches 1 run scoreboard players add ${P}probe ir 1`)?.successCount ?? 0) > 0) tmCache = 1;
+  else if ((runCmd(`execute if score ${P}TORCHMODE ir matches 2 run scoreboard players add ${P}probe ir 1`)?.successCount ?? 0) > 0) tmCache = 2;
+  else tmCache = 0;
+  return tmCache;
+}
+
+// Should NEW columns get torches right now? Mode 1 always plants; the
+// default auto mode 2 asks the SHARED torch_auto brain file, so the
+// day/night window (dusk 12542 .. dawn 23459) lives in exactly one place
+// (src/shared/functions/torch_auto.mcfunction) for both editions: the
+// script hands it the world clock (.tod -- Java fetches its own with
+// `time query daytime`, which Bedrock's execute can't store) and reads
+// back the .torchlit answer through the same bridge as the brain flags.
+// Cached ~1 s -- advance() asks once per column and the answer only moves
+// with the world clock.
+let litCache = false;
+let litCacheAt = -100;
+function torchLit() {
+  const m = torchMode();
+  if (m === 0) return false;
+  if (m === 1) return true;
+  if (tickN - litCacheAt <= 20) return litCache;
+  litCacheAt = tickN;
+  const tod = world.getTimeOfDay() | 0;
+  brainSet('tod', tod);
+  const r = runCmd(`function ${NS}/torch_auto`);
+  if (r) {
+    litCache = brainGetFlag('torchlit');
+  } else {
+    // The shared torch_auto file isn't in the function registry (a pack
+    // update installed over the SAME manifest version leaves Bedrock's
+    // registry stale -- the failure the settings forms also guard against).
+    // Fall back to the same night window computed in script; keep these
+    // numbers in sync with src/shared/functions/torch_auto.mcfunction.
+    litCache = tod >= 12542 && tod <= 23459;
+  }
+  return litCache;
 }
 
 // The ride's land cruising speed: the .speed state score (adjusted by the
@@ -480,20 +533,24 @@ function showRideMenu(player) {
     sky: modeOn('SKYMODE'),
     sound: modeOn('SOUNDMODE'),
     hidecart: modeOn('HIDECART'),
+    aggro: modeOn('AGGROMODE'),
     // Clamped to the slider's 1..64 range -- a hand-set out-of-range .speed
     // must not make the form throw on its default value.
     speed: Math.min(64, Math.max(1, landSpeed())),
   };
   const form = new ModalFormData()
     .title('Scenic Rail Ride Settings')
-    .toggle('Sky mode (high-altitude cruise)', { defaultValue: current.sky })
-    .toggle('Cart sound (rolling loop)', { defaultValue: current.sound })
-    .toggle('Hide minecart (unobstructed view)', { defaultValue: current.hidecart })
+    .toggle('Sky mode', { defaultValue: current.sky })
+    .toggle('Cart sound', { defaultValue: current.sound })
+    .toggle('Hide minecart', { defaultValue: current.hidecart })
+    // Off = rider invisible: the one lever over Bedrock mob detection also
+    // hides the first-person arm, so the label names both consequences.
+    .toggle('Mobs aggro (mobs react to you)', { defaultValue: current.aggro })
     .slider(`Ride speed, blocks/s (default ${cfg('MAXSPEED')})`, 1, 64, { defaultValue: current.speed, valueStep: 1 })
     .submitButton('Apply');
   form.show(player).then((r) => {
     if (r.canceled || !r.formValues) return;
-    const [sky, sound, hidecart, speed] = r.formValues;
+    const [sky, sound, hidecart, aggro, speed] = r.formValues;
     if (current.sky !== !!sky) runCmd(`function ${NS}/mode_sky_${sky ? 'on' : 'off'}`);
     if (current.sound !== !!sound) {
       runCmd(`function ${NS}/mode_sound_${sound ? 'on' : 'off'}`);
@@ -515,6 +572,14 @@ function showRideMenu(player) {
       if (bridgeMode === 'api' && getScore('HIDECART', 0) !== (hidecart ? 1 : 0)) {
         setScore('HIDECART', hidecart ? 1 : 0);
         say(hidecart ? '§7Minecart hidden - enjoy the unobstructed view.' : '§7Minecart visible again.');
+      }
+    }
+    if (current.aggro !== !!aggro) {
+      runCmd(`function ${NS}/mode_aggro_${aggro ? 'on' : 'off'}`);
+      // Same stale-function-registry belt + suspenders as the sound toggle.
+      if (bridgeMode === 'api' && getScore('AGGROMODE', 0) !== (aggro ? 1 : 0)) {
+        setScore('AGGROMODE', aggro ? 1 : 0);
+        say(aggro ? '§7Mobs aggro on.' : '§7Mobs aggro off.');
       }
     }
     const speedWant = Math.round(+speed);
@@ -539,21 +604,34 @@ function showVisualMenu(player) {
   const current = {
     rain: modeOn('RAINMODE'),
     night: nightMode(),
-    torches: modeOn('TORCHMODE'),
+    // Tri-state like Time: the dropdown index IS the .TORCHMODE value.
+    torches: torchMode(),
     dens: densIdx >= 0 ? densIdx : 1,
   };
   const form = new ModalFormData()
     .title('Scenic Rail Visual Settings')
     .toggle('Rain (permanent rain)', { defaultValue: current.rain })
-    .dropdown('Time', ['Default (day/night cycle)', 'Night only (frozen midnight)', 'Day only (frozen noon)'], { defaultValueIndex: current.night })
-    .toggle('Torches (scattered along new track)', { defaultValue: current.torches })
+    .dropdown('Time', ['Default (day/night cycle)', 'Always Night', 'Always Day'], { defaultValueIndex: current.night })
+    .dropdown('Torches (scattered along new track)', ['Off', 'On (day and night)', 'Auto (at night only)'], { defaultValueIndex: current.torches })
     .dropdown('Torch density', TORCH_DENSITY.map((d) => d.label), { defaultValueIndex: current.dens })
     .submitButton('Apply');
   form.show(player).then((r) => {
     if (r.canceled || !r.formValues) return;
     const [rain, night, torches, dens] = r.formValues;
     if (current.rain !== !!rain) runCmd(`function ${NS}/mode_rain_${rain ? 'on' : 'off'}`);
-    if (current.torches !== !!torches) runCmd(`function ${NS}/mode_torches_${torches ? 'on' : 'off'}`);
+    const torchWant = torches | 0;
+    if (torchWant !== current.torches) {
+      runCmd(`function ${NS}/${['mode_torches_off', 'mode_torches_on', 'mode_torches_auto'][torchWant] ?? 'mode_torches_auto'}`);
+      // Same stale-function-registry belt + suspenders as the Ride form's
+      // toggles: mode_torches_auto is a NEW function file, so on a world
+      // whose registry predates it the call silently does nothing and the
+      // dropdown snaps back on the next open -- write the score directly
+      // if it didn't take.
+      if (bridgeMode === 'api' && getScore('TORCHMODE', 0) !== torchWant) {
+        setScore('TORCHMODE', torchWant);
+        say(['§7Torch mode OFF - new track stays unlit.', '§7Torch mode ON - new track will be dotted with torches, day and night.', '§7Torch mode AUTO - torches will appear beside new track at night.'][torchWant]);
+      }
+    }
     const nightWant = night | 0;
     if (nightWant !== current.night) {
       runCmd(`function ${NS}/${['mode_night_off', 'mode_night_on', 'mode_day_on'][nightWant] ?? 'mode_night_off'}`);
@@ -978,10 +1056,12 @@ function placeColumn(x, y, dir, veg) {
   dim.setBlockType({ x, y: y + 3, z }, LIGHT_BLOCK);
 }
 
-// Torch mode (.TORCHMODE -- mode_torches_on): sprinkle torches on the
-// terrain around the line as it is built. The native twin of Java's
-// place_torch/torch_at/torch_try: same odds knob (.TORCHODDS percent of
-// columns), same 2..TORCHRANGE side offsets, same placement policy. Where the
+// Torch mode (.TORCHMODE, tri-state -- mode_torches_on/auto/off; the
+// caller's torchLit() gate decides whether torches are being planted right
+// now): sprinkle torches on the terrain around the line as it is built.
+// The native twin of Java's place_torch/torch_at/torch_try: same odds knob
+// (.TORCHODDS percent of columns), same 2..TORCHRANGE side offsets, same
+// placement policy. Where the
 // ground below is WATER a torch can't stand, so instead a sea pickle is
 // planted on the bed (config .SEAPICKLE 1..4 = pickles = brightness; 0 = skip
 // like before) -- see the water branch below. Other hopeless spots are still
@@ -1098,8 +1178,10 @@ function advance() {
   S.headX = colX;
 
   // Torch mode: maybe plant a torch on the terrain beside this column
-  // (advance.mcfunction's step 5b on Java).
-  if (modeOn('TORCHMODE')) maybeTorch(colX);
+  // (advance.mcfunction's step 5b on Java). torchLit() is the tri-state
+  // gate: always in mode 1, night-only in the default auto mode 2 (the
+  // shared torch_auto decides), never in mode 0.
+  if (torchLit()) maybeTorch(colX);
 
   S.trackY.push(S.railY);
   if (S.trackY.length > HIST_MAX + 256) {
@@ -1749,15 +1831,20 @@ function keepers(seat) {
     }
   } catch { /* container busy */ }
 
-  // Hide-hand (.HIDEHAND, the automatic "Hide Hand" video setting): Bedrock's
-  // /hud command has no element for the first-person arm, but the
-  // invisibility effect removes it -- and with the inventory kept empty,
-  // nothing renders at all. Re-asserted once a second so the knob is
-  // live-tunable; stop() clears it with the other effects. (Side effect: the
-  // rider's body is also hidden in third-person/F5 -- documented trade-off.)
+  // Mobs aggro (.AGGROMODE, default on -- mode_aggro_on/off): the rider's
+  // invisibility effect is Bedrock's ONE vanilla lever over mob detection.
+  // Invisible players are COMPLETELY unseen by hostile mobs here (no
+  // sneaking creepers, no bow-draws, no chases -- why the ride used to
+  // glide through the night in total silence), and the same effect is what
+  // hid the first-person arm (the retired .HIDEHAND knob) -- so the two
+  // are physically one setting: aggro OFF = invisible (mobs blind, arm +
+  // F5 body hidden), aggro ON = visible (mobs react naturally, the arm
+  // shows; the inventory keeper above still keeps the hand itself empty).
+  // Re-asserted once a second so the toggle is live; stop() clears the
+  // effect with the others.
   if (tickN % 20 === 0) {
     try {
-      if (cfg('HIDEHAND') === 1) {
+      if (!modeOn('AGGROMODE')) {
         rider.addEffect('minecraft:invisibility', 600, { amplifier: 0, showParticles: false });
       } else if (rider.getEffect('minecraft:invisibility')) {
         rider.removeEffect('minecraft:invisibility');

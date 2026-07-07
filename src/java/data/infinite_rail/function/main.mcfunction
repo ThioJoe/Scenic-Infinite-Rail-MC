@@ -82,6 +82,15 @@ execute if entity @e[type=minecart,tag=ir_cart,limit=1] run function infinite_ra
 execute if score .SOUNDMODE ir matches 1 run scoreboard players add .sndt ir 1
 execute if score .SOUNDMODE ir matches 1 if score .sndt ir matches 115.. run function infinite_rail:sound_loop
 
+# Loud diagnostic for build_loop's head gate: a head marker that stays
+# unselectable (its chunk unloaded / not entity-ticking) means building is
+# PAUSED, which usually means chunk force-loading is failing on this game
+# version. Warn once after 5 continuous seconds; the counter resets on
+# recovery, so a later relapse warns again.
+execute unless entity @e[type=marker,tag=ir_head,limit=1] run scoreboard players add .hdmiss ir 1
+execute if entity @e[type=marker,tag=ir_head,limit=1] run scoreboard players set .hdmiss ir 0
+execute if score .hdmiss ir matches 100 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Warning: the track builder's head is in unloaded chunks, so building is paused until its terrain loads. If this keeps happening, chunk force-loading may be broken on this Minecraft version - please report it.","color":"yellow"}]
+
 # Extend the track ahead of the pace cart, up to .MAXTICK columns this tick.
 scoreboard players operation .budget ir = .MAXTICK cfg_ride
 function infinite_rail:build_loop

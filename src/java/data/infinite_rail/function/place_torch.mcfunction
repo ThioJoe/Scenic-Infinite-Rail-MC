@@ -1,6 +1,10 @@
-# Torch mode (.TORCHMODE -- see mode_torches_on): sprinkle torches on the
-# terrain around the line as it is built. Runs positioned at the head, once
-# per column, from advance. Three rolls:
+# Torch mode (.TORCHMODE, a tri-state -- see mode_torches_on/auto/off):
+# sprinkle torches on the terrain around the line as it is built. Runs
+# positioned at the head, once per column, from advance, whenever the mode
+# isn't plain off (1..). First the gate: fetch the world clock and let the
+# shared torch_auto decide whether torches are being planted RIGHT NOW
+# (.torchlit -- always 1 in mode 1; in the default auto mode 2 only during
+# the night window, so daytime columns return here). Then three rolls:
 #   1. does this column get a torch at all? (.torchdens percent chance --
 #      the state score behind the Visual Settings book's density presets, seeded
 #      from config .TORCHODDS by modes_init)
@@ -11,6 +15,9 @@
 # /random only rolls literal ranges and positions can't come from
 # scoreboards, so the distance is scaled from a fixed 0..99 roll and the
 # signed result is handed to the torch_at macro as a literal Z offset.
+function infinite_rail:time_now
+function infinite_rail:torch_auto
+execute unless score .torchlit ir matches 1 run return 0
 execute store result score .tr ir run random value 1..100
 execute if score .tr ir > .torchdens ir run return 0
 # Distance = 2 + roll * (range - 1) / 100, with roll = 0..99.

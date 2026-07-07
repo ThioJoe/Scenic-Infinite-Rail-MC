@@ -11,3 +11,11 @@
 # ride speed, in blocks/second -- read by both editions' speed_inc/speed_dec
 # (the shared speed_step then clamps the result to 1..64).
 scoreboard players set .SPEEDSTEP ir 4
+
+# Ticks per Minecraft day -- torch_auto normalizes its world-clock input
+# (.tod) with this before the night-window check. Java 26.1 reworked /time
+# around data-driven World Clocks and clock reads there may report a
+# clock's TOTAL ELAPSED ticks rather than a 0..23999 day time; Bedrock's
+# getTimeOfDay() is already day-relative. The floor-modulo makes every
+# variant read alike (a no-op for values already inside a day).
+scoreboard players set .C24000 ir 24000

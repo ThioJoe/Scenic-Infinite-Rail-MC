@@ -28,9 +28,12 @@ ride @e[type=minecart,tag=ir_ride,limit=1] mount @e[type=item_display,tag=ir_sea
 execute as @e[type=player,tag=ir_rider,limit=1] run gamemode adventure @s
 execute as @e[type=player,tag=ir_rider,limit=1] run effect give @s minecraft:resistance infinite 255 true
 execute as @e[type=player,tag=ir_rider,limit=1] run effect give @s minecraft:saturation infinite 0 true
-# The rider is visible (they sit in a real cart) -- clear any leftover
-# invisibility from rides started on older pack versions.
-execute as @e[type=player,tag=ir_rider,limit=1] run effect clear @s minecraft:invisibility
+# Mobs aggro (.AGGROMODE -- mode_aggro_on/off): apply the current choice.
+# Aggro on (default) = visible rider, so mobs notice and react (also clears
+# leftover invisibility from older pack versions or an aggro-off ride);
+# off = invisible to mobs from the first tick.
+execute if score .AGGROMODE ir matches 1 as @e[type=player,tag=ir_rider,limit=1] run effect clear @s minecraft:invisibility
+execute if score .AGGROMODE ir matches 0 as @e[type=player,tag=ir_rider,limit=1] run effect give @s minecraft:invisibility infinite 0 true
 execute if score .HIDECART ir matches 0 as @e[type=player,tag=ir_rider,limit=1] run ride @s mount @e[type=minecart,tag=ir_ride,limit=1]
 execute if score .HIDECART ir matches 1 as @e[type=player,tag=ir_rider,limit=1] run ride @s mount @e[type=item_display,tag=ir_seat,limit=1]
 

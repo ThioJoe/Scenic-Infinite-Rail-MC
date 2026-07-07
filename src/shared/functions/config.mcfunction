@@ -33,7 +33,7 @@
 # average terrain surface. Higher = a more sweeping, birds-eye view.
 # Keep it at least 2: the redstone power block under the rail is immune to
 # water, but the rail itself is not, so the track must stay above sea level.
-scoreboard players set .HOVER cfg_terrain 1
+scoreboard players set .HOVER cfg_terrain 2
 
 # How high (in blocks above the rail) each column's clearance bore is carved --
 # i.e. the tunnel/headroom height. Slope columns automatically carve one block
@@ -115,17 +115,12 @@ scoreboard players set .CAMMODE cfg_camera 0
 #   /scoreboard players set .CARTYOFF cfg_camera -1
 scoreboard players set .CARTYOFF cfg_camera 12
 
-# BEDROCK EDITION ONLY (ignored on Java). 1 = hide the rider's first-person
-# arm automatically, like turning on the "Hide Hand" video setting, for a
-# clean cinematic view. Bedrock's /hud command has no element for the hand,
-# so this uses the one vanilla mechanism that reaches it: an invisibility
-# effect on the rider -- the inventory keeper keeps everything except the
-# Settings book (the mode-menu item) out of your hands, so normally nothing
-# renders at all. Side effect: your own body is also hidden
-# in third-person / F5 view (the cart still shows). 0 = leave the arm
-# visible. Live-tunable mid-ride (takes effect within a second).
-# (Java has no equivalent mechanism; the Java rider keeps their arm.)
-scoreboard players set .HIDEHAND cfg_camera 1
+# (The old Bedrock-only .HIDEHAND knob is RETIRED. The invisibility effect
+# it toggled to hide the first-person arm is also the one thing that
+# decides whether Bedrock mobs can see the rider at all, so it now belongs
+# to the "Mobs aggro" ride mode instead: mode_aggro_off = invisible to mobs
+# AND the arm is hidden; mode_aggro_on (the default) = mobs notice you and
+# the arm shows. See the ride-modes list below.)
 
 
 # --- Auto-start -------------------------------------------------------------
@@ -329,7 +324,12 @@ scoreboard players set .MAXTICK cfg_ride 15
 #   mode_rain_on      permanent rain            (_off)
 #   mode_night_on     night only, frozen midnight (mode_night_off = default)
 #   mode_day_on       day only, frozen noon       (mode_day_off = default)
-#   mode_torches_on   torch-scattered track     (_off)
+#   mode_torches_on   torch-scattered track, day and night
+#   mode_torches_auto torches beside new track at night only (the default)
+#   mode_torches_off  no new torches
+#   mode_aggro_on     hostile mobs notice you and react (the default)
+#   mode_aggro_off    invisible to mobs -- the ride glides by unnoticed
+#                     (on Bedrock this also hides the first-person arm)
 #   mode_sky_on       high-altitude cruise      (_off)
 #   mode_sound_on     minecart rolling sound    (_off; default from .CARTSOUND below)
 #   modes             show what is currently on
@@ -360,8 +360,9 @@ scoreboard players set .SKYSPEED cfg_ride 18
 # density presets -- Low 15 / Medium 35 / High 70 / Max 100 -- own the live
 # value afterwards, and a chosen density survives reloads, rejoins and ride
 # restarts like every mode. Torches skip lava ground (and plant a sea pickle
-# on the bed over water -- see .SEAPICKLE), and only NEW track built while the
-# mode is on gets them.
+# on the bed over water -- see .SEAPICKLE), and only NEW track built while
+# torches are enabled gets them (mode 1 = always; the default auto mode 2 =
+# only while it is night -- the shared torch_auto decides per column).
 scoreboard players set .TORCHODDS cfg_ride 35
 
 # Torch mode: how far (in blocks) a torch may land from the track's
@@ -369,7 +370,8 @@ scoreboard players set .TORCHODDS cfg_ride 35
 # random side. The floor of 2 keeps torches out of the carved bore. On Java,
 # values above 8 automatically widen the rolling forceload corridor so the
 # whole torch band stays loaded and generated (a few more chunks in memory
-# while torch mode is on); both editions cap the effective value at 48.
+# while torches are actually being planted -- in auto mode that means only
+# at night); both editions cap the effective value at 48.
 scoreboard players set .TORCHRANGE cfg_ride 32
 
 # Torch mode: where a torch would land ON WATER, plant a sea pickle on the

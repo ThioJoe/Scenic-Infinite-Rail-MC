@@ -82,4 +82,32 @@ data modify storage infinite_rail:rule rule set from storage infinite_rail:names
 data modify storage infinite_rail:rule v set value "1000000"
 function infinite_rail:set_rule with storage infinite_rail:rule
 
+# Silence command feedback ON LOAD, not just at ride start (setup_world sets
+# it too, but only when a ride begins). Without this, every menu-book click
+# echoes the vanilla /trigger feedback ("Triggered [ir_menu] (set value to
+# N)") into chat whenever the world has the rule on -- the player only ever
+# wants the pack's own [Scenic Rail] replies. Version-dependent name
+# (send_command_feedback on 26.x), so it goes through names/set_rule like
+# the chain budgets above.
+data modify storage infinite_rail:rule rule set from storage infinite_rail:names cmd_feedback
+data modify storage infinite_rail:rule v set value "false"
+function infinite_rail:set_rule with storage infinite_rail:rule
+
+# Self-test the day/night check (time_now.mcfunction reads the
+# #infinite_rail:night predicate -- §6.7). The `execute if predicate`
+# probes live in the QUARANTINED check_clock.mcfunction, NOT here: 26.2
+# refused to compile that command inside this file, and a single
+# non-compiling line kills its whole file at load -- in THIS file that
+# meant no objectives, no config, no auto-start, a completely dead pack.
+# This file must only ever contain bulletproof commands (scoreboard /
+# function / data / tellraw / execute-if-score); anything riskier goes in
+# its own small file, where a failure costs one soft function call.
+# .todok stays 0 either when both predicates read false or when
+# check_clock itself failed to load -- both mean the same thing: torch
+# auto cannot tell day from night on this version (time_now runs the same
+# command), so warn loudly. The pack boots fine either way.
+scoreboard players set .todok ir 0
+function infinite_rail:check_clock
+execute if score .todok ir matches 0 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Warning: the day/night check is not working on this Minecraft version, so torch mode's Auto (night-only) setting cannot tell day from night and will not plant torches. Always-on torch mode still works. Please report this with your exact game version.","color":"yellow"}]
+
 tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Loaded. A fresh world starts the ride automatically; run ","color":"gray"},{"text":"/function infinite_rail:start","color":"aqua"},{"text":" to (re)start it here.","color":"gray"}]
