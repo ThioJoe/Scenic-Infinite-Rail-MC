@@ -359,8 +359,9 @@ scoreboard players set .SKYSPEED cfg_ride 18
 # score (modes_init copies it once, on the first load): the Settings menu's
 # density presets -- Low 15 / Medium 35 / High 70 / Max 100 -- own the live
 # value afterwards, and a chosen density survives reloads, rejoins and ride
-# restarts like every mode. Torches skip water/lava ground, and only NEW
-# track built while the mode is on gets them.
+# restarts like every mode. Torches skip lava ground (and plant a sea pickle
+# on the bed over water -- see .SEAPICKLE), and only NEW track built while the
+# mode is on gets them.
 scoreboard players set .TORCHODDS cfg_ride 35
 
 # Torch mode: how far (in blocks) a torch may land from the track's
@@ -370,6 +371,14 @@ scoreboard players set .TORCHODDS cfg_ride 35
 # whole torch band stays loaded and generated (a few more chunks in memory
 # while torch mode is on); both editions cap the effective value at 48.
 scoreboard players set .TORCHRANGE cfg_ride 32
+
+# Torch mode: where a torch would land ON WATER, plant a sea pickle on the
+# sea/lake/river bed instead (a torch can't stand on water). This is the
+# NUMBER of pickles in the cluster, which sets its brightness: 1 = light 6,
+# 2 = light 9, 3 = light 12, 4 = light 15 (a torch is 14, so 4 is the closest
+# match). 0 = plant nothing (the old skip-water behavior). Always on by
+# default as part of torch mode; there is no in-game Settings toggle for it.
+scoreboard players set .SEAPICKLE cfg_ride 4
 
 # Minecart sound: whether the ride is accompanied by the classic minecart
 # sound. The cart you sit in glides along the smoothed camera path instead

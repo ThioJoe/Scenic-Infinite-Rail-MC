@@ -219,7 +219,8 @@ const CONFIG_DEFAULTS = {
   SAMEGAP: 40, TURNGAP: 40, SLOPECLEAR: 8, UPCLAMP: 250, DOWNCLAMP: 20,
   UPLOOK: 50, UPGRACE: 10, UPEARLY: 6, DOWNLOOK: 16, DOWNGRACE: 1,
   AHEAD: 224, GENAHEAD: 192, MAXTICK: 15, DEBUGMODE: 0,
-  SKYY: 180, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 32, CARTSOUND: 1,
+  SKYY: 180, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 32, SEAPICKLE: 4,
+  CARTSOUND: 1,
 };
 
 // Which objective each knob lives in. The tunables are split into three
@@ -234,8 +235,8 @@ const CFG_GROUPS = {
   cfg_camera: ['CAMHEIGHT', 'CAMBLEND', 'CAMSMOOTH', 'CAMLIFT', 'CAMAHEAD',
     'CAMMODE', 'CARTYOFF', 'HIDEHAND'],
   cfg_ride: ['MAXSPEED', 'OCEANSPEED', 'OCEANCHUNKS', 'LANDCHUNKS', 'SKYY',
-    'SKYSPEED', 'TORCHODDS', 'TORCHRANGE', 'AHEAD', 'GENAHEAD', 'MAXTICK',
-    'CARTSOUND'],
+    'SKYSPEED', 'TORCHODDS', 'TORCHRANGE', 'SEAPICKLE', 'AHEAD', 'GENAHEAD',
+    'MAXTICK', 'CARTSOUND'],
 };
 const CFG_OBJ = {}; // knob name -> objective id (defaults to OBJ)
 for (const [obj, keys] of Object.entries(CFG_GROUPS)) {
@@ -266,6 +267,11 @@ const OCEAN_BIOMES = new Set([
 // rail_direction: 1 = flat east-west, 2 = ascending east, 3 = ascending west;
 // the light block is per-level flattened on current Bedrock).
 let AIR, RAIL_FLAT, RAIL_UP, RAIL_DOWN, SUPPORT, TORCH;
+// Sea pickle clusters for torch mode's water case (maybeTorch), indexed by
+// pickle count 1..4 (SEA_PICKLE[0] is unused). Bedrock's sea_pickle uses
+// cluster_count 0..3 for 1..4 pickles; dead_bit:false = the live, glowing
+// state (surrounding water re-waterlogs it so it stays alive).
+let SEA_PICKLE = null;
 const LIGHT_BLOCK = 'minecraft:light_block_11';
 
 // --- Ride state ----------------------------------------------------------------
@@ -925,9 +931,11 @@ function placeColumn(x, y, dir, veg) {
 // Torch mode (.TORCHMODE -- mode_torches_on): sprinkle torches on the
 // terrain around the line as it is built. The native twin of Java's
 // place_torch/torch_at/torch_try: same odds knob (.TORCHODDS percent of
-// columns), same 2..TORCHRANGE side offsets, same placement policy -- only
-// genuinely hopeless spots are skipped (liquid or non-solid ground: a torch
-// over water/lava would float then pop). Everything else gets its attempt,
+// columns), same 2..TORCHRANGE side offsets, same placement policy. Where the
+// ground below is WATER a torch can't stand, so instead a sea pickle is
+// planted on the bed (config .SEAPICKLE 1..4 = pickles = brightness; 0 = skip
+// like before) -- see the water branch below. Other hopeless spots are still
+// skipped (lava or non-solid ground). Everything else gets its torch attempt,
 // so frozen and snowy biomes are lit too: ice (all kinds) holds a torch
 // fine, and a snow LAYER occupying the target cell is REPLACED by the torch
 // (what placing one by hand on snowy ground does; requiring an air cell
@@ -946,8 +954,36 @@ function maybeTorch(x) {
     const below = dim.getBlock({ x, y: surf - 1, z });
     const cell = dim.getBlock({ x, y: surf, z });
     if (!below || !cell) return;
-    if (below.isLiquid === true || below.isSolid === false) return;
+    // Water case: a torch can't stand on water, so torch mode plants a sea
+    // pickle on the bed instead (config .SEAPICKLE 1..4 = pickles = brightness;
+    // 0 = skip like before, no GUI option). Only water -- lava still skips.
     const bid = below.typeId ?? '';
+    if (bid === 'minecraft:water' || bid === 'minecraft:flowing_water') {
+      let n = cfg('SEAPICKLE');
+      if (n < 1 || !SEA_PICKLE) return;
+      if (n > 4) n = 4;
+      // Walk down through the water column to the true bed -- the same
+      // "skip what isn't real terrain" idea probeSurface uses for the surface
+      // scan, but skipping water and submerged flora (kelp, seagrass) instead
+      // of leaves. (getTopmostBlock already ignores liquid, but the walk is
+      // robust against plants sitting on the floor.)
+      let fy = surf - 1;               // start in the water (surf is one above the top)
+      let floorY;
+      for (let step = 0; step < 384; step++) {
+        const b = dim.getBlock({ x, y: fy, z });
+        if (!b) return;               // unloaded: give up on this pickle
+        const fid = b.typeId ?? '';
+        const liquid = fid === 'minecraft:water' || fid === 'minecraft:flowing_water' || b.isLiquid === true;
+        if (liquid || fid.includes('leaves') || b.isSolid === false || isNotTerrain(fid)) { fy -= 1; continue; }
+        floorY = b.y;                 // first solid, non-flora block = the bed
+        break;
+      }
+      if (floorY === undefined) return;
+      try { dim.setBlockPermutation({ x, y: floorY + 1, z }, SEA_PICKLE[n]); }
+      catch { /* border chunk: skip this pickle */ }
+      return;
+    }
+    if (below.isLiquid === true || below.isSolid === false) return;
     if (bid.includes('leaves')) return; // canopy top the probe couldn't dig past
     const cid = cell.typeId ?? '';
     if (!(cell.isAir === true || cid === 'minecraft:air' || cid === 'minecraft:snow_layer')) return;
@@ -2002,6 +2038,15 @@ function init() {
   // A standing torch for torch mode (maybeTorch).
   try { TORCH = BlockPermutation.resolve('minecraft:torch', { torch_facing_direction: 'top' }); }
   catch { TORCH = BlockPermutation.resolve('minecraft:torch'); }
+  // Sea pickle clusters 1..4 (cluster_count 0..3) for the water case. If the
+  // states are unavailable, leave SEA_PICKLE null and maybeTorch skips water
+  // like the old behavior rather than throwing.
+  try {
+    SEA_PICKLE = [null];
+    for (let n = 1; n <= 4; n++) {
+      SEA_PICKLE.push(BlockPermutation.resolve('minecraft:sea_pickle', { cluster_count: n - 1, dead_bit: false }));
+    }
+  } catch { SEA_PICKLE = null; }
 
   // Apply the tunable knobs from the SHARED config.mcfunction (the same file
   // Java runs from load.mcfunction). Editing config + /reload refreshes them
