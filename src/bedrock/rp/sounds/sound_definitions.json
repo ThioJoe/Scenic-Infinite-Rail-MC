@@ -59,6 +59,13 @@
           "volume": 0.0
         }
       ]
+    },
+    "ir.cart_roll": {
+      "category": "neutral",
+      "min_distance": 512.0,
+      "sounds": [
+        "sounds/minecart/inside"
+      ]
     }
   }
 }

@@ -17,6 +17,18 @@ scoreboard players add .SKYMODE ir 0
 # Bedrock just stops spawning the scenery cart prop).
 scoreboard players add .HIDECART ir 0
 
+# The minecart-sound toggle (.SOUNDMODE -- each edition's clock re-triggers
+# the vanilla rolling sound at the rider while it is 1) is a mode like the
+# ones above, but with a config-side DEFAULT (.CARTSOUND) instead of a fixed
+# 0 -- so it can't use plain add-0 seeding: for a 0/1 toggle, "never set"
+# and "off" are the same number. A one-shot companion flag (.sndinit) tells
+# them apart: the default is copied only on the load that first creates the
+# flag, then never again, so a menu choice survives /reload, ride restarts
+# and rejoins exactly like every other mode.
+scoreboard players add .sndinit ir 0
+execute if score .sndinit ir matches 0 run scoreboard players operation .SOUNDMODE ir = .CARTSOUND cfg_ride
+execute if score .sndinit ir matches 0 run scoreboard players set .sndinit ir 1
+
 # The adjustable ride speed (.speed -- see the shared speed_step) is state
 # like the modes: seed it from the config default only when it has never
 # been set (or was left at an invalid <= 0), so a speed chosen with the

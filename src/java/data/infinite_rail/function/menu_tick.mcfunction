@@ -17,7 +17,7 @@
 #   9        modes printout              16-19     sidebar terrain/camera/
 #   22-25    torch density                         ride/live-state
 #            low/medium/high/max         20/21     sidebar off / command help
-#   26/27    hide cart on/off
+#   26/27    hide cart on/off            28/29     minecart sound on/off
 execute as @a[scores={ir_menu=1}] run function infinite_rail:mode_rain_on
 execute as @a[scores={ir_menu=2}] run function infinite_rail:mode_rain_off
 execute as @a[scores={ir_menu=3}] run function infinite_rail:mode_night_on
@@ -43,6 +43,8 @@ execute as @a[scores={ir_menu=24}] run function infinite_rail:torch_density_high
 execute as @a[scores={ir_menu=25}] run function infinite_rail:torch_density_max
 execute as @a[scores={ir_menu=26}] run function infinite_rail:mode_hidecart_on
 execute as @a[scores={ir_menu=27}] run function infinite_rail:mode_hidecart_off
+execute as @a[scores={ir_menu=28}] run function infinite_rail:mode_sound_on
+execute as @a[scores={ir_menu=29}] run function infinite_rail:mode_sound_off
 # The Speed hotbar items' clicks: the carrot_on_a_stick "used" statistic
 # (ir_click, a stat-criteria objective) fans out to speed_click, which reads
 # the held item's custom_data to tell + from - and resets the count.

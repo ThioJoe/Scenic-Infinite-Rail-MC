@@ -2,6 +2,8 @@
 # (Setting .started 0 also cancels a launch still in progress -- .started 2.)
 scoreboard players set .started ir 0
 tag @a remove ir_rider
+# Cut the riding-sound loop's tail (up to ~5.8 s of the last played copy).
+stopsound @a neutral minecraft:entity.minecart.inside
 effect clear @a[gamemode=adventure]
 # Take the hotbar items back -- the Settings/Debug books and the Speed +/-
 # items (re-modeled carrot_on_a_sticks) -- the ride is over.

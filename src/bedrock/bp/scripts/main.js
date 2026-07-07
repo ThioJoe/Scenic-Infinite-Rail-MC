@@ -219,7 +219,7 @@ const CONFIG_DEFAULTS = {
   SAMEGAP: 40, TURNGAP: 40, SLOPECLEAR: 8, UPCLAMP: 250, DOWNCLAMP: 20,
   UPLOOK: 50, UPGRACE: 10, UPEARLY: 6, DOWNLOOK: 16, DOWNGRACE: 1,
   AHEAD: 224, GENAHEAD: 192, MAXTICK: 15, DEBUGMODE: 0,
-  SKYY: 180, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 32,
+  SKYY: 180, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 32, CARTSOUND: 1,
 };
 
 // Which objective each knob lives in. The tunables are split into three
@@ -234,7 +234,8 @@ const CFG_GROUPS = {
   cfg_camera: ['CAMHEIGHT', 'CAMBLEND', 'CAMSMOOTH', 'CAMLIFT', 'CAMAHEAD',
     'CAMMODE', 'CARTYOFF', 'HIDEHAND'],
   cfg_ride: ['MAXSPEED', 'OCEANSPEED', 'OCEANCHUNKS', 'LANDCHUNKS', 'SKYY',
-    'SKYSPEED', 'TORCHODDS', 'TORCHRANGE', 'AHEAD', 'GENAHEAD', 'MAXTICK'],
+    'SKYSPEED', 'TORCHODDS', 'TORCHRANGE', 'AHEAD', 'GENAHEAD', 'MAXTICK',
+    'CARTSOUND'],
 };
 const CFG_OBJ = {}; // knob name -> objective id (defaults to OBJ)
 for (const [obj, keys] of Object.entries(CFG_GROUPS)) {
@@ -466,6 +467,7 @@ function showMenu(player) {
     dens: densIdx >= 0 ? densIdx : 1,
     sky: modeOn('SKYMODE'),
     hidecart: modeOn('HIDECART'),
+    sound: modeOn('SOUNDMODE'),
     // Clamped to the slider's 1..64 range -- a hand-set out-of-range .speed
     // must not make the form throw on its default value.
     speed: Math.min(64, Math.max(1, landSpeed())),
@@ -478,11 +480,12 @@ function showMenu(player) {
     .dropdown('Torch density', TORCH_DENSITY.map((d) => d.label), { defaultValueIndex: current.dens })
     .toggle('Sky (high-altitude cruise)', { defaultValue: current.sky })
     .toggle('Hide minecart (unobstructed view)', { defaultValue: current.hidecart })
+    .toggle('Minecart rolling sound', { defaultValue: current.sound })
     .slider(`Ride speed, blocks/s (default ${cfg('MAXSPEED')})`, 1, 64, { defaultValue: current.speed, valueStep: 1 })
     .submitButton('Apply');
   form.show(player).then((r) => {
     if (r.canceled || !r.formValues) return;
-    const [rain, night, torches, dens, sky, hidecart, speed] = r.formValues;
+    const [rain, night, torches, dens, sky, hidecart, sound, speed] = r.formValues;
     const apply = (was, wanted, fn) => {
       if (was !== !!wanted) runCmd(`function ${NS}/mode_${fn}_${wanted ? 'on' : 'off'}`);
     };
@@ -500,6 +503,15 @@ function showMenu(player) {
       if (bridgeMode === 'api' && getScore('HIDECART', 0) !== (hidecart ? 1 : 0)) {
         setScore('HIDECART', hidecart ? 1 : 0);
         say(hidecart ? '§7Minecart hidden - enjoy the unobstructed view.' : '§7Minecart visible again.');
+      }
+    }
+    if (current.sound !== !!sound) {
+      runCmd(`function ${NS}/mode_sound_${sound ? 'on' : 'off'}`);
+      // Same stale-function-registry belt + suspenders as hide-cart above.
+      if (bridgeMode === 'api' && getScore('SOUNDMODE', 0) !== (sound ? 1 : 0)) {
+        setScore('SOUNDMODE', sound ? 1 : 0);
+        if (!sound) runCmd('stopsound @a ir.cart_roll');
+        say(sound ? '§7Minecart sound on.' : '§7Minecart sound off.');
       }
     }
     const nightWant = night | 0;
@@ -1364,6 +1376,64 @@ function sweepDrops(seat) {
   }
 }
 
+// --- Minecart riding sound --------------------------------------------------
+// Nothing on Bedrock rolls on rails (the pace is virtual, the cart prop is
+// scripted scenery with none of the minecart's client-side behavior), so the
+// sound a rider expects is re-created: while .SOUNDMODE is on
+// (mode_sound_on/_off, the Settings form's Sound toggle; config .CARTSOUND
+// is only the first-load default, seeded by the shared modes_init), the
+// vanilla FIRST-PERSON riding sample is played at the rider -- ONCE. Three
+// facts make that single play a perfect endless loop:
+//   1. vanilla's sounds/minecart/inside FSB carries a baked-in FMOD LOOP
+//      flag (samples 0..187760): ANY playback of it loops forever until
+//      explicitly stopped. (This is also how the engine loops the cart
+//      sounds natively -- and it is why an earlier version of this feature,
+//      which re-triggered the sample on a timer, stacked a new immortal
+//      copy every cycle into a hundred-cart phasing chorus.)
+//   2. the sound id is the RP's OWN definition (ir.cart_roll) pointing at
+//      that vanilla file -- both because the global minecart.base EVENT is
+//      silenced by this pack (the phantom-noise fixes) and because only a
+//      pack-own definition can carry its own attenuation settings;
+//   3. that definition sets min_distance 512: within that range the engine
+//      applies NO distance attenuation, so the playing loop holds constant
+//      volume as the ride glides away from where it was emitted.
+// The emission point IS still fixed in the world, so the loop is
+// RE-ANCHORED -- stopped and started fresh at the rider -- after every
+// SOUND_REANCHOR blocks of travel (half the min_distance guard band; a
+// barely-audible sample restart every ~30 s at cruise instead of a fade).
+// Every play is preceded by a stop, and the rider-offline path resets
+// soundOn (a rejoining client has no sound instances), so exactly one
+// loop instance can ever exist. stop() and mode_sound_off also stopsound.
+// (Java data packs can't define or re-tune sounds at all -- the Java
+// edition instead relies on the pace cart's native loop plus the pack's
+// own dual-purpose assets/ half, enabled as a resource pack, which
+// extends that loop's falloff; see the Java files.)
+const SOUND_REANCHOR = 256;
+let soundOn = false;   // a native loop instance is (believed) playing
+let soundAnchorX = 0;  // world X where it was emitted
+function resetSound() { soundOn = false; }
+function tickSound() {
+  if (!modeOn('SOUNDMODE')) {
+    if (soundOn) { runCmd('stopsound @a ir.cart_roll'); soundOn = false; }
+    return;
+  }
+  const rider = findRider();
+  if (!rider) return;
+  let x;
+  try { x = rider.location.x; } catch { return; }
+  if (soundOn && Math.abs(x - soundAnchorX) < SOUND_REANCHOR) return;
+  runCmd('stopsound @a ir.cart_roll'); // the one-instance invariant
+  try {
+    rider.playSound('ir.cart_roll', { volume: 0.7, pitch: 1 });
+  } catch {
+    // playSound unavailable (API drift): the command route reaches the same
+    // client-side sound.
+    runCmd(`playsound ir.cart_roll "${S.riderName}"`);
+  }
+  soundOn = true;
+  soundAnchorX = x;
+}
+
 function camMove(seat, cart, sy) {
   const target = {
     x: S.paceX + cfg('CAMAHEAD'),
@@ -1777,6 +1847,10 @@ function stop(silent) {
     } catch { /* inventory unavailable */ }
   }
   S.camActive = false;
+  // Stop the riding-sound loop (it plays natively forever -- see tickSound)
+  // and forget it, so the next ride emits a fresh one wherever it starts.
+  runCmd('stopsound @a ir.cart_roll');
+  resetSound();
   // Remove EVERY rig piece wearing our tags (there should be one of each, but
   // stale sessions may have left extras behind). Each type is collected under
   // its own guard so one unregistered type (e.g. an outdated BP without the
@@ -2034,8 +2108,10 @@ function tick() {
   // Rider offline: freeze the whole ride until they return. (Java pauses the
   // same way in practice -- its pace cart stops being simulated when its
   // chunks unload -- but the virtual pace here would happily roll on and
-  // build track through terrain nobody is watching.)
-  if (!findRider()) return;
+  // build track through terrain nobody is watching.) The riding-sound state
+  // resets too: a rejoining client has no sound instances, so the loop must
+  // be re-emitted when the ride resumes.
+  if (!findRider()) { resetSound(); return; }
 
   // Per-tick driver, mirroring main.mcfunction's order:
   tickPace();                       // 1.  pace cart X (virtual)
@@ -2101,6 +2177,7 @@ function tick() {
     const sy = camFollow();         // 6.  the smoothed rail-line height
     if (sy !== undefined) camMove(seat, cart, sy); // glide seat (+ prop if shown)
   }
+  tickSound();                      // 6b. minecart rolling sound (.SOUNDMODE)
   buildLoop();                      // 7.  extend the track
   tickStateSidebar();               // 8.  the Debug menu's Live state mirror
 

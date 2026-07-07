@@ -39,6 +39,9 @@ execute if score .HIDECART ir matches 1 as @e[type=player,tag=ir_rider,limit=1] 
 scoreboard players operation .s2 ir = .railY ir
 scoreboard players operation .s2 ir *= .C1000 ir
 function infinite_rail:cam_follow
+# Prime the riding-sound clock at its firing threshold so the sound (if
+# .SOUNDMODE is on) starts with the very first ride tick (see sound_loop).
+scoreboard players set .sndt ir 115
 scoreboard players set .started ir 1
 tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Enjoy the ride.","color":"gray"}]
 # Loud diagnostic instead of a silent no-op: if the rider still is not

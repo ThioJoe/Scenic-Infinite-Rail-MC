@@ -331,6 +331,7 @@ scoreboard players set .MAXTICK cfg_ride 15
 #   mode_day_on       day only, frozen noon       (mode_day_off = default)
 #   mode_torches_on   torch-scattered track     (_off)
 #   mode_sky_on       high-altitude cruise      (_off)
+#   mode_sound_on     minecart rolling sound    (_off; default from .CARTSOUND below)
 #   modes             show what is currently on
 # They are STATE, not settings -- independent switches that stack freely
 # (night + torches is the lantern ride, night + rain the storm ride), stick
@@ -369,6 +370,24 @@ scoreboard players set .TORCHODDS cfg_ride 35
 # whole torch band stays loaded and generated (a few more chunks in memory
 # while torch mode is on); both editions cap the effective value at 48.
 scoreboard players set .TORCHRANGE cfg_ride 32
+
+# Minecart sound: whether the ride is accompanied by the classic minecart
+# sound. The cart you sit in glides along the smoothed camera path instead
+# of rolling on the rails, so it makes no sound of its own -- each edition
+# re-creates it by playing the vanilla FIRST-PERSON riding sample (the one
+# you hear sitting inside a cart) at the rider on a repeating clock:
+#   Java     /playsound entity.minecart.inside every 115 ticks (the
+#            sample's length) at a large volume so it never fades as the
+#            ride moves. Pure vanilla command, no resource pack needed.
+#   Bedrock  the pack's own resource pack plays the same sample; the file
+#            loops natively (FMOD loop flag) and its sound definition is
+#            attenuation-free, so it is played once and simply left running.
+# 1 = on, 0 = the silent glide. This is only the DEFAULT for the .SOUNDMODE
+# state score (modes_init copies it once, on the first load): the Settings
+# menu's Sound switch (mode_sound_on / mode_sound_off) owns the live value
+# afterwards, and a chosen setting survives reloads, rejoins and ride
+# restarts like every mode.
+scoreboard players set .CARTSOUND cfg_ride 1
 
 
 # --- Debugging --------------------------------------------------------------

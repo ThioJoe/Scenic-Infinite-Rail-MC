@@ -74,6 +74,14 @@ execute if score .mx ir matches ..10 run data merge entity @e[type=minecart,tag=
 # Smooth camera: fly the rig along the recorded profile ahead of the pace cart.
 execute if entity @e[type=minecart,tag=ir_cart,limit=1] run function infinite_rail:cam_follow
 
+# Minecart sound (mode_sound_* / .SOUNDMODE): re-trigger the vanilla
+# first-person riding sample at the rider on a 115-tick clock (the exact
+# length of entity.minecart.inside -- sound_loop plays it at a huge volume
+# so it never fades as the ride glides). A pure /playsound loop, no cart or
+# resource pack involved.
+execute if score .SOUNDMODE ir matches 1 run scoreboard players add .sndt ir 1
+execute if score .SOUNDMODE ir matches 1 if score .sndt ir matches 115.. run function infinite_rail:sound_loop
+
 # Extend the track ahead of the pace cart, up to .MAXTICK columns this tick.
 scoreboard players operation .budget ir = .MAXTICK cfg_ride
 function infinite_rail:build_loop
