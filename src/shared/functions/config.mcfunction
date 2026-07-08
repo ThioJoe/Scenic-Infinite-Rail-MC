@@ -33,7 +33,7 @@
 # average terrain surface. Higher = a more sweeping, birds-eye view.
 # Keep it at least 2: the redstone power block under the rail is immune to
 # water, but the rail itself is not, so the track must stay above sea level.
-scoreboard players set .HOVER cfg_terrain 2
+scoreboard players set .HOVER cfg_terrain 1
 
 # How high (in blocks above the rail) each column's clearance bore is carved --
 # i.e. the tunnel/headroom height. Slope columns automatically carve one block
@@ -292,7 +292,7 @@ scoreboard players set .DOWNLOOK cfg_terrain 250
 # higher values stop descents sooner / keep the line flying higher over
 # terrain it crosses. Keep it BELOW .HOVER, or descents end just short of
 # their target even over flat ground and the line rides permanently high.
-scoreboard players set .DOWNGRACE cfg_terrain 1
+scoreboard players set .DOWNGRACE cfg_terrain 0
 
 
 # --- Performance / world generation ----------------------------------------
@@ -344,7 +344,7 @@ scoreboard players set .MAXTICK cfg_ride 15
 # default rides just above the cloud layer (Y 192). Terrain taller than this
 # is punched through like any rise the rail cannot climb over -- raise it
 # toward ~260 to clear even the tallest jagged peaks (build limit 320).
-scoreboard players set .SKYY cfg_ride 180
+scoreboard players set .SKYY cfg_ride 120
 
 # Sky mode: cruising speed (blocks/second) while the mode is on. There is
 # nothing nearby to look at up there, so it defaults to ocean pace. Applied
