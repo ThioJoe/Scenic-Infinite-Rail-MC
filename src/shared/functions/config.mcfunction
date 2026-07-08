@@ -33,7 +33,7 @@
 # average terrain surface. Higher = a more sweeping, birds-eye view.
 # Keep it at least 2: the redstone power block under the rail is immune to
 # water, but the rail itself is not, so the track must stay above sea level.
-scoreboard players set .HOVER cfg_terrain 1
+scoreboard players set .HOVER cfg_terrain 2
 
 # How high (in blocks above the rail) each column's clearance bore is carved --
 # i.e. the tunnel/headroom height. Slope columns automatically carve one block
@@ -292,7 +292,7 @@ scoreboard players set .DOWNLOOK cfg_terrain 250
 # higher values stop descents sooner / keep the line flying higher over
 # terrain it crosses. Keep it BELOW .HOVER, or descents end just short of
 # their target even over flat ground and the line rides permanently high.
-scoreboard players set .DOWNGRACE cfg_terrain 0
+scoreboard players set .DOWNGRACE cfg_terrain 1
 
 
 # --- Performance / world generation ----------------------------------------
