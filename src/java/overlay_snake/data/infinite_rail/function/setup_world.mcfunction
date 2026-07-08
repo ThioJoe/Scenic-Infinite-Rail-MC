@@ -21,12 +21,14 @@ gamerule mob_griefing false
 gamerule fire_spread_radius_around_player 0
 # doInsomnia became spawn_phantoms.
 gamerule spawn_phantoms false
-# Prevent blocks broken by the track builder (like unsupported torches) from dropping items.
-gamerule do_tile_drops false
+# Prevent blocks broken by the track builder (like unsupported torches) from
+# dropping items. doTileDrops' snake_case name is block_drops (verified against
+# the 26.2 command registry -- there was never a do_tile_drops).
+gamerule block_drops false
 # Disable all environmental damage to ensure true invulnerability (no damage sounds or fire screen).
 gamerule fall_damage false
 gamerule fire_damage false
 gamerule freeze_damage false
-gamerule drown_damage false
+gamerule drowning_damage false
 # If something impossible happens, come straight back (spawnpoint follows the ride).
 gamerule immediate_respawn true

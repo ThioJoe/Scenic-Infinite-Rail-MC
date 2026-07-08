@@ -23,6 +23,6 @@ gamerule doTileDrops false
 gamerule fallDamage false
 gamerule fireDamage false
 gamerule freezeDamage false
-gamerule drownDamage false
+gamerule drowningDamage false
 # If something impossible happens, come straight back (spawnpoint follows the ride).
 gamerule doImmediateRespawn true

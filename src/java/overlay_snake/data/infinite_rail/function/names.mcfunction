@@ -8,6 +8,8 @@ data modify storage infinite_rail:speed rule set value "max_minecart_speed"
 # 25w44a renamed doWeatherCycle -> advance_weather, doDaylightCycle -> advance_time.
 data modify storage infinite_rail:names weather_cycle set value "advance_weather"
 data modify storage infinite_rail:names daylight_cycle set value "advance_time"
-data modify storage infinite_rail:names chain_length set value "max_command_chain_length"
-data modify storage infinite_rail:names fork_count set value "max_command_fork_count"
+# maxCommandChainLength / maxCommandForkCount became max_command_sequence_length /
+# max_command_forks (verified against the 26.2 command registry).
+data modify storage infinite_rail:names chain_length set value "max_command_sequence_length"
+data modify storage infinite_rail:names fork_count set value "max_command_forks"
 data modify storage infinite_rail:names cmd_feedback set value "send_command_feedback"
