@@ -36,7 +36,7 @@ scoreboard players operation .lastChunk ir = .chunkNow ir
 # land): their icebergs and pack ice are scenery worth watching, not an empty
 # stretch to sprint across.
 scoreboard players set .isOcean ir 0
-execute at @e[type=item_display,tag=ir_seat,limit=1] if biome ~ ~ ~ #minecraft:is_ocean unless biome ~ ~ ~ minecraft:frozen_ocean unless biome ~ ~ ~ minecraft:deep_frozen_ocean run scoreboard players set .isOcean ir 1
+execute at @e[type=item_display,tag=ir_seat,limit=1] if biome ~ ~ ~ #minecraft:is_ocean unless biome ~ ~ ~ minecraft:frozen_ocean unless biome ~ ~ ~ minecraft:deep_frozen_ocean unless biome ~ ~ ~ minecraft:warm_ocean run scoreboard players set .isOcean ir 1
 
 # Debug helper: the pace cart's actual eastward speed x100 (0.4/tick ~= 40 at
 # vanilla 8 m/s, ~160 at 32 m/s). If this never climbs after a speed change, the
