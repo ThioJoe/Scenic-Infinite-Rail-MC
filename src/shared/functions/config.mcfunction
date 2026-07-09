@@ -183,13 +183,41 @@ scoreboard players set .DEADBAND cfg_terrain 2
 
 # Minimum flat blocks between two changes in the SAME direction.
 # Higher = fewer, longer swoops. Terrain that rises faster than this allows
-# gets tunneled through instead of climbed.
-scoreboard players set .SAMEGAP cfg_terrain 40
+# gets tunneled through instead of climbed. (After a LARGE climb or descent
+# the effective gap is shortened by the big-event gap credit -- .GAPRATIO /
+# .GAPMATCH below -- so a long gap here calms typical terrain without
+# stretching out big mountain work.)
+scoreboard players set .SAMEGAP cfg_terrain 50
 
 # Minimum flat blocks required before the rail may REVERSE direction.
 # Higher = no quick up-then-down bobbing; small bumps get tunneled through and
-# small dips get bridged across.
-scoreboard players set .TURNGAP cfg_terrain 40
+# small dips get bridged across. (Also shortened by the big-event gap credit
+# below -- so a 40-block climb up a narrow mountain doesn't shoot a
+# TURNGAP-long bridge past the peak before it may come back down.)
+scoreboard players set .TURNGAP cfg_terrain 50
+
+# --- The big-event gap credit --------------------------------------------
+# Long gaps make calm, stately track on ordinary terrain -- but after a LARGE
+# elevation change they misfire: reaching the top of a tall narrow mountain,
+# the line must run a full .TURNGAP of flat bridge past the peak before it
+# may descend; and one big ascent too tall for a single event gets its climbs
+# spread .SAMEGAP apart, tunneling in between. A big event was clearly a
+# major terrain feature, so it EARNS the next event an earlier start: the
+# required gap is reduced by (last event's height) / .GAPRATIO. With 2, a 40
+# block climb shortens the next gap by 20 columns; 1 = the full height is
+# credited; 0 = the credit is off and the gaps always apply in full. The
+# discounted gap never drops below 0, and small everyday events (a few
+# blocks) earn next to nothing, so typical terrain still gets the full gaps.
+scoreboard players set .GAPRATIO cfg_terrain 2
+
+# The credit's worth-it guard: the newly wanted climb/descent must itself be
+# at least (last event's height) / .GAPMATCH blocks tall, or the full gap
+# applies. With 2, only a follow-up at least HALF the size of the big event
+# may start early -- coming back down off the mountain qualifies, a 3-block
+# bob at the summit does not. 1 = the follow-up must be at least as large as
+# the event that earned the credit; 0 = no size requirement (any wanted
+# change may use the discount).
+scoreboard players set .GAPMATCH cfg_terrain 2
 
 
 # --- Track clearing / vegetation sparing ------------------------------------

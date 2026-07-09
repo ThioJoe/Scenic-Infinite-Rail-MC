@@ -15,7 +15,10 @@
 //    - events only start when |target - railY| >= #DEADBAND (checked exactly;
 //      a climb may also start at diff >= 1 on near-scan ground contact)
 //    - climbs never start ahead of schedule (the 45-degree cone + #UPEARLY)
-//    - flat gaps between events respect #SAMEGAP / #TURNGAP (exact counting)
+//    - flat gaps between events respect #SAMEGAP / #TURNGAP minus the
+//      big-event gap credit (#GAPRATIO / #GAPMATCH -- a large previous event
+//      shortens the next gap), recomputed exactly; and on the purpose-built
+//      terrains the credit must actually engage at least once
 //    - descents never step below the descent floor (the TALLEST near-scan
 //      surface + #DOWNGRACE -- no trenching), never start without two-step
 //      runway, and never end while the floor below is still clear
@@ -178,8 +181,8 @@ function inRange(v, range) {
 // 48 blocks, hand target+railY to the shared decide, act on the returned dir.
 // Every knob is read from the emitted config.mcfunction via the interpreter.
 // ---------------------------------------------------------------------------
-const CFG_KEYS = ['HOVER', 'DEADBAND', 'SAMEGAP', 'TURNGAP', 'UPCLAMP', 'DOWNCLAMP',
-  'UPLOOK', 'UPGRACE', 'UPEARLY', 'DOWNLOOK', 'DOWNGRACE',
+const CFG_KEYS = ['HOVER', 'DEADBAND', 'SAMEGAP', 'TURNGAP', 'GAPRATIO', 'GAPMATCH',
+  'UPCLAMP', 'DOWNCLAMP', 'UPLOOK', 'UPGRACE', 'UPEARLY', 'DOWNLOOK', 'DOWNGRACE',
   'CAMBLEND', 'CAMLIFT', 'CAMSMOOTH', 'CAMAHEAD', 'SLOPECLEAR'];
 // The objective each knob lives in (the config split -- must match
 // config.mcfunction; camera knobs live in cfg_camera, the rest of CFG_KEYS
@@ -265,6 +268,7 @@ function runRide(fnDirs, surface, columns) {
   sim.set('slope', 0);
   sim.set('flat', 99);
   sim.set('lastDir', 0);
+  sim.set('evrun', 0);
   sim.set('vclear', 0);
   sim.set('retro', 0);
   sim.set('SKYMODE', 0); // modes_init seeds this on both engines
@@ -303,6 +307,16 @@ const TERRAINS = {
   // 45-degree swoops that never enter the ground -- the old min-window
   // floor let them knife several blocks into the face.
   hillside: { settles: true, f: (x) => (x < 150 ? 96 : Math.max(64, 96 - Math.floor((x - 150) / 2))) },
+  // A tall NARROW mountain (1:1 faces, 40 above the base plain): the ascent
+  // is one big event, so the big-event gap credit must let the line REVERSE
+  // and come back down before a full #TURNGAP of clifftop bridge has been
+  // built past the summit (the loop below asserts a discounted reversal).
+  peak: { settles: true, f: (x) => (x < 200 ? 64 : x < 240 ? 64 + (x - 200) : x < 280 ? 104 - (x - 240) : 64) },
+  // One big ascent as two 35-block walls 80 apart: too tall for a single
+  // event, so the second climb REPEATS the direction and is normally paced
+  // by the full #SAMEGAP -- the credit earned by the first climb must let it
+  // start sooner (the loop below asserts a discounted same-direction start).
+  bigsteps: { settles: true, f: (x) => (x < 200 ? 64 : x < 280 ? 99 : 134) },
 };
 
 function checkInvariants(name, ride, settles) {
@@ -310,8 +324,16 @@ function checkInvariants(name, ride, settles) {
   // Mirror the algorithm's own #flat accounting exactly: end_event zeroes the
   // counter ON the event-ending flat column, and each subsequent flat column
   // adds 1 -- so at an event-start column, `flats` equals the #flat the shared
-  // brain compared against #SAMEGAP/#TURNGAP.
-  let flats = 99, lastDir = 0, inEvent = 0, vbuf = 0;
+  // brain compared against #SAMEGAP/#TURNGAP. `run` mirrors #evrun (the last
+  // event's sloped-column count = its height), the big-event gap credit's
+  // input: at an event start the brain shrinks the required gap by
+  // run / #GAPRATIO, provided the newly wanted move is itself at least
+  // run / #GAPMATCH blocks (consider_start's credit block). The mirror
+  // recomputes that exact discounted requirement, and counts the starts that
+  // actually USED the credit (flats below the undiscounted gap) so the
+  // purpose-built terrains can assert the feature engaged at all.
+  let flats = 99, lastDir = 0, inEvent = 0, vbuf = 0, run = 0;
+  const discounted = { same: 0, turn: 0 };
   log.forEach((step, i) => {
     const { dir, veg, retro, gfloor, gmax, gcone } = step;
     const diff = step.target - step.railYBefore;
@@ -347,8 +369,22 @@ function checkInvariants(name, ride, settles) {
       }
       if (inEvent === 0) {
         // event start: check the deadband and the gap the brain just approved
-        const need = dir === lastDir ? cfg.SAMEGAP : cfg.TURNGAP;
-        if (flats < need) fail(`${name}: event started after ${flats} flat columns (needed ${need}) at column ${i}`);
+        // -- the base #SAMEGAP/#TURNGAP minus the big-event gap credit
+        // (run / #GAPRATIO, guarded by the run / #GAPMATCH worth-it test,
+        // floored at 0 -- exactly consider_start's arithmetic).
+        const sameDir = dir === lastDir;
+        const base = sameDir ? cfg.SAMEGAP : cfg.TURNGAP;
+        let cut = cfg.GAPRATIO >= 1 ? Math.floor(run / cfg.GAPRATIO) : 0;
+        // The worth-it size of the wanted move: |diff|, except climbs also
+        // consult the near scan (#gmax + #HOVER - railY) -- the average
+        // dilutes an approaching rise to ~half, the contact reading is
+        // honest (consider_start's .gup max; -10000 no-data loses the max).
+        let mag = diff * dir;
+        if (dir === 1) mag = Math.max(mag, gmax + cfg.HOVER - step.railYBefore);
+        if (cfg.GAPMATCH >= 1 && mag < Math.floor(run / cfg.GAPMATCH)) cut = 0;
+        const need = Math.max(0, base - cut);
+        if (flats < need) fail(`${name}: event started after ${flats} flat columns (needed ${need} = ${base} - credit ${base - need}) at column ${i}`);
+        if (flats < base) discounted[sameDir ? 'same' : 'turn'] += 1;
         if (dir === 1) {
           // A climb may also start inside the deadband on ground contact
           // (diff >= 1 and the near scan sees terrain above the rail).
@@ -373,7 +409,9 @@ function checkInvariants(name, ride, settles) {
         }
         inEvent = dir;
         lastDir = dir;
+        run = 0; // start_event restarts #evrun; the credit above used the OLD value
       }
+      run += 1; // decide counts every sloped column into #evrun
       flats = 0;
     } else {
       flats = inEvent !== 0 ? 0 : flats + 1; // ending column resets, like end_event
@@ -388,6 +426,7 @@ function checkInvariants(name, ride, settles) {
     const drift = Math.abs(last.target - S.railY);
     if (drift >= cfg.DEADBAND + 1) fail(`${name}: rail ended ${drift} blocks from target`);
   }
+  return discounted;
 }
 
 // The mesa's specific promise (the descent guard): once the line has crested
@@ -472,9 +511,26 @@ for (const [name, { settles, f: surface }] of Object.entries(TERRAINS)) {
   if (jDirs !== bDirs) fail(`${name}: Java and Bedrock copies diverged`);
   else ok(`${name}: Java and Bedrock decisions identical over ${COLUMNS} columns (${java.log.filter((s) => s.dir !== 0).length} sloped)`);
 
-  checkInvariants(name, java, settles);
+  const discounted = checkInvariants(name, java, settles);
   checkCamera(name, java);
   if (name === 'mesa') checkMesa(java);
+
+  // The purpose-built gap-credit terrains must show the credit ENGAGING (an
+  // event legally starting inside the full, undiscounted gap) -- otherwise a
+  // regression that silently disables the credit (or a config change that
+  // starves it) would still pass every structural invariant above.
+  if (java.cfg.GAPRATIO >= 1) {
+    if (name === 'peak' && discounted.turn < 1) {
+      fail('peak: the big-event gap credit never engaged (no reversal started inside the full TURNGAP)');
+    } else if (name === 'peak') {
+      ok(`peak: the credit let ${discounted.turn} reversal(s) start inside the full TURNGAP (descending off the summit early)`);
+    }
+    if (name === 'bigsteps' && discounted.same < 1) {
+      fail('bigsteps: the big-event gap credit never engaged (no same-direction climb started inside the full SAMEGAP)');
+    } else if (name === 'bigsteps') {
+      ok(`bigsteps: the credit let ${discounted.same} same-direction climb(s) start inside the full SAMEGAP (chaining the big ascent sooner)`);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -496,6 +552,7 @@ console.log('\nSimulating sky mode (the fixed-altitude #SKYY override in the sha
     sim.set('slope', 0);
     sim.set('flat', 99);
     sim.set('lastDir', 0);
+    sim.set('evrun', 0);
     sim.set('vclear', 0);
     sim.set('retro', 0);
     sim.set('SKYMODE', 1);

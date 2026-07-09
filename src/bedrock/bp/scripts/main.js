@@ -232,10 +232,11 @@ const CONFIG_DEFAULTS = {
   HOVER: 2, TUNNEL: 6, CAMHEIGHT: 0, CAMBLEND: 6, CAMSMOOTH: 6, CAMLIFT: 20,
   CAMAHEAD: 64, CAMMODE: 0, CARTYOFF: 12, AUTOSTART: 1,
   MAXSPEED: 8, OCEANSPEED: 32, OCEANCHUNKS: 6, LANDCHUNKS: 3, DEADBAND: 2,
-  SAMEGAP: 40, TURNGAP: 40, SLOPECLEAR: 8, UPCLAMP: 250, DOWNCLAMP: 20,
-  UPLOOK: 50, UPGRACE: 10, UPEARLY: 6, DOWNLOOK: 16, DOWNGRACE: 1,
+  SAMEGAP: 50, TURNGAP: 50, GAPRATIO: 2, GAPMATCH: 2,
+  SLOPECLEAR: 6, UPCLAMP: 250, DOWNCLAMP: 30,
+  UPLOOK: 75, UPGRACE: 10, UPEARLY: 2, DOWNLOOK: 250, DOWNGRACE: 1,
   AHEAD: 224, GENAHEAD: 192, MAXTICK: 15, DEBUGMODE: 0,
-  SKYY: 180, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 32, SEAPICKLE: 4,
+  SKYY: 120, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 32, SEAPICKLE: 4,
   CARTSOUND: 1,
 };
 
@@ -246,8 +247,8 @@ const CONFIG_DEFAULTS = {
 // load.mcfunction.
 const CFG_GROUPS = {
   cfg_terrain: ['HOVER', 'TUNNEL', 'DEADBAND', 'SAMEGAP', 'TURNGAP',
-    'SLOPECLEAR', 'UPCLAMP', 'DOWNCLAMP', 'UPLOOK', 'UPGRACE', 'UPEARLY',
-    'DOWNLOOK', 'DOWNGRACE'],
+    'GAPRATIO', 'GAPMATCH', 'SLOPECLEAR', 'UPCLAMP', 'DOWNCLAMP', 'UPLOOK',
+    'UPGRACE', 'UPEARLY', 'DOWNLOOK', 'DOWNGRACE'],
   cfg_camera: ['CAMHEIGHT', 'CAMBLEND', 'CAMSMOOTH', 'CAMLIFT', 'CAMAHEAD',
     'CAMMODE', 'CARTYOFF'],
   cfg_ride: ['MAXSPEED', 'OCEANSPEED', 'OCEANCHUNKS', 'LANDCHUNKS', 'SKYY',
@@ -2056,10 +2057,12 @@ function beginPhase2(startX) {
   S.avg = S.railY - cfg('HOVER');
 
   // Initialize the shared brain's event-model state, exactly as begin does on
-  // Java: flat, with a large flat-gap so the first slope is unrestricted.
+  // Java: flat, with a large flat-gap so the first slope is unrestricted (and
+  // no leftover big-event gap credit from a previous ride: .evrun 0).
   brainSet('slope', 0);
   brainSet('flat', 99);
   brainSet('lastDir', 0);
+  brainSet('evrun', 0);
   brainSet('railY', S.railY);
   // Fresh carve-mode state (see decide): no slope buffer, no pending retro.
   brainSet('vclear', 0);

@@ -76,8 +76,12 @@ const FORBIDDEN_ANYWHERE = [
 function lintSharedLine(file, lineNo, raw) {
   const line = raw.trim();
   if (line === '' || line.startsWith('#')) return;
+  // The "/" token exists to catch folder-slash function calls, but the
+  // scoreboard divide operator (" /= ") is a legitimate dual-dialect
+  // operation on both engines -- mask it out before the forbidden scan.
+  const scannable = line.replace(/ \/= /g, ' ');
   for (const [tok, why] of FORBIDDEN_ANYWHERE) {
-    if (line.includes(tok)) fail(`${file}:${lineNo}: contains "${tok}" (${why})`);
+    if (scannable.includes(tok)) fail(`${file}:${lineNo}: contains "${tok}" (${why})`);
   }
   checkCommand(file, lineNo, line);
 }

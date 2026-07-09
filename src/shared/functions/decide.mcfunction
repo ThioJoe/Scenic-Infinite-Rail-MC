@@ -123,6 +123,15 @@ execute if score .slope0 ir = .nOne ir if score .diff ir matches 0.. run functio
 # --- If currently flat, decide whether to begin a new event ---
 execute if score .slope0 ir matches 0 run function ir_consider_start
 
+# --- Track the event's size (the big-event gap credit's input) ---
+# .evrun counts this event's sloped columns -- at 45 degrees that IS its
+# height. start_event zeroes it, so the increment below makes the starting
+# column count 1; it then keeps the finished event's total untouched across
+# the flat stretch that follows, where consider_start reads it to shrink the
+# next required gap (a big climb/descent was clearly a major terrain
+# feature, so the next event may follow sooner -- see consider_start).
+execute unless score .dir ir matches 0 run scoreboard players add .evrun ir 1
+
 # --- Carve mode for this column (read by each edition's column placer) ---
 # .veg 1 = the carve may spare natural vegetation outside the critical
 # envelope; 0 = the full center bore is cleared unconditionally. Full clears

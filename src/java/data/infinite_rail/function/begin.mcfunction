@@ -60,10 +60,12 @@ data modify entity @e[type=marker,tag=ir_head,limit=1] Pos[1] set from storage i
 
 # --- Initialize counters and slope state ---
 execute store result score .headX ir run data get entity @e[type=marker,tag=ir_head,limit=1] Pos[0] 1
-# Start flat, with a large flat-gap so the first climb/descent is unrestricted.
+# Start flat, with a large flat-gap so the first climb/descent is unrestricted
+# (and no leftover big-event gap credit from a previous ride: .evrun 0).
 scoreboard players set .slope ir 0
 scoreboard players set .flat ir 99
 scoreboard players set .lastDir ir 0
+scoreboard players set .evrun ir 0
 # Fresh carve-mode state (see decide): no slope buffer, no pending retro-clear.
 # .veg 0 = the first column below (placed before any decide runs) gets a full
 # clear; every later column's decide computes its own .veg.
