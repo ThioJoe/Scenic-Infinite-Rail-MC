@@ -71,6 +71,25 @@ execute if score .speed ir matches ..0 run scoreboard players operation .speed i
 scoreboard players add .skyspd ir 0
 execute if score .skyspd ir matches ..0 run scoreboard players operation .skyspd ir = .SKYSPEED cfg_ride
 
+# The adjustable OCEAN cruise speed (.ocnspd -- what the ride cruises at
+# while the ocean sprint is on, .fast 1): same pattern again, seeded from
+# the config default .OCEANSPEED. The Speed items tune it -- in BOTH
+# directions -- while the sprint is active; the old max(.OCEANSPEED, .speed)
+# "the ocean never slows the ride" rule is retired in its favor. (With the
+# ocean speed-up disabled in config -- .OCEANSPEED 0 -- this seeds 0 and
+# re-seeds each load until the feature is enabled; it is never applied then.)
+scoreboard players add .ocnspd ir 0
+execute if score .ocnspd ir matches ..0 run scoreboard players operation .ocnspd ir = .OCEANSPEED cfg_ride
+
+# Track light (.LIGHTMODE): the light level of the invisible light block
+# placed 3 above every NEW rail (0 = none -- dark tunnels and nights; the
+# menu presets are Off 0 / Low 8 / On 11). A non-zero default (11, the
+# classic bright line), so it seeds with a one-shot flag like .AGGROMODE.
+scoreboard players add .LIGHTMODE ir 0
+scoreboard players add .lgtinit ir 0
+execute if score .lgtinit ir matches 0 run scoreboard players set .LIGHTMODE ir 11
+execute if score .lgtinit ir matches 0 run scoreboard players set .lgtinit ir 1
+
 # Torch density (.torchdens -- the roll place_torch/maybeTorch actually
 # uses) follows the same pattern: seeded from the config default .TORCHODDS
 # only when never set, then owned by the Visual Settings menu's presets (the

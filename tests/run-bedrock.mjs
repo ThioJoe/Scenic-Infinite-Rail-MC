@@ -116,12 +116,17 @@ const tests = [
     if (wrong.length) throw new Error(`config values not applied: ${wrong.join('; ')}`);
   }),
 
-  report('modes_init seeded the defaults (torch auto, mobs aggro, speed)', async (s) => {
+  report('modes_init seeded the defaults (torch auto, mobs aggro, speeds, track light)', async (s) => {
     const checks = [];
     if (!(await s.scoreInRange('.TORCHMODE', 'ir', 2))) checks.push('.TORCHMODE != 2 (auto)');
     if (!(await s.scoreInRange('.AGGROMODE', 'ir', 1))) checks.push('.AGGROMODE != 1');
+    if (!(await s.scoreInRange('.LIGHTMODE', 'ir', 11))) checks.push('.LIGHTMODE != 11 (bright)');
     const maxspeed = expected.find((e) => e.holder === '.MAXSPEED')?.value;
     if (maxspeed !== undefined && !(await s.scoreInRange('.speed', 'ir', maxspeed))) checks.push(`.speed != ${maxspeed}`);
+    const skyspeed = expected.find((e) => e.holder === '.SKYSPEED')?.value;
+    if (skyspeed !== undefined && !(await s.scoreInRange('.skyspd', 'ir', skyspeed))) checks.push(`.skyspd != ${skyspeed}`);
+    const oceanspeed = expected.find((e) => e.holder === '.OCEANSPEED')?.value;
+    if (oceanspeed !== undefined && !(await s.scoreInRange('.ocnspd', 'ir', oceanspeed))) checks.push(`.ocnspd != ${oceanspeed}`);
     const odds = expected.find((e) => e.holder === '.TORCHODDS')?.value;
     if (odds !== undefined && !(await s.scoreInRange('.torchdens', 'ir', odds))) checks.push(`.torchdens != ${odds}`);
     if (checks.length) throw new Error(checks.join('; '));
@@ -169,6 +174,21 @@ const tests = [
     await s.setScore('.SKYMODE', 'ir', 0);
   }),
 
+  report('shared speed_step: the ocean sprint tunes the ocean cruise (.ocnspd), both directions', async (s) => {
+    const base = expected.find((e) => e.holder === '.MAXSPEED')?.value ?? 8;
+    const ocean = expected.find((e) => e.holder === '.OCEANSPEED')?.value ?? 32;
+    await s.setScore('.fast', 'ir', 1);
+    await s.fn('speed_inc');
+    if (!(await s.scoreInRange('.ocnspd', 'ir', ocean + 4))) throw new Error(`ocean inc: .ocnspd != ${ocean + 4}`);
+    if (!(await s.scoreInRange('.speed', 'ir', base))) throw new Error('land .speed changed while the sprint owned the ride');
+    await s.fn('speed_dec');
+    await s.fn('speed_dec');
+    if (!(await s.scoreInRange('.ocnspd', 'ir', ocean - 4))) throw new Error('Speed - must go BELOW the ocean default now');
+    await s.fn('speed_reset');
+    if (!(await s.scoreInRange('.ocnspd', 'ir', ocean))) throw new Error(`ocean reset: .ocnspd != ${ocean}`);
+    await s.setScore('.fast', 'ir', 0);
+  }),
+
   report('mode toggles flip their scores on Bedrock', async (s) => {
     await s.fn('mode_torches_on');
     if (!(await s.scoreInRange('.TORCHMODE', 'ir', 1))) throw new Error('torches on != 1');
@@ -178,6 +198,12 @@ const tests = [
     if (!(await s.scoreInRange('.torchdens', 'ir', 70))) throw new Error('density high != 70');
     await s.fn('torch_density_medium');
     if (!(await s.scoreInRange('.torchdens', 'ir', 35))) throw new Error('density medium != 35');
+    await s.fn('mode_light_low');
+    if (!(await s.scoreInRange('.LIGHTMODE', 'ir', 8))) throw new Error('track light low != 8');
+    await s.fn('mode_light_off');
+    if (!(await s.scoreInRange('.LIGHTMODE', 'ir', 0))) throw new Error('track light off != 0');
+    await s.fn('mode_light_on');
+    if (!(await s.scoreInRange('.LIGHTMODE', 'ir', 11))) throw new Error('track light on != 11');
   }),
 ];
 

@@ -24,3 +24,7 @@ execute if score .torchdens ir matches 35 run tellraw @a {"rawtext":[{"text":"§
 execute if score .torchdens ir matches 70 run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Torch density: High"}]}
 execute if score .torchdens ir matches 100 run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Torch density: Max"}]}
 execute unless score .torchdens ir matches 15 unless score .torchdens ir matches 35 unless score .torchdens ir matches 70 unless score .torchdens ir matches 100 run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Torch density: Custom"}]}
+execute if score .LIGHTMODE ir matches 11 run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Track light: on (default)"}]}
+execute if score .LIGHTMODE ir matches 8 run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Track light: low"}]}
+execute if score .LIGHTMODE ir matches 0 run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Track light: off"}]}
+execute unless score .LIGHTMODE ir matches 0 unless score .LIGHTMODE ir matches 8 unless score .LIGHTMODE ir matches 11 run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Track light: custom (level §f"},{"score":{"name":".LIGHTMODE","objective":"ir"}},{"text":"§7)"}]}

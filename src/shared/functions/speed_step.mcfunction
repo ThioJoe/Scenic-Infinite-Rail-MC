@@ -1,16 +1,21 @@
 # The adjustable ride speed's shared state machine (both editions).
 #
-# There are TWO adjustable cruise speeds, and this file tunes whichever one is
-# active right now:
-#   .speed  (ir) -- the LAND cruising speed (default .MAXSPEED). Used on the
-#                   ground and, via max(.OCEANSPEED, .speed), over the ocean.
-#   .skyspd (ir) -- the SKY cruising speed (default .SKYSPEED), used only while
-#                   sky mode owns the ride. Seeded from .SKYSPEED by modes_init
-#                   exactly like .speed from .MAXSPEED, so a chosen sky speed
-#                   persists across /reload, ride restarts and rejoins too.
-# While .SKYMODE is 1 the Speed +/- items and Reset tune .skyspd (so sky mode
-# jumps to its own default on entry but is adjustable from there); otherwise
-# they tune .speed. Both are STATE, not config.
+# There are THREE adjustable cruise speeds, and this file tunes whichever one
+# is active right now:
+#   .speed  (ir) -- the LAND cruising speed (default .MAXSPEED).
+#   .ocnspd (ir) -- the OCEAN cruise speed (default .OCEANSPEED), used while
+#                   the ocean sprint owns the ride (.fast 1). Adjustable in
+#                   BOTH directions -- the old max(.OCEANSPEED, .speed) rule
+#                   ("the ocean never slows the ride") is gone: the ocean has
+#                   its own speed now, and Speed - below the ocean default
+#                   works like anywhere else.
+#   .skyspd (ir) -- the SKY cruising speed (default .SKYSPEED), used while
+#                   sky mode owns the ride (.SKYMODE 1).
+# All three are seeded from their config default by modes_init exactly like
+# .speed always was, so each context "jumps to its default" on first use but
+# is adjustable from there, and a chosen value persists across /reload, ride
+# restarts and rejoins. The Speed +/- items and Reset tune whichever context
+# is active; the other two are untouched.
 #
 # Input:  .spdir (ir)  --  the change in blocks/s: positive = faster,
 #                          negative = slower (speed_inc/speed_dec pass
@@ -18,15 +23,15 @@
 #                          Bedrock's settings slider passes an exact delta),
 #                          0 = reset to the active default.
 # Output: .spcur (ir)  --  the NEW active cruise speed (== the just-updated
-#                          .speed or .skyspd). The native apply/report reads
-#                          this so it never has to re-branch on sky mode:
-#                          Java's speed_apply pushes it into the minecart
-#                          max-speed gamerule and prints it; Bedrock's
-#                          speed_msg prints it (the script reads .speed /
-#                          .skyspd as the virtual pace target every tick).
-#         .speed / .skyspd -- the active one is written back with the result.
+#                          .speed, .ocnspd or .skyspd). The native
+#                          apply/report reads this so it never re-branches on
+#                          the context: Java's speed_apply pushes it into the
+#                          minecart max-speed gamerule and prints it;
+#                          Bedrock's speed_msg prints it (the script reads
+#                          the three scores as the virtual pace target).
+#         .speed / .ocnspd / .skyspd -- the active one gets the result.
 #         .spdflt (ir) --  1 = the new value equals the active config default
-#                          (.MAXSPEED on land, .SKYSPEED in sky mode -- the
+#                          (.MAXSPEED / .OCEANSPEED / .SKYSPEED -- the
 #                          caller's message appends "(default)").
 #
 # Floored at 1 (and a +one-step click from that floor rejoins the .SPEEDSTEP
@@ -35,16 +40,17 @@
 # enforces whatever bound vanilla itself has; Bedrock's virtual pace takes any
 # value, though past a point the builder can't lay track fast enough and the
 # pace soft-ceiling eases the ride off to the track buffer). Reached from the
-# Speed +/- and Reset hotbar items, the Ride Settings menu's speed controls,
-# and the speed_inc / speed_dec / speed_reset chat functions.
+# Speed -/Reset/+ hotbar items, the Ride Settings menu's speed controls, and
+# the speed_inc / speed_dec / speed_reset chat functions.
 
 # Pick the ACTIVE target + its config default into the working copy .spcur /
-# .spdef: the sky cruise (.skyspd / .SKYSPEED) while sky mode owns the ride,
-# else the land speed (.speed / .MAXSPEED). The math below runs on .spcur, so
-# there is one code path for both, and the result is written back to whichever
-# target is active.
-execute unless score .SKYMODE ir matches 1 run scoreboard players operation .spcur ir = .speed ir
-execute unless score .SKYMODE ir matches 1 run scoreboard players operation .spdef ir = .MAXSPEED cfg_ride
+# .spdef: sky mode wins (it also zeroes .fast on entry), then the ocean sprint
+# (.fast 1), else land. The math below runs on .spcur, so there is one code
+# path for all three, and the result is written back to the active target.
+scoreboard players operation .spcur ir = .speed ir
+scoreboard players operation .spdef ir = .MAXSPEED cfg_ride
+execute unless score .SKYMODE ir matches 1 if score .fast ir matches 1 run scoreboard players operation .spcur ir = .ocnspd ir
+execute unless score .SKYMODE ir matches 1 if score .fast ir matches 1 run scoreboard players operation .spdef ir = .OCEANSPEED cfg_ride
 execute if score .SKYMODE ir matches 1 run scoreboard players operation .spcur ir = .skyspd ir
 execute if score .SKYMODE ir matches 1 run scoreboard players operation .spdef ir = .SKYSPEED cfg_ride
 # Remember whether this change starts from the clamp floor (speed 1): the floor
@@ -60,7 +66,8 @@ scoreboard players set .sclamp ir 1
 scoreboard players operation .spcur ir > .sclamp ir
 execute if score .spfloor ir matches 1 if score .spdir ir = .SPEEDSTEP ir run scoreboard players operation .spcur ir = .SPEEDSTEP ir
 # Write the result back to the active cruise speed.
-execute unless score .SKYMODE ir matches 1 run scoreboard players operation .speed ir = .spcur ir
+execute unless score .SKYMODE ir matches 1 unless score .fast ir matches 1 run scoreboard players operation .speed ir = .spcur ir
+execute unless score .SKYMODE ir matches 1 if score .fast ir matches 1 run scoreboard players operation .ocnspd ir = .spcur ir
 execute if score .SKYMODE ir matches 1 run scoreboard players operation .skyspd ir = .spcur ir
 scoreboard players set .spdflt ir 0
 execute if score .spcur ir = .spdef ir run scoreboard players set .spdflt ir 1

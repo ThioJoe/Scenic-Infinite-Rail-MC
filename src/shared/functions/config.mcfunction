@@ -152,8 +152,12 @@ scoreboard players set .AUTOSTART ir 1
 # it for a brisker journey.
 scoreboard players set .MAXSPEED cfg_ride 8
 
-# Speed used while crossing open ocean (see below). 0 disables the whole
-# ocean speed-up feature and the speed stays at .MAXSPEED everywhere.
+# The DEFAULT speed while crossing open ocean (see below). 0 disables the
+# whole ocean speed-up feature and the speed stays at .MAXSPEED everywhere.
+# Like .MAXSPEED and .SKYSPEED this is only the SEED for an adjustable state
+# score (.ocnspd): while the ocean sprint is on, the Speed -/+/Reset hotbar
+# items tune the ocean cruise itself -- faster OR slower than this -- and a
+# chosen ocean speed persists across reloads/rejoins; Reset returns it here.
 scoreboard players set .OCEANSPEED cfg_ride 32
 
 # How many consecutive ocean-biome chunks the ride must cross before it speeds
@@ -327,6 +331,9 @@ scoreboard players set .MAXTICK cfg_ride 15
 #   mode_torches_on   torch-scattered track, day and night
 #   mode_torches_auto torches beside new track at night only (the default)
 #   mode_torches_off  no new torches
+#   mode_light_on     bright track light above new rails (level 11, default)
+#   mode_light_low    dim track light (level 8)
+#   mode_light_off    no track light -- dark tunnels and nights
 #   mode_aggro_on     hostile mobs notice you and react (the default)
 #   mode_aggro_off    invisible to mobs -- the ride glides by unnoticed
 #                     (on Bedrock this also hides the first-person arm)

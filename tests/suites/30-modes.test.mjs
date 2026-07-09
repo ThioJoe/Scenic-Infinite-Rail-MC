@@ -41,6 +41,15 @@ export default defineSuite('ride modes', ({ test }) => {
     eq(await mc.score('.NIGHTMODE', 'ir'), 0, 'back to the default cycle');
   });
 
+  test('track light tri-state sets .LIGHTMODE (the placed light level)', async ({ mc }) => {
+    await mc.fn('mode_light_low');
+    eq(await mc.score('.LIGHTMODE', 'ir'), 8, 'low = a dim light 8');
+    await mc.fn('mode_light_off');
+    eq(await mc.score('.LIGHTMODE', 'ir'), 0, 'off = no light block');
+    await mc.fn('mode_light_on');
+    eq(await mc.score('.LIGHTMODE', 'ir'), 11, 'on = light 11 (the default)');
+  });
+
   test('rain mode flips .RAINMODE', async ({ mc }) => {
     await mc.fn('mode_rain_on');
     eq(await mc.score('.RAINMODE', 'ir'), 1, 'rain on');

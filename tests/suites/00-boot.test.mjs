@@ -55,13 +55,17 @@ export default defineSuite('boot & initialization', ({ test }) => {
     eq(await mc.score('.SKYMODE', 'ir'), 0, 'sky mode off');
     eq(await mc.score('.HIDECART', 'ir'), 0, 'hide-cart off');
     eq(await mc.score('.SOUNDMODE', 'ir'), await mc.score('.CARTSOUND', 'cfg_ride'), '.SOUNDMODE seeded from .CARTSOUND');
+    eq(await mc.score('.LIGHTMODE', 'ir'), 11, 'track light defaults to bright (11)');
     eq(await mc.score('.trchinit', 'ir'), 1, 'torch one-shot seed flag consumed');
     eq(await mc.score('.agginit', 'ir'), 1, 'aggro one-shot seed flag consumed');
     eq(await mc.score('.sndinit', 'ir'), 1, 'sound one-shot seed flag consumed');
+    eq(await mc.score('.lgtinit', 'ir'), 1, 'track-light one-shot seed flag consumed');
   });
 
   test('adjustable state seeded from config defaults', async ({ mc }) => {
     eq(await mc.score('.speed', 'ir'), await mc.score('.MAXSPEED', 'cfg_ride'), '.speed seeded from .MAXSPEED');
+    eq(await mc.score('.skyspd', 'ir'), await mc.score('.SKYSPEED', 'cfg_ride'), '.skyspd seeded from .SKYSPEED');
+    eq(await mc.score('.ocnspd', 'ir'), await mc.score('.OCEANSPEED', 'cfg_ride'), '.ocnspd seeded from .OCEANSPEED');
     eq(await mc.score('.torchdens', 'ir'), await mc.score('.TORCHODDS', 'cfg_ride'), '.torchdens seeded from .TORCHODDS');
   });
 

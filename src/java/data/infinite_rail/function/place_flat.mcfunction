@@ -14,4 +14,4 @@ execute store result storage infinite_rail:carve h int 1 run scoreboard players 
 function infinite_rail:carve
 function infinite_rail:support
 setblock ~ ~ ~ minecraft:powered_rail[shape=east_west,powered=true]
-setblock ~ ~3 ~ minecraft:light[level=11]
+function infinite_rail:place_light

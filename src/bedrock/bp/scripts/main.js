@@ -290,7 +290,10 @@ let AIR, RAIL_FLAT, RAIL_UP, RAIL_DOWN, SUPPORT, TORCH;
 // cluster_count 0..3 for 1..4 pickles; dead_bit:false = the live, glowing
 // state (surrounding water re-waterlogs it so it stays alive).
 let SEA_PICKLE = null;
-const LIGHT_BLOCK = 'minecraft:light_block_11';
+// The track light's per-level flattened ids (light_block_0 .. light_block_15);
+// the level itself is the .LIGHTMODE state score (lightLevel() -- the Track
+// light mode: 11 = bright/default, 8 = dim, 0 = none).
+const LIGHT_BLOCK_PREFIX = 'minecraft:light_block_';
 
 // --- Ride state ----------------------------------------------------------------
 // The Bedrock twin of Java's scoreboard runtime state (section 4.1 of
@@ -487,6 +490,27 @@ function torchLit() {
   return litCache;
 }
 
+// The Track light level (.LIGHTMODE -- mode_light_on/low/off, or the Visual
+// Settings form's dropdown: 11 = the bright line (the default), 8 = a dim
+// glow, 0 = none -- dark tunnels and nights). Any hand-set 0..15 works in
+// API-bridge mode; on cmd-bridge worlds the read degrades to the nearest
+// preset (two successCount probes, cached ~1 s -- placeColumn asks per
+// column, the torchMode() pattern).
+let llCache = 11;
+let llCacheAt = -100;
+function lightLevel() {
+  if (bridgeMode === 'api') {
+    const v = getScore('LIGHTMODE', -1);
+    return v < 0 ? 11 : Math.min(15, v);
+  }
+  if (tickN - llCacheAt <= 20) return llCache;
+  llCacheAt = tickN;
+  if ((runCmd(`execute if score ${P}LIGHTMODE ir matches 0 run scoreboard players add ${P}probe ir 1`)?.successCount ?? 0) > 0) llCache = 0;
+  else if ((runCmd(`execute if score ${P}LIGHTMODE ir matches 8 run scoreboard players add ${P}probe ir 1`)?.successCount ?? 0) > 0) llCache = 8;
+  else llCache = 11;
+  return llCache;
+}
+
 // The ride's land cruising speed: the .speed state score (adjusted by the
 // Speed +/- items and the Ride Settings form's slider; seeded from .MAXSPEED by
 // the shared modes_init, clamped 1..64 by the shared speed_step). Falls
@@ -508,11 +532,32 @@ function skySpeed() {
   return v >= 1 ? v : cfg('SKYSPEED');
 }
 
+// The ride's OCEAN cruise speed: the .ocnspd state score (adjusted by the
+// Speed items / the form's slider WHILE THE SPRINT IS ON -- in both
+// directions, the old max(.OCEANSPEED, landSpeed()) "the ocean never slows
+// the ride" rule is retired; seeded from config .OCEANSPEED by the shared
+// modes_init). Same unreadable-score fallback as the other two.
+function oceanSpeed() {
+  const v = getScore('ocnspd', 0);
+  return v >= 1 ? v : cfg('OCEANSPEED');
+}
+
 // The speed the ride cruises at right now: the sky cruise while sky mode owns
-// the ride, else the land speed. The single reader the pace + the form use so
-// they can't disagree about which speed is live.
+// the ride, the ocean cruise during an ocean sprint, else the land speed. The
+// single reader the pace + the form use so they can't disagree about which
+// speed is live.
 function activeSpeed() {
-  return modeOn('SKYMODE') ? skySpeed() : landSpeed();
+  if (modeOn('SKYMODE')) return skySpeed();
+  return S.fast ? oceanSpeed() : landSpeed();
+}
+
+// The shared speed_step branches on the .fast score (the ocean sprint's
+// context flag) -- on Java that scoreboard score IS the state, but here the
+// sprint lives in S.fast, so every transition mirrors it into the `ir`
+// objective for the brain to read. A command write, so it works on
+// cmd-bridge worlds too.
+function syncFast() {
+  runCmd(`scoreboard players set ${P}fast ir ${S.fast ? 1 : 0}`);
 }
 
 // Torch-mode density: the .torchdens state score (the Visual Settings form's
@@ -526,6 +571,15 @@ const TORCH_DENSITY = [
   { fn: 'medium', label: 'Medium (default)', v: 35 },
   { fn: 'high', label: 'High', v: 70 },
   { fn: 'max', label: 'Max', v: 100 },
+];
+
+// The Track light presets (the Visual Settings form's dropdown; index order
+// matches Java's book row [Off] [Low] [On]). v = the .LIGHTMODE light level
+// the mode_light_* function files set.
+const LIGHT_PRESETS = [
+  { fn: 'off', label: 'Off (dark tunnels & nights)', v: 0 },
+  { fn: 'low', label: 'Low (dim glow)', v: 8 },
+  { fn: 'on', label: 'On (bright, default)', v: 11 },
 ];
 function torchDensity() {
   const v = getScore('torchdens', 0);
@@ -571,7 +625,9 @@ function showRideMenu(player) {
     .toggle('Mobs aggro (mobs react to you)', { defaultValue: current.aggro })
     .slider(current.sky
       ? `Sky cruise speed, blocks/s (default ${cfg('SKYSPEED')})`
-      : `Ride speed, blocks/s (default ${cfg('MAXSPEED')})`, 1, 64, { defaultValue: current.speed, valueStep: 1 })
+      : S.fast
+        ? `Ocean cruise speed, blocks/s (default ${cfg('OCEANSPEED')})`
+        : `Ride speed, blocks/s (default ${cfg('MAXSPEED')})`, 1, 64, { defaultValue: current.speed, valueStep: 1 })
     .submitButton('Apply');
   form.show(player).then((r) => {
     if (r.canceled || !r.formValues) return;
@@ -630,12 +686,16 @@ function showVisualMenu(player) {
   // (change detection runs against the DISPLAYED index, so an untouched
   // submit never clobbers a custom value).
   const densIdx = TORCH_DENSITY.findIndex((d) => d.v === torchDensity());
+  // Track light: same display rule as density -- a hand-set level matching
+  // no preset shows as On but is only overwritten if actively picked.
+  const lightIdx = LIGHT_PRESETS.findIndex((d) => d.v === lightLevel());
   const current = {
     rain: modeOn('RAINMODE'),
     night: nightMode(),
     // Tri-state like Time: the dropdown index IS the .TORCHMODE value.
     torches: torchMode(),
     dens: densIdx >= 0 ? densIdx : 1,
+    light: lightIdx >= 0 ? lightIdx : 2,
   };
   const form = new ModalFormData()
     .title('Scenic Rail Visual Settings')
@@ -643,10 +703,11 @@ function showVisualMenu(player) {
     .dropdown('Time', ['Default (day/night cycle)', 'Always Night', 'Always Day'], { defaultValueIndex: current.night })
     .dropdown('Torches (scattered along new track)', ['Off', 'On (day and night)', 'Auto (at night only)'], { defaultValueIndex: current.torches })
     .dropdown('Torch density', TORCH_DENSITY.map((d) => d.label), { defaultValueIndex: current.dens })
+    .dropdown('Track light (above new track)', LIGHT_PRESETS.map((d) => d.label), { defaultValueIndex: current.light })
     .submitButton('Apply');
   form.show(player).then((r) => {
     if (r.canceled || !r.formValues) return;
-    const [rain, night, torches, dens] = r.formValues;
+    const [rain, night, torches, dens, light] = r.formValues;
     if (current.rain !== !!rain) runCmd(`function ${NS}/mode_rain_${rain ? 'on' : 'off'}`);
     const torchWant = torches | 0;
     if (torchWant !== current.torches) {
@@ -668,6 +729,19 @@ function showVisualMenu(player) {
     const densWant = dens | 0;
     if (densWant !== current.dens) {
       runCmd(`function ${NS}/torch_density_${TORCH_DENSITY[densWant]?.fn ?? 'medium'}`);
+    }
+    const lightWant = light | 0;
+    if (lightWant !== current.light) {
+      runCmd(`function ${NS}/mode_light_${LIGHT_PRESETS[lightWant]?.fn ?? 'on'}`);
+      // Stale-function-registry belt + suspenders (the mode_light_* files
+      // are NEW): if the score didn't take, write it directly (API mode
+      // only -- on cmd-bridge worlds the read lies, and there the function
+      // route is the working one anyway).
+      const wantV = LIGHT_PRESETS[lightWant]?.v ?? 11;
+      if (bridgeMode === 'api' && getScore('LIGHTMODE', -1) !== wantV) {
+        setScore('LIGHTMODE', wantV);
+        say(['§7Track light OFF - new track is built dark.', '§7Track light LOW - new track gets a dim glow.', '§7Track light ON - new track gets the bright line (the default).'][lightWant]);
+      }
     }
   }).catch((e) => reportError('visual settings menu', e));
 }
@@ -859,6 +933,7 @@ function loadState() {
     S.oceanRun = d.oceanRun | 0; S.landRun = d.landRun | 0;
     S.lastChunk = d.lastChunk | 0; S.s2 = +d.s2 || 0;
     S.riderName = typeof d.riderName === 'string' ? d.riderName : '';
+    syncFast(); // the shared speed_step reads .fast from the scoreboard
   } catch { /* corrupt state: fall through to a fresh start */ }
 }
 
@@ -1082,7 +1157,10 @@ function placeColumn(x, y, dir, veg) {
   }
   dim.setBlockPermutation({ x, y: y - 1, z }, SUPPORT);
   dim.setBlockPermutation({ x, y, z }, dir === 0 ? RAIL_FLAT : dir === 1 ? RAIL_UP : RAIL_DOWN);
-  dim.setBlockType({ x, y: y + 3, z }, LIGHT_BLOCK);
+  // The track light, at the Track light mode's level (0 = none -- the carve
+  // above already left the cell clear, so "off" just places nothing).
+  const lvl = lightLevel();
+  if (lvl > 0) dim.setBlockType({ x, y: y + 3, z }, LIGHT_BLOCK_PREFIX + lvl);
 }
 
 // Torch mode (.TORCHMODE, tri-state -- mode_torches_on/auto/off; the
@@ -1415,17 +1493,16 @@ function oceanCheck() {
       dbg(`§bocean chunk - oceanRun=§f${S.oceanRun}§b/§f${cfg('OCEANCHUNKS')}§7  speed=§f${(S.paceSpeed * 20).toFixed(1)}`);
     }
     if (cfg('OCEANSPEED') >= 1 && S.oceanRun >= cfg('OCEANCHUNKS')) {
-      // speed_up -- which may only ever SPEED the ride UP: the target is
-      // max(.OCEANSPEED, .speed), so a land speed raised past the ocean
-      // speed with the Speed + item is kept over the water too (the ocean
-      // never slows the cart down). Re-asserted every ocean chunk so the
-      // winning speed always sticks (and a mid-sprint .speed change takes
-      // effect at the next chunk); the debug line and flag flip only fire
-      // on the transition.
-      const oceanSpeed = Math.max(cfg('OCEANSPEED'), landSpeed());
-      S.targetSpeed = oceanSpeed / 20;
-      if (!S.fast) dbg(`§bswitching to fast ocean mode, speed §f${oceanSpeed}`);
+      // speed_up: switch to the OCEAN cruise (.ocnspd -- adjustable state,
+      // default .OCEANSPEED; the Speed items tune it in both directions
+      // while the sprint is on -- tickPace re-asserts it every tick, so a
+      // mid-sprint change applies within a second). The debug line and
+      // flag flip only fire on the transition.
+      const cruise = oceanSpeed();
+      S.targetSpeed = cruise / 20;
+      if (!S.fast) dbg(`§bswitching to fast ocean mode, speed §f${cruise}`);
       S.fast = true;
+      syncFast();
     }
   } else {
     S.landRun += 1;
@@ -1440,6 +1517,7 @@ function oceanCheck() {
       S.targetSpeed = landSpeed() / 20;
       dbg(`§eslowing down over land, speed §f${landSpeed()}`);
       S.fast = false;
+      syncFast();
     }
   }
 }
@@ -1460,10 +1538,13 @@ function tickPace() {
     S.targetSpeed = skySpeed() / 20;
   } else if (skyWas) {
     S.fast = false;
+    syncFast();
     S.oceanRun = 0;
     S.landRun = 0;
     S.targetSpeed = landSpeed() / 20;
-  } else if (!S.fast) {
+  } else if (S.fast) {
+    S.targetSpeed = oceanSpeed() / 20; // the ocean cruise stays live-adjustable
+  } else {
     S.targetSpeed = landSpeed() / 20; // the land speed stays live-adjustable
   }
   skyWas = sky;
@@ -1925,6 +2006,7 @@ function begin(player) {
   S.paceSpeed = 0;
   S.targetSpeed = landSpeed() / 20;
   S.fast = false;
+  syncFast();
   dbg(`ride speed set to §f${landSpeed()}§7 blocks/s`);
 
   // Wait (up to ~50 s) for the ticking area to load/generate both the start

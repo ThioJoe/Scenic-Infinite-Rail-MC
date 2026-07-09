@@ -53,15 +53,28 @@ execute at @e[type=minecart,tag=ir_cart,limit=1] align xyz run fill ~ ~ ~ ~1 ~1 
 execute at @e[type=item_display,tag=ir_seat,limit=1] run kill @e[type=item,distance=..16]
 execute at @e[type=item_display,tag=ir_seat,limit=1] run kill @e[type=experience_orb,distance=..16]
 
-# Keeper: silence the player-hurt "oof". In aggro mode (the default) hostile
-# mobs still notice and "hit" the rider -- that ambience is the point -- but
-# every hit lands as 0 damage (Resistance 255 + the damage gamerules), and a
-# fully-absorbed hit STILL plays the hurt sound. A data pack can't cancel a
-# damage event and Java has no resource pack to mute a sound file, so stop the
-# hurt sound every tick: it is cut within a tick of starting (~50 ms). This is
-# deliberately NOT invisibility, which would blind mobs and kill the aggro
-# ambience -- the rider takes no real damage either way, only the sound is
-# suppressed.
+# Keeper: intercept hostile projectiles before they can hit the rider. A hit
+# lands as 0 damage (Resistance 255 + the damage gamerules) but STILL plays
+# the player-hurt "oof" -- and a command can only react at the next tick
+# boundary, by which time the sound's onset (the part you actually hear) has
+# already played. So the fix is to stop the hit from happening at all: every
+# projectile within 6 blocks of the seat is killed each tick -- 6 exceeds the
+# farthest an arrow can close on the rider in one tick (~3.2 blocks of arrow
+# flight plus the ride's own motion), so nothing crosses the bubble between
+# ticks. Skeletons still aim and shoot (the aggro ambience is untouched);
+# their arrows just vanish silently at the last moment. The ids live in
+# #infinite_rail:projectiles with required:false entries, so a renamed entity
+# degrades to "that projectile can hit again", never a broken selector.
+# (Bedrock doesn't need this -- its resource pack silences game.player.hurt
+# outright, which a Java data pack cannot do.)
+execute at @e[type=item_display,tag=ir_seat,limit=1] run kill @e[type=#infinite_rail:projectiles,distance=..6]
+
+# Keeper: cut the tail of any player-hurt "oof" that still gets through
+# (melee reach-ups, creeper blasts -- the projectile sweep above prevents the
+# common ranged case entirely). A tick-boundary stopsound can only trim what
+# is already playing, so this is a mitigation for the rare residual hit, not
+# the fix. Deliberately NOT invisibility, which would blind mobs and kill the
+# aggro ambience -- the rider takes no real damage either way.
 stopsound @a[tag=ir_rider] * minecraft:entity.player.hurt
 
 # Keeper: police the rider's inventory (give_menu): anything beyond the six

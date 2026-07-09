@@ -1,0 +1,22 @@
+{
+  "replace": false,
+  "values": [
+    {"id": "minecraft:arrow", "required": false},
+    {"id": "minecraft:spectral_arrow", "required": false},
+    {"id": "minecraft:trident", "required": false},
+    {"id": "minecraft:fireball", "required": false},
+    {"id": "minecraft:small_fireball", "required": false},
+    {"id": "minecraft:dragon_fireball", "required": false},
+    {"id": "minecraft:wither_skull", "required": false},
+    {"id": "minecraft:shulker_bullet", "required": false},
+    {"id": "minecraft:llama_spit", "required": false},
+    {"id": "minecraft:potion", "required": false},
+    {"id": "minecraft:splash_potion", "required": false},
+    {"id": "minecraft:lingering_potion", "required": false},
+    {"id": "minecraft:wind_charge", "required": false},
+    {"id": "minecraft:breeze_wind_charge", "required": false},
+    {"id": "minecraft:snowball", "required": false},
+    {"id": "minecraft:egg", "required": false},
+    {"id": "minecraft:firework_rocket", "required": false}
+  ]
+}

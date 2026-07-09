@@ -10,15 +10,16 @@
 # number into the real call at function permission level.
 #
 # The number map (give_menu writes these into the books' links):
-#   1/2      rain on/off                 13        speed reset (11/12 were the
-#   3/10/4   time night/day/default                book's old -/+ links, retired:
-#   5/6/30   torches on/off/auto                   the hotbar items cover it)
-#   7/8      sky on/off                  14/15     debug chat on/off
-#   9        modes printout              16-19     sidebar terrain/camera/
-#   22-25    torch density                         ride/live-state
-#            low/medium/high/max         20/21     sidebar off / command help
-#   26/27    hide cart on/off            28/29     minecart sound on/off
-#   31/32    mobs aggro on/off
+#   1/2      rain on/off                 13        speed reset (retired from the
+#   3/10/4   time night/day/default                book -- the Speed Reset hotbar
+#   5/6/30   torches on/off/auto                   item covers it -- but kept
+#   7/8      sky on/off                            wired for stale book copies,
+#   9        modes printout                        like the old 11/12 -/+ links)
+#   22-25    torch density               14/15     debug chat on/off
+#            low/medium/high/max         16-19     sidebar terrain/camera/
+#   26/27    hide cart on/off                      ride/live-state
+#   31/32    mobs aggro on/off           20/21     sidebar off / command help
+#   33/34/35 track light off/low/on      28/29     minecart sound on/off
 execute as @a[scores={ir_menu=1}] run function infinite_rail:mode_rain_on
 execute as @a[scores={ir_menu=2}] run function infinite_rail:mode_rain_off
 execute as @a[scores={ir_menu=3}] run function infinite_rail:mode_night_on
@@ -49,6 +50,9 @@ execute as @a[scores={ir_menu=28}] run function infinite_rail:mode_sound_on
 execute as @a[scores={ir_menu=29}] run function infinite_rail:mode_sound_off
 execute as @a[scores={ir_menu=31}] run function infinite_rail:mode_aggro_on
 execute as @a[scores={ir_menu=32}] run function infinite_rail:mode_aggro_off
+execute as @a[scores={ir_menu=33}] run function infinite_rail:mode_light_off
+execute as @a[scores={ir_menu=34}] run function infinite_rail:mode_light_low
+execute as @a[scores={ir_menu=35}] run function infinite_rail:mode_light_on
 # The Speed hotbar items' clicks: the carrot_on_a_stick "used" statistic
 # (ir_click, a stat-criteria objective) fans out to speed_click, which reads
 # the held item's custom_data to tell + from - and resets the count.

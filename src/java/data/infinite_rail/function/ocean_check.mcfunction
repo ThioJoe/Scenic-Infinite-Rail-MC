@@ -1,17 +1,18 @@
 # Ocean speed-up. When the ride crosses a run of ocean-biome chunks (frozen
-# oceans excluded -- they read as land), raise the minecart max-speed gamerule
-# to max(.OCEANSPEED, .speed) -- the ocean may speed the ride up but never slow
-# it below the chosen land speed; after a run of non-ocean chunks, drop back to
-# the land cruising speed (.speed -- the config default .MAXSPEED
-# unless adjusted with the Speed +/- items). Sampled once per chunk, at the RIDER'S position (the
-# seat carries the player, .CAMAHEAD blocks ahead of the pace cart), so the
-# speed reflects the biome the viewer is actually flying over -- not the pace
-# cart trailing far behind.
+# oceans excluded -- they read as land), switch the minecart max-speed
+# gamerule to the OCEAN cruise speed (.ocnspd -- adjustable state, default
+# the config .OCEANSPEED; the Speed items tune it in both directions while
+# the sprint is on); after a run of non-ocean chunks, drop back to the land
+# cruising speed (.speed -- the config default .MAXSPEED unless adjusted).
+# Sampled once per chunk, at the RIDER'S position (the seat carries the
+# player, .CAMAHEAD blocks ahead of the pace cart), so the speed reflects the
+# biome the viewer is actually flying over -- not the pace cart trailing far
+# behind.
 #
-# Over ocean the target speed is RE-APPLIED every chunk (see speed_up), so the
-# winning speed -- max(.OCEANSPEED, .speed) -- always sticks and any manual
-# /gamerule change or desynced state self-heals. The land speed (.speed) is restored only once, on the
-# transition back, so you can still tweak the gamerule by hand on land.
+# Over ocean the cruise is RE-APPLIED every chunk (see speed_up), so it
+# always sticks and any manual /gamerule change or desynced state self-heals.
+# The land speed (.speed) is restored only once, on the transition back, so
+# you can still tweak the gamerule by hand on land.
 #
 # Requires the minecart max-speed gamerule to exist (see set_speed); on worlds
 # without the "Minecart Improvements" feature the speed changes are no-ops and
@@ -47,8 +48,9 @@ execute if score .isOcean ir matches 1 run scoreboard players add .oceanRun ir 1
 execute if score .isOcean ir matches 1 run scoreboard players set .landRun ir 0
 # Debug: report only while counting up to the threshold, then go quiet.
 execute if score .DEBUGMODE ir matches 1 if score .isOcean ir matches 1 if score .oceanRun ir <= .OCEANCHUNKS cfg_ride run tellraw @a [{"text":"[SR Debug] ","color":"dark_aqua"},{"text":"ocean chunk - oceanRun=","color":"aqua"},{"score":{"name":".oceanRun","objective":"ir"},"color":"white"},{"text":"/","color":"aqua"},{"score":{"name":".OCEANCHUNKS","objective":"cfg_ride"},"color":"white"},{"text":"  cartx100=","color":"gray"},{"score":{"name":".dbgmx","objective":"ir"},"color":"white"}]
-# Past the ocean threshold -> enforce .OCEANSPEED (re-applied every ocean chunk).
-# (.OCEANSPEED 0 disables the feature, so it never triggers then.)
+# Past the ocean threshold -> enforce the ocean cruise .ocnspd (re-applied
+# every ocean chunk). (.OCEANSPEED 0 disables the feature, so it never
+# triggers then.)
 execute if score .isOcean ir matches 1 if score .OCEANSPEED cfg_ride matches 1.. if score .oceanRun ir >= .OCEANCHUNKS cfg_ride run function infinite_rail:speed_up
 
 # Non-ocean chunk: grow the land run, clear the ocean run.
