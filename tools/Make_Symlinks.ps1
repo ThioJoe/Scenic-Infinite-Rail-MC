@@ -4,10 +4,10 @@ Set-Location $repoRoot
 
 # --- Configuration ---
 $useJunctions = $true
-$outDir  = "dist_links"
+$outDir  = "tools\dist_links"
 $rpDir   = "Scenic_Infinite_Rail_Mode_RP"
 $bpDir   = "Scenic_Infinite_Rail_Mode_BP"
-$javaDir = "Scenic_Infinite_Rail_Mode"
+$javaDir = "Scenic_Infinite_Rail_Mode_Java"
 
 # --- Helper Functions ---
 
@@ -83,6 +83,7 @@ New-DirSymlink -LinkPath "$outDir\$javaDir\data\minecraft" -TargetPath "src\java
 
 New-Item -ItemType Directory -Force -Path "$outDir\$javaDir\data\infinite_rail" | Out-Null
 New-DirSymlink -LinkPath "$outDir\$javaDir\data\infinite_rail\tags" -TargetPath "src\java\data\infinite_rail\tags"
+New-DirSymlink -LinkPath "$outDir\$javaDir\data\infinite_rail\predicate" -TargetPath "src\java\data\infinite_rail\predicate"
 
 New-FileSymlink -LinkPath "$outDir\$javaDir\pack.mcmeta" -TargetPath "src\java\pack.mcmeta"
 
