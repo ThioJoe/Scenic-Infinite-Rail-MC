@@ -263,6 +263,7 @@ function advance(sim, S, surface, cfg) {
 
 function runRide(fnDirs, surface, columns) {
   const sim = new Sim(fnDirs);
+  sim.call('consts'); // .C100, the credit's percent divisor (both engines run it at load)
   sim.call('config');
   const cfg = readCfg(sim);
   sim.set('slope', 0);
@@ -327,8 +328,10 @@ function checkInvariants(name, ride, settles) {
   // brain compared against #SAMEGAP/#TURNGAP. `run` mirrors #evrun (the last
   // event's sloped-column count = its height), the big-event gap credit's
   // input: at an event start the brain shrinks the required gap by
-  // run / #GAPRATIO, provided the newly wanted move is itself at least
-  // run / #GAPMATCH blocks (consider_start's credit block). The mirror
+  // run * #GAPRATIO / 100 (the knobs are PERCENTS -- x100 fixed point, so
+  // the ratios can be fractional on an int-only scoreboard), provided the
+  // newly wanted move is itself at least run * #GAPMATCH / 100 blocks
+  // (consider_start's credit block). The mirror
   // recomputes that exact discounted requirement, and counts the starts that
   // actually USED the credit (flats below the undiscounted gap) so the
   // purpose-built terrains can assert the feature engaged at all.
@@ -370,18 +373,19 @@ function checkInvariants(name, ride, settles) {
       if (inEvent === 0) {
         // event start: check the deadband and the gap the brain just approved
         // -- the base #SAMEGAP/#TURNGAP minus the big-event gap credit
-        // (run / #GAPRATIO, guarded by the run / #GAPMATCH worth-it test,
-        // floored at 0 -- exactly consider_start's arithmetic).
+        // (run * #GAPRATIO / 100, guarded by the run * #GAPMATCH / 100
+        // worth-it test, floored at 0 -- exactly consider_start's
+        // arithmetic).
         const sameDir = dir === lastDir;
         const base = sameDir ? cfg.SAMEGAP : cfg.TURNGAP;
-        let cut = cfg.GAPRATIO >= 1 ? Math.floor(run / cfg.GAPRATIO) : 0;
+        let cut = cfg.GAPRATIO >= 1 ? Math.floor(run * cfg.GAPRATIO / 100) : 0;
         // The worth-it size of the wanted move: |diff|, except climbs also
         // consult the near scan (#gmax + #HOVER - railY) -- the average
         // dilutes an approaching rise to ~half, the contact reading is
         // honest (consider_start's .gup max; -10000 no-data loses the max).
         let mag = diff * dir;
         if (dir === 1) mag = Math.max(mag, gmax + cfg.HOVER - step.railYBefore);
-        if (cfg.GAPMATCH >= 1 && mag < Math.floor(run / cfg.GAPMATCH)) cut = 0;
+        if (cfg.GAPMATCH >= 1 && mag < Math.floor(run * cfg.GAPMATCH / 100)) cut = 0;
         const need = Math.max(0, base - cut);
         if (flats < need) fail(`${name}: event started after ${flats} flat columns (needed ${need} = ${base} - credit ${base - need}) at column ${i}`);
         if (flats < base) discounted[sameDir ? 'same' : 'turn'] += 1;

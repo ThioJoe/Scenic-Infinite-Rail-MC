@@ -51,21 +51,25 @@ execute unless score .want ir matches 0 unless score .want ir = .lastDir ir run 
 # between the chained climb events of one big ascent (.SAMEGAP). So the last
 # event's size (.evrun -- its column count, which at 45 degrees is its
 # height) buys the NEXT event a proportional discount: .need shrinks by
-# .evrun / .GAPRATIO (the adjuster; 0 turns the credit off). Guard: the move
-# being considered must itself be worth it -- at least .evrun / .GAPMATCH
-# blocks (0 = no size requirement) -- so a big climb never lets a small bob
-# through early, and an absurdly large credit (a sky-mode glide) demands an
-# equally large follow-up or none at all. Small events earn next to nothing;
-# the discounted gap is floored at 0; and a credit can never go stale in a
-# harmful way -- once enough columns pass, .flat exceeds the FULL gap anyway
-# and the discount changes nothing, so it only ever acts close behind the
-# event that earned it. The dialect note in decide applies: no negative
-# literals in matches ranges, so |.diff| is built by multiplying with .want
-# (nonzero in the guarded lines, and .diff always carries .want's sign).
+# .evrun * .GAPRATIO / 100 -- the knob is a PERCENT of the event's height,
+# the x100 fixed point being how an int-only scoreboard carries fractional
+# ratios (50 = half, 67 = two thirds; 0 turns the credit off). Guard: the
+# move being considered must itself be worth it -- at least
+# .evrun * .GAPMATCH / 100 blocks (also a percent; 0 = no size requirement)
+# -- so a big climb never lets a small bob through early, and an absurdly
+# large credit (a sky-mode glide) demands an equally large follow-up or
+# none at all. Small events earn next to nothing; the discounted gap is
+# floored at 0; and a credit can never go stale in a harmful way -- once
+# enough columns pass, .flat exceeds the FULL gap anyway and the discount
+# changes nothing, so it only ever acts close behind the event that earned
+# it. The dialect note in decide applies: no negative literals in matches
+# ranges, so |.diff| is built by multiplying with .want (nonzero in the
+# guarded lines, and .diff always carries .want's sign).
 scoreboard players add .evrun ir 0
 scoreboard players set .gapcut ir 0
 execute if score .GAPRATIO cfg_terrain matches 1.. run scoreboard players operation .gapcut ir = .evrun ir
-execute if score .GAPRATIO cfg_terrain matches 1.. run scoreboard players operation .gapcut ir /= .GAPRATIO cfg_terrain
+execute if score .GAPRATIO cfg_terrain matches 1.. run scoreboard players operation .gapcut ir *= .GAPRATIO cfg_terrain
+execute if score .GAPRATIO cfg_terrain matches 1.. run scoreboard players operation .gapcut ir /= .C100 ir
 scoreboard players operation .gmag ir = .diff ir
 scoreboard players operation .gmag ir *= .want ir
 # For CLIMBS the average is a poor size witness: it dilutes an approaching
@@ -82,7 +86,8 @@ scoreboard players operation .gup ir += .HOVER cfg_terrain
 scoreboard players operation .gup ir -= .railY ir
 execute if score .want ir matches 1 run scoreboard players operation .gmag ir > .gup ir
 scoreboard players operation .gth ir = .evrun ir
-execute if score .GAPMATCH cfg_terrain matches 1.. run scoreboard players operation .gth ir /= .GAPMATCH cfg_terrain
+execute if score .GAPMATCH cfg_terrain matches 1.. run scoreboard players operation .gth ir *= .GAPMATCH cfg_terrain
+execute if score .GAPMATCH cfg_terrain matches 1.. run scoreboard players operation .gth ir /= .C100 ir
 execute if score .GAPMATCH cfg_terrain matches 1.. if score .gmag ir < .gth ir run scoreboard players set .gapcut ir 0
 execute unless score .want ir matches 0 run scoreboard players operation .need ir -= .gapcut ir
 execute unless score .need ir matches 0.. run scoreboard players set .need ir 0

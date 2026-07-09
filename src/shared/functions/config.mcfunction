@@ -203,21 +203,24 @@ scoreboard players set .TURNGAP cfg_terrain 50
 # may descend; and one big ascent too tall for a single event gets its climbs
 # spread .SAMEGAP apart, tunneling in between. A big event was clearly a
 # major terrain feature, so it EARNS the next event an earlier start: the
-# required gap is reduced by (last event's height) / .GAPRATIO. With 2, a 40
-# block climb shortens the next gap by 20 columns; 1 = the full height is
-# credited; 0 = the credit is off and the gaps always apply in full. The
-# discounted gap never drops below 0, and small everyday events (a few
-# blocks) earn next to nothing, so typical terrain still gets the full gaps.
-scoreboard players set .GAPRATIO cfg_terrain 2
+# required gap is reduced by this PERCENT of the last event's height.
+# (Percent because scoreboards are int-only -- the x100 fixed point is what
+# lets the ratio be fractional.) With 50, a 40-block climb shortens the next
+# gap by 20 columns; 67 credits two thirds (a 1/1.5 ratio); 100 credits the
+# full height; above 100 works too (150 = one and a half times the height).
+# 0 = the credit is off and the gaps always apply in full. The discounted
+# gap never drops below 0, and small everyday events (a few blocks) earn
+# next to nothing, so typical terrain still gets the full gaps.
+scoreboard players set .GAPRATIO cfg_terrain 50
 
 # The credit's worth-it guard: the newly wanted climb/descent must itself be
-# at least (last event's height) / .GAPMATCH blocks tall, or the full gap
-# applies. With 2, only a follow-up at least HALF the size of the big event
-# may start early -- coming back down off the mountain qualifies, a 3-block
-# bob at the summit does not. 1 = the follow-up must be at least as large as
-# the event that earned the credit; 0 = no size requirement (any wanted
-# change may use the discount).
-scoreboard players set .GAPMATCH cfg_terrain 2
+# at least this PERCENT of the last event's height, or the full gap applies.
+# With 50, only a follow-up at least HALF the size of the big event may
+# start early -- coming back down off the mountain qualifies, a 3-block bob
+# at the summit does not. 67 demands two thirds, 100 demands a follow-up at
+# least as large as the event that earned the credit. 0 = no size
+# requirement (any wanted change may use the discount).
+scoreboard players set .GAPMATCH cfg_terrain 50
 
 
 # --- Track clearing / vegetation sparing ------------------------------------

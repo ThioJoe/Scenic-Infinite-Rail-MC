@@ -36,9 +36,10 @@ scoreboard players set .C12 ir 12
 # Internal constants for the camera math: fixed-point multipliers
 # (.CAMHEIGHT/.CAMLIFT are configured in tenths of a block; heights are
 # tracked in milliblocks) and small divisors for the scan geometry.
+# (.C100 moved to the shared consts.mcfunction, called just below -- the
+# shared consider_start needs it for the gap credit's percent math.)
 scoreboard players set .C2 ir 2
 scoreboard players set .C10 ir 10
-scoreboard players set .C100 ir 100
 scoreboard players set .C1000 ir 1000
 # Blocks per chunk -- the divisor for the ocean-biome chunk counter.
 scoreboard players set .C16 ir 16

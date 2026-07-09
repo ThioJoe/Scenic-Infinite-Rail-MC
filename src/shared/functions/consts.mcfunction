@@ -4,7 +4,7 @@
 # reason to tune them per world. They live in `ir` with the runtime state.
 # Called once per load, right beside config: from load.mcfunction on Java,
 # from the script's init() on Bedrock. (Java's fixed-point helpers .C2/.C10/
-# .C12/.C16/.C100/.C1000 stay in load.mcfunction -- they exist only because
+# .C12/.C16/.C1000 stay in load.mcfunction -- they exist only because
 # scoreboards are int-only, and Bedrock does that math in floats.)
 
 # How much one click of the "Speed -"/"Speed +" hotbar items changes the
@@ -19,3 +19,11 @@ scoreboard players set .SPEEDSTEP ir 4
 # getTimeOfDay() is already day-relative. The floor-modulo makes every
 # variant read alike (a no-op for values already inside a day).
 scoreboard players set .C24000 ir 24000
+
+# Fixed-point percent divisor (100). The shared consider_start needs it: the
+# big-event gap credit's .GAPRATIO/.GAPMATCH knobs are PERCENTS of the last
+# event's height (scoreboards are int-only, so fractional ratios ride on a
+# x100 fixed point -- 50 = half, 67 = two thirds). Java's camera math reuses
+# the same score as its tenths->milliblocks multiplier (it lived in
+# load.mcfunction before the credit made it cross-edition).
+scoreboard players set .C100 ir 100
