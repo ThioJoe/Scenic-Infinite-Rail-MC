@@ -98,4 +98,18 @@ export default defineSuite('ride speed state machine', ({ test }) => {
     const rule = await speedRule(mc);
     if (rule !== null) eq(rule, expected.get('.MAXSPEED'), 'gamerule back to the land speed');
   });
+
+  test('sky mode: Speed +/- and Reset tune the sky cruise (.skyspd), not the land speed', async ({ mc, expected }) => {
+    const land = await mc.score('.speed', 'ir');
+    const skyDefault = expected.get('.SKYSPEED');
+    await mc.setScore('.SKYMODE', 'ir', 1);
+    await mc.fn('speed_inc');
+    eq(await mc.score('.skyspd', 'ir'), skyDefault + 4, 'sky cruise steps up by one .SPEEDSTEP');
+    eq(await mc.score('.speed', 'ir'), land, 'the land speed is untouched while sky mode owns the ride');
+    eq(await mc.score('.spdflt', 'ir'), 0, 'no longer the sky default');
+    await mc.fn('speed_reset');
+    eq(await mc.score('.skyspd', 'ir'), skyDefault, 'Reset returns the sky cruise to the config .SKYSPEED');
+    eq(await mc.score('.spdflt', 'ir'), 1, '.spdflt answers the sky default');
+    await mc.setScore('.SKYMODE', 'ir', 0);
+  });
 });

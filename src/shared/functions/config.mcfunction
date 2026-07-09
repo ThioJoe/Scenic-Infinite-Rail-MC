@@ -346,11 +346,15 @@ scoreboard players set .MAXTICK cfg_ride 15
 # toward ~260 to clear even the tallest jagged peaks (build limit 320).
 scoreboard players set .SKYY cfg_ride 120
 
-# Sky mode: cruising speed (blocks/second) while the mode is on. There is
-# nothing nearby to look at up there, so it defaults to ocean pace. Applied
-# when the mode is toggled on (and at ride start if the mode was left on);
-# mode_sky_off restores .MAXSPEED. The ocean speed-up is paused while sky
-# mode owns the speed.
+# Sky mode: the DEFAULT cruising speed (blocks/second) while the mode is on.
+# There is nothing nearby to look at up there, so it defaults to ocean pace.
+# This is only the SEED for the adjustable sky cruise (the .skyspd state
+# score): sky mode jumps to this the first time, but the Speed -/+/Reset
+# hotbar items tune it live WHILE SKY MODE IS ON (the land speed is left
+# untouched, and a chosen sky speed persists across reloads/rejoins like every
+# mode; Reset returns it to this value). Applied when the mode is toggled on
+# (and at ride start if the mode was left on); mode_sky_off restores the land
+# speed. The ocean speed-up is paused while sky mode owns the speed.
 scoreboard players set .SKYSPEED cfg_ride 18
 
 # Torch mode: the DEFAULT percent chance (0-100) that each newly built

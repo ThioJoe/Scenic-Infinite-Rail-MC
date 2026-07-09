@@ -157,6 +157,18 @@ const tests = [
     if (!(await s.scoreInRange('.speed', 'ir', base))) throw new Error(`reset: .speed != ${base}`);
   }),
 
+  report('shared speed_step: sky mode tunes the sky cruise (.skyspd), land speed untouched', async (s) => {
+    const base = expected.find((e) => e.holder === '.MAXSPEED')?.value ?? 8;
+    const skyDefault = expected.find((e) => e.holder === '.SKYSPEED')?.value ?? 18;
+    await s.setScore('.SKYMODE', 'ir', 1);
+    await s.fn('speed_inc');
+    if (!(await s.scoreInRange('.skyspd', 'ir', skyDefault + 4))) throw new Error(`sky inc: .skyspd != ${skyDefault + 4}`);
+    if (!(await s.scoreInRange('.speed', 'ir', base))) throw new Error('land .speed changed while sky mode owned the ride');
+    await s.fn('speed_reset');
+    if (!(await s.scoreInRange('.skyspd', 'ir', skyDefault))) throw new Error(`sky reset: .skyspd != ${skyDefault}`);
+    await s.setScore('.SKYMODE', 'ir', 0);
+  }),
+
   report('mode toggles flip their scores on Bedrock', async (s) => {
     await s.fn('mode_torches_on');
     if (!(await s.scoreInRange('.TORCHMODE', 'ir', 1))) throw new Error('torches on != 1');

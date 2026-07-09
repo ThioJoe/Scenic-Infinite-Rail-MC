@@ -60,6 +60,23 @@
         }
       ]
     },
+    "game.player.hurt": {
+      "category": "player",
+      "sounds": [
+        {
+          "name": "sounds/damage/hit1",
+          "volume": 0.0
+        },
+        {
+          "name": "sounds/damage/hit2",
+          "volume": 0.0
+        },
+        {
+          "name": "sounds/damage/hit3",
+          "volume": 0.0
+        }
+      ]
+    },
     "ir.cart_roll": {
       "category": "neutral",
       "min_distance": 512.0,

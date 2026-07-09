@@ -62,6 +62,15 @@ execute if score .agginit ir matches 0 run scoreboard players set .agginit ir 1
 scoreboard players add .speed ir 0
 execute if score .speed ir matches ..0 run scoreboard players operation .speed ir = .MAXSPEED cfg_ride
 
+# The adjustable SKY cruise speed (.skyspd -- what the ride cruises at while
+# sky mode is on; the Speed +/- items and Reset tune it in sky mode via the
+# shared speed_step) follows the exact same pattern: seeded from the config
+# default .SKYSPEED only when never set, so a chosen sky speed survives
+# /reload, ride restarts and rejoins. Sky mode still "jumps to its default"
+# on the very first use (the seed) but is adjustable from there forever after.
+scoreboard players add .skyspd ir 0
+execute if score .skyspd ir matches ..0 run scoreboard players operation .skyspd ir = .SKYSPEED cfg_ride
+
 # Torch density (.torchdens -- the roll place_torch/maybeTorch actually
 # uses) follows the same pattern: seeded from the config default .TORCHODDS
 # only when never set, then owned by the Visual Settings menu's presets (the

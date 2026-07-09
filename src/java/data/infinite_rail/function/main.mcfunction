@@ -53,6 +53,17 @@ execute at @e[type=minecart,tag=ir_cart,limit=1] align xyz run fill ~ ~ ~ ~1 ~1 
 execute at @e[type=item_display,tag=ir_seat,limit=1] run kill @e[type=item,distance=..16]
 execute at @e[type=item_display,tag=ir_seat,limit=1] run kill @e[type=experience_orb,distance=..16]
 
+# Keeper: silence the player-hurt "oof". In aggro mode (the default) hostile
+# mobs still notice and "hit" the rider -- that ambience is the point -- but
+# every hit lands as 0 damage (Resistance 255 + the damage gamerules), and a
+# fully-absorbed hit STILL plays the hurt sound. A data pack can't cancel a
+# damage event and Java has no resource pack to mute a sound file, so stop the
+# hurt sound every tick: it is cut within a tick of starting (~50 ms). This is
+# deliberately NOT invisibility, which would blind mobs and kill the aggro
+# ambience -- the rider takes no real damage either way, only the sound is
+# suppressed.
+stopsound @a[tag=ir_rider] * minecraft:entity.player.hurt
+
 # Keeper: police the rider's inventory (give_menu): anything beyond the six
 # pinned hotbar items is wiped, and a missing/wrong pinned item is re-pinned
 # in place. (A blanket clear + re-give every tick used to re-fire the

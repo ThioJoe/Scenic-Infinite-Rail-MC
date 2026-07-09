@@ -154,11 +154,13 @@ const DBG = '§3[SR Debug]§r ';
 // clears everything else every tick) and matched by type + name in the
 // use handlers, so a random picked-up item could never trigger them.
 // Mirrors Java's give_menu slot for slot -- settings menus far left, Debug
-// far right, the speed pair in between with empty slots as separators:
+// far right, the speed trio (-, Reset, +) in between with empty slots as
+// separators (Reset dead center at slot 4):
 //   0  "Ride Settings"    opens the native ride form (speed, sky, sound, hide cart, mobs aggro)
 //   1  "Visual Settings"  opens the native visual form (rain, time, torches)
-//   3  "Speed -"   .SPEEDSTEP blocks/s slower  (runs infinite_rail/speed_dec)
-//   4  "Speed +"   .SPEEDSTEP blocks/s faster  (runs infinite_rail/speed_inc)
+//   3  "Speed -"      .SPEEDSTEP blocks/s slower    (runs infinite_rail/speed_dec)
+//   4  "Speed Reset"  back to the default ride speed (runs infinite_rail/speed_reset) -- dead center of the bar
+//   5  "Speed +"      .SPEEDSTEP blocks/s faster    (runs infinite_rail/speed_inc)
 //   7  "Tips"      opens the recommended-settings page
 //   8  "Debug"     opens the native debug form (chat output, sidebar views)
 // Most of these items are placeable blocks/carts chosen for their icons
@@ -181,11 +183,13 @@ const TIPS_NAME = '§eTips';
 const DEBUG_NAME = '§3Debug';
 const SPEED_UP_NAME = '§aSpeed +';
 const SPEED_DOWN_NAME = '§cSpeed -';
+const SPEED_RESET_NAME = '§eSpeed Reset';
 const PINNED = [
   { slot: 0, type: 'minecraft:chest_minecart', name: RIDE_NAME, lore: ['§7Use to open the', '§7ride settings menu'] },
   { slot: 1, type: 'minecraft:soul_campfire', name: VISUAL_NAME, lore: ['§7Use to open the', '§7visual settings menu'] },
   { slot: 3, type: 'minecraft:rail', name: SPEED_DOWN_NAME, lore: ['§7Ride speed down'] },
-  { slot: 4, type: 'minecraft:golden_rail', name: SPEED_UP_NAME, lore: ['§7Ride speed up'] },
+  { slot: 4, type: 'minecraft:minecart', name: SPEED_RESET_NAME, lore: ['§7Reset the ride speed', '§7to the default'] },
+  { slot: 5, type: 'minecraft:golden_rail', name: SPEED_UP_NAME, lore: ['§7Ride speed up'] },
   { slot: 7, type: 'minecraft:book', name: TIPS_NAME, lore: ['§7Recommended settings', '§7for the best ride'] },
   { slot: 8, type: 'minecraft:smithing_table', name: DEBUG_NAME, lore: ['§7Use to open the', '§7debug menu'] },
 ];
@@ -494,6 +498,23 @@ function landSpeed() {
   return v >= 1 ? v : cfg('MAXSPEED');
 }
 
+// The ride's SKY cruising speed: the .skyspd state score (adjusted by the
+// Speed +/- items and the Ride Settings form's slider WHILE SKY MODE IS ON;
+// seeded from config .SKYSPEED by the shared modes_init, tuned through the
+// shared speed_step). Falls back to the config default where the score is
+// unreadable (cmd-bridge worlds), like landSpeed().
+function skySpeed() {
+  const v = getScore('skyspd', 0);
+  return v >= 1 ? v : cfg('SKYSPEED');
+}
+
+// The speed the ride cruises at right now: the sky cruise while sky mode owns
+// the ride, else the land speed. The single reader the pace + the form use so
+// they can't disagree about which speed is live.
+function activeSpeed() {
+  return modeOn('SKYMODE') ? skySpeed() : landSpeed();
+}
+
 // Torch-mode density: the .torchdens state score (the Visual Settings form's
 // Low/Medium/High/Max presets -- the torch_density_* function files; seeded
 // from config .TORCHODDS by the shared modes_init), read the same way as
@@ -534,9 +555,11 @@ function showRideMenu(player) {
     sound: modeOn('SOUNDMODE'),
     hidecart: modeOn('HIDECART'),
     aggro: modeOn('AGGROMODE'),
-    // Clamped to the slider's 1..64 range -- a hand-set out-of-range .speed
-    // must not make the form throw on its default value.
-    speed: Math.min(64, Math.max(1, landSpeed())),
+    // The slider tunes whichever cruise speed is live -- the sky cruise while
+    // sky mode is on, else the land speed. Clamped to the slider's 1..64 range
+    // (a hand-set / Speed+-boosted out-of-range value must not throw on the
+    // form's default).
+    speed: Math.min(64, Math.max(1, activeSpeed())),
   };
   const form = new ModalFormData()
     .title('Scenic Rail Ride Settings')
@@ -546,7 +569,9 @@ function showRideMenu(player) {
     // Off = rider invisible: the one lever over Bedrock mob detection also
     // hides the first-person arm, so the label names both consequences.
     .toggle('Mobs aggro (mobs react to you)', { defaultValue: current.aggro })
-    .slider(`Ride speed, blocks/s (default ${cfg('MAXSPEED')})`, 1, 64, { defaultValue: current.speed, valueStep: 1 })
+    .slider(current.sky
+      ? `Sky cruise speed, blocks/s (default ${cfg('SKYSPEED')})`
+      : `Ride speed, blocks/s (default ${cfg('MAXSPEED')})`, 1, 64, { defaultValue: current.speed, valueStep: 1 })
     .submitButton('Apply');
   form.show(player).then((r) => {
     if (r.canceled || !r.formValues) return;
@@ -590,7 +615,11 @@ function showRideMenu(player) {
     // "set 8 while cruising at 76" land at 20 instead of 8. (One blind
     // spot remains by construction: at over-64 speeds, sliding exactly to
     // 64 reads as untouched -- pick 63, or use the Speed - item.)
-    if (speedWant !== current.speed) adjustSpeed(speedWant - landSpeed());
+    // Delta against the REAL live cruise (sky or land) after any sky toggle
+    // above -- so an untouched slider never fires, and a move applies to
+    // whichever speed is now active (the shared speed_step writes .skyspd in
+    // sky mode, .speed otherwise).
+    if (speedWant !== current.speed) adjustSpeed(speedWant - activeSpeed());
   }).catch((e) => reportError('ride settings menu', e));
 }
 
@@ -1420,13 +1449,15 @@ function oceanCheck() {
 // max-speed gamerule achieved on Java, in four lines.
 let skyWas = false; // last tick's .SKYMODE, to catch the toggle-off transition
 function tickPace() {
-  // Sky mode (mode_sky_on) owns the speed outright: .SKYSPEED is asserted
-  // every tick while it is on (so it is live-tweakable, like .MAXSPEED), and
-  // the moment it turns off the ocean system gets the speed back with fresh
-  // counters -- Java's mode_sky_off does the same reset explicitly.
+  // Sky mode (mode_sky_on) owns the speed outright: the sky cruise (.skyspd,
+  // the adjustable sky speed -- default .SKYSPEED, tuned by the Speed +/-
+  // items and the Ride Settings slider while sky mode is on) is asserted every
+  // tick, so it is live-tweakable; the moment sky mode turns off the ocean
+  // system gets the speed back with fresh counters -- Java's mode_sky_off does
+  // the same reset explicitly.
   const sky = modeOn('SKYMODE');
   if (sky) {
-    S.targetSpeed = cfg('SKYSPEED') / 20;
+    S.targetSpeed = skySpeed() / 20;
   } else if (skyWas) {
     S.fast = false;
     S.oceanRun = 0;
@@ -2025,8 +2056,8 @@ function stop(silent) {
   if (rider) {
     try { rider.camera.clear(); } catch { /* not set */ }
     try { rider.runCommand('effect @s clear'); } catch { /* none */ }
-    // Take the pinned hotbar items (the menu items, Tips, Speed +/-) back
-    // -- the ride is over.
+    // Take the pinned hotbar items (the menu items, Tips, Speed -/Reset/+)
+    // back -- the ride is over.
     try {
       const inv = rider.getComponent('minecraft:inventory')?.container;
       for (const def of PINNED) {
@@ -2294,6 +2325,7 @@ function handlePinnedUse(player, item) {
   else if (def.name === DEBUG_NAME) showDebugMenu(player);
   else if (def.name === SPEED_UP_NAME) runCmd(`function ${NS}/speed_inc`);
   else if (def.name === SPEED_DOWN_NAME) runCmd(`function ${NS}/speed_dec`);
+  else if (def.name === SPEED_RESET_NAME) runCmd(`function ${NS}/speed_reset`);
 }
 world.afterEvents.itemUse.subscribe((ev) => {
   try {
