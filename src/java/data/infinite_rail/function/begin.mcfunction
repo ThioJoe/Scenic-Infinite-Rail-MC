@@ -85,6 +85,16 @@ data modify storage infinite_rail:track y append value 0
 execute store result storage infinite_rail:track y[-1] int 1 run scoreboard players get .railY ir
 
 # --- First column and the hidden pace cart (plugged so nothing can enter) ---
+# The anchor IS the starting player's position, so the first column is about
+# to be built exactly where they stand -- and with the default .HOVER (2) the
+# SOLID support block lands at their head height: a few ticks of suffocation
+# damage (and the player-hurt sound) before launch_done can mount them. Lift
+# the player onto the line first -- standing in the rail's own cell, the
+# support solidifies under their feet instead of inside their skull, and the
+# carve keeps the bore above them clear. launch_done summons the rig at the
+# rider and seats them a few ticks later; the pace cart summoned below simply
+# rolls out from underneath them in the meantime.
+execute at @e[type=marker,tag=ir_head,limit=1] run tp @s ~ ~ ~
 execute at @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:place_flat
 execute at @e[type=marker,tag=ir_head,limit=1] run summon minecraft:minecart ~ ~0.1 ~ {Tags:["ir_cart"],Invulnerable:1b,Motion:[0.4,0.0,0.0]}
 execute at @e[type=marker,tag=ir_head,limit=1] run summon minecraft:item_display ~ ~1 ~ {Tags:["ir_plug"]}

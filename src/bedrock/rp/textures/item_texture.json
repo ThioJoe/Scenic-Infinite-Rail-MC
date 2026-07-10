@@ -1,0 +1,15 @@
+{
+  "resource_pack_name": "infinite_rail",
+  "texture_name": "atlas.items",
+  "texture_data": {
+    "ir_speed_down": {
+      "textures": "textures/items/rail_normal"
+    },
+    "ir_speed_reset": {
+      "textures": "textures/items/minecart_normal"
+    },
+    "ir_speed_up": {
+      "textures": "textures/items/rail_golden"
+    }
+  }
+}

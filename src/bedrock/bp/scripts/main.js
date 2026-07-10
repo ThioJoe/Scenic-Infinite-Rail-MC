@@ -163,14 +163,17 @@ const DBG = '§3[SR Debug]§r ';
 //   5  "Speed +"      .SPEEDSTEP blocks/s faster    (runs infinite_rail/speed_inc)
 //   7  "Tips"      opens the recommended-settings page
 //   8  "Debug"     opens the native debug form (chat output, sidebar views)
-// Most of these items are placeable blocks/carts chosen for their icons
-// (rails, the smithing table, the soul campfire, the chest minecart), so a
-// use can arrive through TWO events: itemUse (aiming at air) and
+// The MENU items are placeable vanilla blocks/carts chosen for their icons
+// (the smithing table, the soul campfire, the chest minecart), so a use can
+// arrive through TWO events: itemUse (aiming at air) and
 // playerInteractWithBlock (aiming at a block -- which must also be
-// CANCELLED before the survival rider builds the icon into the world).
-// Both paths funnel through handlePinnedUse with a shared debounce. Java's twins are clickable written
-// books + re-modeled carrot_on_a_sticks (give_menu.mcfunction) since Java
-// has no native forms.
+// CANCELLED before the survival rider builds the icon into the world). The
+// SPEED trio are the pack's own non-placeable items (see the PINNED note
+// below) so nothing can ever be built OR client-predicted, but their block-
+// aimed clicks still arrive through the same interact event. Both paths
+// funnel through handlePinnedUse with a debounce. Java's twins are clickable
+// written books + re-modeled carrot_on_a_sticks (give_menu.mcfunction) since
+// Java has no native forms.
 //
 // Deliberately NOT slot-locked (ItemLockMode.slot): Bedrock decorates
 // locked items with a lock badge and a "Can't be moved / dropped /
@@ -184,18 +187,48 @@ const DEBUG_NAME = '§3Debug';
 const SPEED_UP_NAME = '§aSpeed +';
 const SPEED_DOWN_NAME = '§cSpeed -';
 const SPEED_RESET_NAME = '§eSpeed Reset';
+// The SPEED trio are the pack's OWN items (bp/items/speed_*.json), pure
+// non-placeable icons whose sprites the RP maps onto the vanilla rail /
+// minecart / powered-rail item textures (textures/item_texture.json, the
+// no-texture-shipped trick). They used to be the real vanilla items, which
+// are PLACEABLE -- so every click aimed at a block within reach (the track
+// is right under the crosshair) had the client PREDICT the placement
+// (minecart onto the powered rail below was the worst: the hotbar stack
+// visibly emptied) before the cancelled interact event rolled it back with
+// a full hotbar resync -- and a resync racing the mouse wheel EATS scroll
+// input, which is exactly the "scrolling around the middle Speed item needs
+// two notches" bug. A custom item with no block gives the client nothing to
+// predict: no rollback, no resync, no eaten scrolls. `fallback` is the old
+// vanilla item, used only if this engine somehow can't resolve the custom
+// id (mismatched/outdated pack pair) -- and still matched by the use
+// handlers so a stale save's old items keep working until the keeper
+// swaps them.
 const PINNED = [
   { slot: 0, type: 'minecraft:chest_minecart', name: RIDE_NAME, lore: ['§7Use to open the', '§7ride settings menu'] },
   { slot: 1, type: 'minecraft:soul_campfire', name: VISUAL_NAME, lore: ['§7Use to open the', '§7visual settings menu'] },
-  { slot: 3, type: 'minecraft:rail', name: SPEED_DOWN_NAME, lore: ['§7Ride speed down'] },
-  { slot: 4, type: 'minecraft:minecart', name: SPEED_RESET_NAME, lore: ['§7Reset the ride speed', '§7to the default'] },
-  { slot: 5, type: 'minecraft:golden_rail', name: SPEED_UP_NAME, lore: ['§7Ride speed up'] },
+  { slot: 3, type: 'infinite_rail:speed_down', fallback: 'minecraft:rail', name: SPEED_DOWN_NAME, lore: ['§7Ride speed down'] },
+  { slot: 4, type: 'infinite_rail:speed_reset', fallback: 'minecraft:minecart', name: SPEED_RESET_NAME, lore: ['§7Reset the ride speed', '§7to the default'] },
+  { slot: 5, type: 'infinite_rail:speed_up', fallback: 'minecraft:golden_rail', name: SPEED_UP_NAME, lore: ['§7Ride speed up'] },
   { slot: 7, type: 'minecraft:book', name: TIPS_NAME, lore: ['§7Recommended settings', '§7for the best ride'] },
   { slot: 8, type: 'minecraft:smithing_table', name: DEBUG_NAME, lore: ['§7Use to open the', '§7debug menu'] },
 ];
 
+// Which id a def actually pins: the custom item normally, the vanilla
+// fallback if the custom ids don't resolve on this engine (probed once per
+// session -- the answer can't change mid-run, and probing per tick would
+// throw in the keeper's hot loop). The keeper compares against the SAME
+// answer, so a fallback world never enters a replace-every-tick war.
+let customItemsOk = null;
+function pinnedItemType(def) {
+  if (!def.fallback) return def.type;
+  if (customItemsOk === null) {
+    try { void new ItemStack(def.type, 1); customItemsOk = true; } catch { customItemsOk = false; }
+  }
+  return customItemsOk ? def.type : def.fallback;
+}
+
 function makePinnedItem(def) {
-  const item = new ItemStack(def.type, 1);
+  const item = new ItemStack(pinnedItemType(def), 1);
   item.nameTag = def.name;
   item.setLore(def.lore);
   return item;
@@ -205,6 +238,15 @@ function makePinnedItem(def) {
 // blocks/second per tick. Java gets its acceleration for free from powered-rail
 // physics; this reproduces a similar gentle ramp (8 -> 32 blocks/s in ~3 s).
 const ACCEL = 0.4;
+// The brisk ramp used when the TARGET ITSELF was changed by the user (a
+// Speed -/Reset/+ click or the settings slider) rather than by a context
+// switch (ocean sprint in/out, sky mode on/off). Java applies a click
+// straight to the minecart max-speed gamerule -- deceleration there is
+// near-instant -- so the virtual pace matches: a 32 -> 8 reset lands in
+// ~0.5 s instead of the 3 s context ramp. Context switches keep the gentle
+// ACCEL above: those model Java's own rail-physics accelerations, and
+// gradual is the point there.
+const ACCEL_CLICK = 2.5;
 
 // The ride cart rests this far above the smoothed rail line, like a real cart
 // on a rail (Java uses the same 62 milliblocks in cam_move).
@@ -1569,6 +1611,14 @@ function oceanCheck() {
 // what the hidden physical pace cart + always-powered rails + stall keeper +
 // max-speed gamerule achieved on Java, in four lines.
 let skyWas = false; // last tick's .SKYMODE, to catch the toggle-off transition
+// The user-click detector's memory: last tick's target speed and speed
+// context. A target that moved while the context did NOT means a Speed
+// -/Reset/+ click (or the slider) changed the active cruise -- ease to it at
+// the brisk ACCEL_CLICK until it is reached, then drop back to the gentle
+// context ramp. (Module state: a /reload just re-learns it in one tick.)
+let paceTargetWas = -1;
+let paceCtxWas = '';
+let paceClickEase = false;
 function tickPace() {
   // Sky mode (mode_sky_on) owns the speed outright: the sky cruise (.skyspd,
   // the adjustable sky speed -- default .SKYSPEED, tuned by the Speed +/-
@@ -1591,7 +1641,16 @@ function tickPace() {
     S.targetSpeed = landSpeed() / 20; // the land speed stays live-adjustable
   }
   skyWas = sky;
-  const accel = ACCEL / 20;
+  // A moved target under an UNCHANGED context = the user tuned the active
+  // cruise; take the brisk ramp until it is reached. A context switch always
+  // clears the flag -- those transitions keep the gentle rail-physics ramp.
+  const ctx = sky ? 'sky' : S.fast ? 'ocean' : 'land';
+  const tgt = Math.round(S.targetSpeed * 20);
+  if (ctx !== paceCtxWas) paceClickEase = false;
+  else if (paceTargetWas >= 0 && tgt !== paceTargetWas) paceClickEase = true;
+  paceCtxWas = ctx;
+  paceTargetWas = tgt;
+  const accel = (paceClickEase ? ACCEL_CLICK : ACCEL) / 20;
   // Never let the ride outrun the built track (e.g. while world generation is
   // catching up). This is a SOFT ceiling: the allowed speed shrinks smoothly
   // with the remaining track buffer, so a starved builder reads as the ride
@@ -1601,6 +1660,7 @@ function tickPace() {
   const allowed = Math.max(0, Math.min(S.targetSpeed, headroom / 40));
   if (S.paceSpeed < allowed) S.paceSpeed = Math.min(allowed, S.paceSpeed + accel);
   else if (S.paceSpeed > allowed) S.paceSpeed = Math.max(allowed, S.paceSpeed - accel * 2);
+  else if (S.paceSpeed === S.targetSpeed) paceClickEase = false; // arrived: back to the gentle ramp
   S.paceX += S.paceSpeed;
 }
 
@@ -1746,6 +1806,19 @@ function sweepDrops(seat) {
 // two editions now share the same cadence.)
 const SOUND_LOOP_TICKS = 115; // the sample's length, 5.77 s, in ticks
 const SOUND_REANCHOR = 256;
+// A play emitted at a just-(re)joining client is dropped outright (the
+// loading screen swallows it) -- and the clock then believes a copy is
+// playing for the next 5.75 s, which is the "the cart sound only starts
+// seconds after loading in" bug. There is no client-is-ready signal to wait
+// on, so for a short window after any player join the loop re-anchors on a
+// fast cadence instead: the first play the client actually receives lands
+// within a second of its loading screen dropping, and once the window
+// closes the cadence returns to the sample length. (The warm re-triggers a
+// client already hears are stopsound-then-play restarts of a uniform
+// rolling loop -- a far smaller evil than seconds of silence.)
+const SOUND_JOIN_WARM = 200;  // ticks after a join on the fast cadence
+const SOUND_WARM_TICKS = 20;  // the fast cadence itself
+let lastJoinAt = -1e9;        // tickN of the latest initial player spawn
 let soundOn = false;      // a copy is (believed) playing
 let soundAnchorX = 0;     // world X where it was emitted
 let soundStartedAt = -1e9; // tickN of the last (re)trigger
@@ -1759,8 +1832,9 @@ function tickSound() {
   if (!rider) return;
   let x;
   try { x = rider.location.x; } catch { return; }
+  const period = tickN - lastJoinAt < SOUND_JOIN_WARM ? SOUND_WARM_TICKS : SOUND_LOOP_TICKS;
   if (soundOn
-    && tickN - soundStartedAt < SOUND_LOOP_TICKS
+    && tickN - soundStartedAt < period
     && Math.abs(x - soundAnchorX) < SOUND_REANCHOR) return;
   runCmd('stopsound @a ir.cart_roll'); // the one-instance invariant
   try {
@@ -1979,7 +2053,10 @@ function keepers(seat) {
         const cur = inv.getItem(i);
         if (!want) {
           if (cur) inv.setItem(i, undefined);
-        } else if (!cur || cur.typeId !== want.type || cur.nameTag !== want.name) {
+        } else if (!cur || cur.typeId !== pinnedItemType(want) || cur.nameTag !== want.name) {
+          // (This is also the one-time upgrade path: a save from the
+          // vanilla-item era has its old speed items swapped for the custom
+          // ones on the first kept tick.)
           try { inv.setItem(i, makePinnedItem(want)); } catch { /* unknown item id on this version: leave the slot empty */ }
         }
       }
@@ -2189,7 +2266,7 @@ function stop(silent) {
       const inv = rider.getComponent('minecraft:inventory')?.container;
       for (const def of PINNED) {
         const cur = inv?.getItem(def.slot);
-        if (cur && cur.typeId === def.type && cur.nameTag === def.name) {
+        if (cur && (cur.typeId === def.type || cur.typeId === def.fallback) && cur.nameTag === def.name) {
           inv.setItem(def.slot, undefined);
         }
       }
@@ -2408,6 +2485,17 @@ function ensureInit() {
 
 world.afterEvents.worldLoad.subscribe(ensureInit);
 
+// The riding-sound warm window's trigger (see tickSound): remember when a
+// player joins, because plays emitted while their client is still on the
+// loading screen are dropped. Guarded subscribe, same reasoning as
+// playerInteractWithBlock below -- losing this signal must only cost the
+// warm-up, never the whole script.
+try {
+  world.afterEvents.playerSpawn.subscribe((ev) => {
+    if (ev.initialSpawn) lastJoinAt = tickN;
+  });
+} catch { /* signal unavailable: the warm window simply never arms */ }
+
 system.afterEvents.scriptEventReceive.subscribe((ev) => {
   try {
     if (!ensureInit()) { say('§cThe pack is not initialized yet -- see any error above.'); return; }
@@ -2442,9 +2530,18 @@ let lastPinnedUseAt = -1e9;
 function handlePinnedUse(player, item) {
   if (!inited || !S.started) return;
   if (!item || player?.typeId !== 'minecraft:player' || player.name !== S.riderName) return;
-  const def = PINNED.find((d) => d.type === item.typeId && d.name === item.nameTag);
+  const def = PINNED.find((d) => (d.type === item.typeId || d.fallback === item.typeId) && d.name === item.nameTag);
   if (!def) return;
-  if (tickN - lastPinnedUseAt < 4) return;
+  // One physical click can arrive TWICE -- itemUse fires on the click's tick
+  // and the cancelled interact path re-delivers via system.run a tick later
+  // -- so 2 ticks is the smallest window that still folds the pair into one
+  // action. For the SPEED items that tiny window is the WHOLE debounce:
+  // distinct clicks (and a held button's refires) land as fast as the client
+  // sends them, matching Java's stat-counted items (click or hold at any
+  // rate, every one counts). Only the menu items keep the longer window, so
+  // a double-delivered click can't pop a form open twice.
+  const isSpeedItem = def.name === SPEED_UP_NAME || def.name === SPEED_DOWN_NAME || def.name === SPEED_RESET_NAME;
+  if (tickN - lastPinnedUseAt < (isSpeedItem ? 2 : 4)) return;
   lastPinnedUseAt = tickN;
   if (def.name === RIDE_NAME) showRideMenu(player);
   else if (def.name === VISUAL_NAME) showVisualMenu(player);
@@ -2475,12 +2572,17 @@ try {
       const item = ev.itemStack; // optional: empty-hand interactions carry none
       const player = ev.player;
       if (!item || player?.name !== S.riderName) return;
-      if (!PINNED.some((d) => d.type === item.typeId && d.name === item.nameTag)) return;
-      // Never place the pinned item's block/cart; run the real action outside
-      // the before-event's read-only window (forms can't open inside it).
+      if (!PINNED.some((d) => (d.type === item.typeId || d.fallback === item.typeId) && d.name === item.nameTag)) return;
+      // Never place a menu item's block/cart (or a stale save's old vanilla
+      // speed item), and never let a pinned-item click interact with a
+      // passing lever/door/chest; run the real action outside the
+      // before-event's read-only window (forms can't open inside it).
       // Every event in the gesture's chain is cancelled (not just
       // isFirstEvent); the debounce in handlePinnedUse keeps the action
-      // single-fire.
+      // single-fire. The custom speed items have no block to place, so for
+      // them this cancel costs no client-side rollback (nothing was
+      // predicted) -- which is what keeps hotbar scrolling clean around
+      // the speed trio.
       ev.cancel = true;
       system.run(() => {
         try { handlePinnedUse(player, item); } catch (e) { reportError('hotbar menu', e); }

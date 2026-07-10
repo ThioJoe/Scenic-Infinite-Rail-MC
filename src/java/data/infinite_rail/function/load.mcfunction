@@ -94,6 +94,16 @@ data modify storage infinite_rail:rule rule set from storage infinite_rail:names
 data modify storage infinite_rail:rule v set value "false"
 function infinite_rail:set_rule with storage infinite_rail:rule
 
+# Prime the riding-sound clock at its firing threshold: a world rejoin
+# resumes .sndt wherever it was mid-count (scores persist in the save), and
+# waiting out the remainder left the ride silent for up to 5.75 s after
+# loading in. Primed here, sound_loop fires on the very first ride tick --
+# and it only zeroes the clock once the playsound actually reaches the
+# rider, so a still-joining player can't swallow the cycle either. (On a
+# mid-ride /reload this restarts the sample once -- stopsound-then-play, a
+# single clean seam.)
+scoreboard players set .sndt ir 115
+
 # Self-test the day/night check (time_now.mcfunction reads the
 # #infinite_rail:night predicate -- §6.7). The `execute if predicate`
 # probes live in the QUARANTINED check_clock.mcfunction, NOT here: 26.2

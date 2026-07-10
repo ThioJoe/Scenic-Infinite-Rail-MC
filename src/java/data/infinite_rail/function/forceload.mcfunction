@@ -9,5 +9,17 @@
 # never forced is a no-op), so lowering .TORCHRANGE mid-ride can never
 # strand wide chunks loaded behind the ride. Runs positioned at the head
 # marker (position is inherited from the caller).
-$forceload add ~ ~-$(w) ~$(gen) ~$(w)
+#
+# ORDER + `return run` MATTER: forceload_here store-successes this whole
+# function into .flok, the chunk pipeline's health signal (roll_chunks warns
+# once when it reads 0). On modern versions a function WITHOUT an explicit
+# /return stores success 0 no matter what its commands did -- so the signal
+# read "failing" on every ride even while forceloading demonstrably worked,
+# and every ride start opened with a bogus one-shot warning. The remove runs
+# first (its failure is routine: for the first ~336 blocks of a ride there
+# is nothing behind to release), and the function RETURNS the add's own
+# result -- the one command whose success actually means "the corridor
+# ahead is loading". The add gains at least one brand-new chunk column per
+# 16-block roll, so a healthy pipeline always answers 1.
 forceload remove ~-336 ~-64 ~-256 ~64
+$return run forceload add ~ ~-$(w) ~$(gen) ~$(w)

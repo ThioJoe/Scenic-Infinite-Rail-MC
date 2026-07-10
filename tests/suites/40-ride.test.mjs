@@ -131,9 +131,13 @@ export default defineSuite('ride bootstrap & build pipeline', ({ test }) => {
     between(gap, 1, ahead + maxTick, `.gap (${gap}) must stay within .AHEAD (${ahead})`);
   });
 
-  test('chunk pipeline healthy: head never went missing', async ({ mc, note }) => {
+  test('chunk pipeline healthy: head never went missing', async ({ mc }) => {
     eq(await mc.score('.hdmiss', 'ir'), 0, 'head marker stayed selectable (no incoherent pauses)');
-    note(`.flok=${await mc.score('.flok', 'ir')} .flwarn=${await mc.score('.flwarn', 'ir')} (informational: forceload store-success semantics vary by version)`);
+    // The forceload macro ends with `return run` on its add, so the health
+    // signal is meaningful on modern store-success semantics: a ride that
+    // rolled chunks must have read success (and never armed the warning).
+    eq(await mc.score('.flok', 'ir'), 1, 'forceload health signal reads success (.flok)');
+    eq(await mc.score('.flwarn', 'ir'), 0, 'the broken-forceload warning never armed (.flwarn)');
   });
 
   test('no unexpected server errors during the ride', async ({ mc, server }) => {

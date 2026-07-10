@@ -228,13 +228,14 @@ slash path), `setScore`, `scoreInRange`, `scriptErrorsSince(mark)`.
   verify candidate names against the server's own registry:
   `java -DbundlerMainClass=net.minecraft.data.Main -jar server.jar --reports --output /tmp/reports`
   → `gamerule` children in `/tmp/reports/reports/commands.json`.
-- **Informational, not failures**: `.flok=0` / `.flwarn=1` after rides on modern
-  servers — `execute store success … run function` semantics changed (functions without
-  `return` store 0), so the pack's forceload health signal reads as "failed" even while
-  forceloading demonstrably works. The ride suite `note()`s these values. Also,
-  `datapack list` shows `minecart_improvements (feature)` as *available* rather than
-  enabled on 26.2, yet `max_minecart_speed` exists and works — the version-compat suite
-  checks the gamerule itself, which is what matters.
+- **`.flok`/`.flwarn` are asserted now**: the forceload macro ends with `return run` on
+  its add, so `execute store success … run function` reads the add's real result on
+  modern semantics (functions without `return` store 0 — which used to make the health
+  signal read "failed" on every ride and fire a bogus warning at start). The ride suite
+  asserts `.flok=1` / `.flwarn=0` after a ride. Also, `datapack list` shows
+  `minecart_improvements (feature)` as *available* rather than enabled on 26.2, yet
+  `max_minecart_speed` exists and works — the version-compat suite checks the gamerule
+  itself, which is what matters.
 
 ## Runtime budget
 

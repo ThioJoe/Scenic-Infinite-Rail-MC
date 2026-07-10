@@ -20,12 +20,14 @@ src/
                         (manifest.json, functions/ -- including the ir_* call
                         bridges at its root -- scripts/ -- including the
                         carve's vegetation list, vegetation.js -- entities/,
-                        blocks/)
+                        blocks/, items/ -- the non-placeable Speed -/Reset/+
+                        hotbar items)
   bedrock/rp/           the Bedrock resource pack: the invisible client
                         definitions of the camera-seat and chunk-scout
                         entities, plus the texture/sound/name wiring for the
-                        custom track-support block (which reuses a vanilla
-                        texture -- no image files are shipped)
+                        custom track-support block and the Speed items'
+                        icons (all reuse vanilla textures -- no image files
+                        are shipped)
 tools/
   build.mjs             assembles + validates + zips both packs (zero deps)
   simulate.mjs          interprets the emitted shared functions and asserts

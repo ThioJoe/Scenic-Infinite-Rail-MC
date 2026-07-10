@@ -31,6 +31,13 @@
 # It is unattached (unlike the engine's in-cart loop, which the smoothed,
 # velocity-zeroed rig can never trigger), so the ride cart stays silent and
 # this stands in for it.
-scoreboard players set .sndt ir 0
+# The clock only resets when the playsound actually REACHED a rider: while
+# the rider is still joining (world load resumes a ride before their player
+# entity exists) the selector matches nobody, and unconditionally zeroing
+# .sndt here used to swallow the whole cycle -- the ride stayed mute for up
+# to 5.75 s after loading in. With the store-success guard, main's clock
+# stays at the threshold and this file simply retries every tick until the
+# rider is targetable, so the sound starts the moment they are.
 stopsound @a[tag=ir_rider] neutral minecraft:entity.minecart.inside
-execute as @a[tag=ir_rider] at @s run playsound minecraft:entity.minecart.inside neutral @s ~ ~ ~ 100 1
+execute store success score .sndok ir as @a[tag=ir_rider] at @s run playsound minecraft:entity.minecart.inside neutral @s ~ ~ ~ 100 1
+execute if score .sndok ir matches 1 run scoreboard players set .sndt ir 0
