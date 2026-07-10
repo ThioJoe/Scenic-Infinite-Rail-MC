@@ -11,7 +11,7 @@ export default defineSuite('lifecycle: reload / stop / restart', ({ test }) => {
     // Player-chosen state (must survive a reload)...
     await mc.fn('speed_inc');
     await mc.fn('speed_inc');
-    eq(await mc.score('.speed', 'ir'), expected.get('.MAXSPEED') + 8, 'speed adjusted');
+    eq(await mc.score('.speed', 'ir'), expected.get('.DEFAULTSPEED') + 8, 'speed adjusted');
     await mc.fn('torch_density_high');
     // ...vs a live config tweak (must be reset by the reload).
     await mc.setScore('.HOVER', 'cfg_terrain', 99);
@@ -20,11 +20,11 @@ export default defineSuite('lifecycle: reload / stop / restart', ({ test }) => {
     await new Promise((r) => setTimeout(r, 2000));
 
     eq(await mc.score('.started', 'ir'), 1, 'ride still running after /reload');
-    eq(await mc.score('.speed', 'ir'), expected.get('.MAXSPEED') + 8, 'chosen speed survived the reload');
+    eq(await mc.score('.speed', 'ir'), expected.get('.DEFAULTSPEED') + 8, 'chosen speed survived the reload');
     eq(await mc.score('.torchdens', 'ir'), 70, 'chosen torch density survived the reload');
     eq(await mc.score('.TORCHMODE', 'ir'), 2, 'torch tri-state untouched');
     eq(await mc.score('.HOVER', 'cfg_terrain'), expected.get('.HOVER'), 'live tweak reset to config.mcfunction');
-    const tunnel = await mc.score('.TUNNEL', 'cfg_terrain');
+    const tunnel = await mc.score('.TUNNELCLEAR', 'cfg_terrain');
     eq(await mc.score('.TUNNELUP', 'ir'), tunnel + 1, '.TUNNELUP re-derived');
 
     const h0 = await mc.score('.headX', 'ir');

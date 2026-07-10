@@ -1,11 +1,13 @@
 # Advances the track head one column east, choosing the rail elevation from
 # a lookahead heightmap scan, then places that column.
 
-# --- 1. Sample the terrain surface over the next 48 blocks ---
+# --- 1. Sample the terrain surface over the next .SAMPLE_WINDOW blocks ---
+# sample_window walks the window and also derives the divisor .winn (the
+# sample count, .SAMPLE_WINDOW / .SAMPLE_BLOCK_INTERVAL -- 12 at defaults).
 scoreboard players set .sum ir 0
 execute at @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:sample_window
 scoreboard players operation .avg ir = .sum ir
-scoreboard players operation .avg ir /= .C12 ir
+scoreboard players operation .avg ir /= .winn ir
 
 # --- 2. Target elevation = average surface + hover altitude ---
 scoreboard players operation .target ir = .avg ir

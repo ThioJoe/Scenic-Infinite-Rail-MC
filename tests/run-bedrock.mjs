@@ -121,7 +121,7 @@ const tests = [
     if (!(await s.scoreInRange('.TORCHMODE', 'ir', 2))) checks.push('.TORCHMODE != 2 (auto)');
     if (!(await s.scoreInRange('.AGGROMODE', 'ir', 1))) checks.push('.AGGROMODE != 1');
     if (!(await s.scoreInRange('.LIGHTMODE', 'ir', 11))) checks.push('.LIGHTMODE != 11 (bright)');
-    const maxspeed = expected.find((e) => e.holder === '.MAXSPEED')?.value;
+    const maxspeed = expected.find((e) => e.holder === '.DEFAULTSPEED')?.value;
     if (maxspeed !== undefined && !(await s.scoreInRange('.speed', 'ir', maxspeed))) checks.push(`.speed != ${maxspeed}`);
     const skyspeed = expected.find((e) => e.holder === '.SKYSPEED')?.value;
     if (skyspeed !== undefined && !(await s.scoreInRange('.skyspd', 'ir', skyspeed))) checks.push(`.skyspd != ${skyspeed}`);
@@ -149,7 +149,7 @@ const tests = [
   }),
 
   report('shared speed_step: step / floor / grid-rejoin / reset on Bedrock', async (s) => {
-    const base = expected.find((e) => e.holder === '.MAXSPEED')?.value ?? 8;
+    const base = expected.find((e) => e.holder === '.DEFAULTSPEED')?.value ?? 8;
     await s.fn('speed_inc');
     if (!(await s.scoreInRange('.speed', 'ir', base + 4))) throw new Error(`inc: .speed != ${base + 4}`);
     await s.fn('speed_dec');
@@ -163,7 +163,7 @@ const tests = [
   }),
 
   report('shared speed_step: sky mode tunes the sky cruise (.skyspd), land speed untouched', async (s) => {
-    const base = expected.find((e) => e.holder === '.MAXSPEED')?.value ?? 8;
+    const base = expected.find((e) => e.holder === '.DEFAULTSPEED')?.value ?? 8;
     const skyDefault = expected.find((e) => e.holder === '.SKYSPEED')?.value ?? 18;
     await s.setScore('.SKYMODE', 'ir', 1);
     await s.fn('speed_inc');
@@ -175,7 +175,7 @@ const tests = [
   }),
 
   report('shared speed_step: the ocean sprint tunes the ocean cruise (.ocnspd), both directions', async (s) => {
-    const base = expected.find((e) => e.holder === '.MAXSPEED')?.value ?? 8;
+    const base = expected.find((e) => e.holder === '.DEFAULTSPEED')?.value ?? 8;
     const ocean = expected.find((e) => e.holder === '.OCEANSPEED')?.value ?? 32;
     await s.setScore('.fast', 'ir', 1);
     await s.fn('speed_inc');

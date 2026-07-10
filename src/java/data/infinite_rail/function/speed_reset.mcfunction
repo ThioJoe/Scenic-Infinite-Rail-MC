@@ -1,4 +1,4 @@
-# Reset the ride speed back to the config default (.MAXSPEED). Reached from
+# Reset the ride speed back to the config default (.DEFAULTSPEED). Reached from
 # the Ride Settings book's [Reset] link (via menu_tick) or by hand:
 #   /function infinite_rail:speed_reset
 # The message it prints shows the resulting number with "(default)".

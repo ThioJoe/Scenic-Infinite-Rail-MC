@@ -36,14 +36,13 @@ export default defineSuite('boot & initialization', ({ test }) => {
   });
 
   test('fixed-point constants seeded by load', async ({ mc }) => {
-    eq(await mc.score('.C12', 'ir'), 12, '.C12');
     eq(await mc.score('.C16', 'ir'), 16, '.C16');
     eq(await mc.score('.C100', 'ir'), 100, '.C100');
     eq(await mc.score('.C1000', 'ir'), 1000, '.C1000');
   });
 
-  test('.TUNNELUP derived as .TUNNEL + 1', async ({ mc }) => {
-    const tunnel = await mc.score('.TUNNEL', 'cfg_terrain');
+  test('.TUNNELUP derived as .TUNNELCLEAR + 1', async ({ mc }) => {
+    const tunnel = await mc.score('.TUNNELCLEAR', 'cfg_terrain');
     eq(await mc.score('.TUNNELUP', 'ir'), tunnel + 1, '.TUNNELUP');
   });
 
@@ -63,7 +62,7 @@ export default defineSuite('boot & initialization', ({ test }) => {
   });
 
   test('adjustable state seeded from config defaults', async ({ mc }) => {
-    eq(await mc.score('.speed', 'ir'), await mc.score('.MAXSPEED', 'cfg_ride'), '.speed seeded from .MAXSPEED');
+    eq(await mc.score('.speed', 'ir'), await mc.score('.DEFAULTSPEED', 'cfg_ride'), '.speed seeded from .DEFAULTSPEED');
     eq(await mc.score('.skyspd', 'ir'), await mc.score('.SKYSPEED', 'cfg_ride'), '.skyspd seeded from .SKYSPEED');
     eq(await mc.score('.ocnspd', 'ir'), await mc.score('.OCEANSPEED', 'cfg_ride'), '.ocnspd seeded from .OCEANSPEED');
     eq(await mc.score('.torchdens', 'ir'), await mc.score('.TORCHODDS', 'cfg_ride'), '.torchdens seeded from .TORCHODDS');

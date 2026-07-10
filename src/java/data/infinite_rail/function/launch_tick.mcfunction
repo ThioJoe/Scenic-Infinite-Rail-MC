@@ -1,6 +1,6 @@
 # Launch phase driver (.started 2), run from tick: extends the pre-ride
 # runway a couple dozen columns per tick until the head reaches the goal
-# begin set (.pregoal = start + .CAMAHEAD + 32), then finishes the launch
+# begin set (.pregoal = the rig position + 32: start + .PACE_CART_BEHIND - .RIDER_BEHIND + 32), then finishes the launch
 # via launch_done. Building across ticks -- instead of synchronously inside
 # begin -- means every tick is its own fresh command chain, so the launch
 # can never be silently truncated by the vanilla per-chain command/fork

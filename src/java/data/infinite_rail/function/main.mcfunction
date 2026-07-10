@@ -31,7 +31,7 @@ execute as @e[type=minecart,tag=ir_ride,limit=1] run data modify entity @s Rotat
 
 # Keeper: no creature may crowd the pace cart -- entities physically shove a
 # minecart around, and a mob pile can slow or stall it outright. The rider is
-# .CAMAHEAD blocks ahead, so nothing here is ever seen or heard. Every entity
+# (.PACE_CART_BEHIND - .RIDER_BEHIND) blocks ahead, so nothing here is ever seen or heard. Every entity
 # kind the ride itself uses is excluded (pace/ride carts, the plug/seat
 # displays, the support-disguise block_displays, the head/probe markers);
 # the kill sweeping up nearby dropped items/orbs too is fine -- doTileDrops
@@ -115,6 +115,6 @@ execute unless entity @e[type=marker,tag=ir_head,limit=1] run scoreboard players
 execute if entity @e[type=marker,tag=ir_head,limit=1] run scoreboard players set .hdmiss ir 0
 execute if score .hdmiss ir matches 100 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Warning: the track builder's head is in unloaded chunks, so building is paused until its terrain loads. If this keeps happening, chunk force-loading may be broken on this Minecraft version - please report it.","color":"yellow"}]
 
-# Extend the track ahead of the pace cart, up to .MAXTICK columns this tick.
-scoreboard players operation .budget ir = .MAXTICK cfg_ride
+# Extend the track ahead of the pace cart, up to .BUILD_PER_TICK columns this tick.
+scoreboard players operation .budget ir = .BUILD_PER_TICK cfg_ride
 function infinite_rail:build_loop

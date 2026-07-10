@@ -1,6 +1,6 @@
 # Computes the forceload macro's arguments and runs it at the current
 # position (the head marker for roll_chunks, the starting player for begin):
-#   gen = .GENAHEAD -- how far ahead terrain is force-generated
+#   gen = .TERRAIN_GENAHEAD -- how far ahead terrain is force-generated
 #   w   = the corridor's Z half-width: 8 (+-1 chunk) normally, raised to
 #         .TORCHRANGE (capped at 48) while torch mode is on OR auto, so
 #         randomly thrown torches always land in loaded, generated chunks
@@ -17,7 +17,7 @@
 # track/camera divergence bug. A few extra daytime chunks in auto mode is
 # cheap insurance by comparison; the clock read now lives quarantined in
 # time_now.mcfunction, called only by place_torch.
-execute store result storage infinite_rail:args gen int 1 run scoreboard players get .GENAHEAD cfg_ride
+execute store result storage infinite_rail:args gen int 1 run scoreboard players get .TERRAIN_GENAHEAD cfg_ride
 scoreboard players set .fw ir 8
 execute if score .TORCHMODE ir matches 1.. if score .TORCHRANGE cfg_ride > .fw ir run scoreboard players operation .fw ir = .TORCHRANGE cfg_ride
 execute if score .fw ir matches 49.. run scoreboard players set .fw ir 48

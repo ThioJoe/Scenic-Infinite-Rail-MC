@@ -31,7 +31,7 @@ function infinite_rail:setup_world
 # start, before the launch.
 recipe give @s *
 
-# Apply the land cruising speed (.speed -- the config default .MAXSPEED
+# Apply the land cruising speed (.speed -- the config default .DEFAULTSPEED
 # unless adjusted with the Speed +/- items; state, so a chosen speed sticks
 # across ride restarts) to the minecart max-speed gamerule once, at the
 # start. (Not enforced afterwards -- change /gamerule yourself mid-ride if
@@ -102,18 +102,19 @@ ride @e[type=item_display,tag=ir_plug,limit=1] mount @e[type=minecart,tag=ir_car
 
 # --- Seed the ocean speed-up state ---
 execute store result score .cartX ir run data get entity @e[type=minecart,tag=ir_cart,limit=1] Pos[0] 1
-# The rider starts .CAMAHEAD blocks ahead of the pace cart, so seed
-# .lastChunk from that chunk (matches where ocean_check samples). Empty
-# ocean/land run counters.
+# The rider starts (.PACE_CART_BEHIND - .RIDER_BEHIND) blocks ahead of the
+# pace cart, so seed .lastChunk from that chunk (matches where ocean_check
+# samples). Empty ocean/land run counters.
 scoreboard players operation .lastChunk ir = .cartX ir
-scoreboard players operation .lastChunk ir += .CAMAHEAD cfg_camera
+scoreboard players operation .lastChunk ir += .PACE_CART_BEHIND cfg_ride
+scoreboard players operation .lastChunk ir -= .RIDER_BEHIND cfg_camera
 scoreboard players operation .lastChunk ir /= .C16 ir
 scoreboard players set .oceanRun ir 0
 scoreboard players set .landRun ir 0
 
 # --- Hand the rest of the launch to the ticker (launch_tick/launch_done) ---
-# The runway pre-build (~.CAMAHEAD+32 columns) plus the rig used to run right
-# here, synchronously -- but one command chain that big brushes vanilla's
+# The runway pre-build (out to the rig position + 32 columns) plus the rig
+# used to run right here, synchronously -- but one command chain that big brushes vanilla's
 # per-chain command/fork budgets, and a chain that exceeds a budget is cut
 # off SILENTLY. That manifested as: track built, pace cart rolling away, rig
 # never summoned, rider never mounted, .started never set. So begin now only
@@ -123,6 +124,7 @@ scoreboard players set .landRun ir 0
 # The rider is remembered by tag -- begin's player context is gone by then.
 tag @s add ir_rider
 scoreboard players operation .pregoal ir = .headX ir
-scoreboard players operation .pregoal ir += .CAMAHEAD cfg_camera
+scoreboard players operation .pregoal ir += .PACE_CART_BEHIND cfg_ride
+scoreboard players operation .pregoal ir -= .RIDER_BEHIND cfg_camera
 scoreboard players add .pregoal ir 32
 scoreboard players set .started ir 2

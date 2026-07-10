@@ -146,7 +146,7 @@ tests in the same suite would see it.
     auto-split under the fill volume limit (destructive; scan after asserting)
 - **`ctx.expected`** (`lib/pack.mjs`) — the pack's own `config.mcfunction` /
   `consts.mcfunction` values parsed **from the pack under test**:
-  `expected.get('.MAXSPEED')` etc. Assert against these, never hardcoded copies.
+  `expected.get('.DEFAULTSPEED')` etc. Assert against these, never hardcoded copies.
 - **`ctx.server`** (`lib/server.mjs`) — the process: `log`, `mark()`,
   `errorsSince(mark, {alsoIgnore})` (auth-noise pre-filtered),
   `functionLoadErrors(mark)`.

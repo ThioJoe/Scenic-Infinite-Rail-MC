@@ -13,20 +13,20 @@ async function speedRule(mc) {
 
 export default defineSuite('ride speed state machine', ({ test }) => {
   test('fresh world: .speed equals the config default', async ({ mc, expected }) => {
-    eq(await mc.score('.speed', 'ir'), expected.get('.MAXSPEED'), '.speed');
+    eq(await mc.score('.speed', 'ir'), expected.get('.DEFAULTSPEED'), '.speed');
   });
 
   test('Speed + adds one .SPEEDSTEP', async ({ mc, expected }) => {
     const step = await mc.score('.SPEEDSTEP', 'ir');
     eq(step, 4, '.SPEEDSTEP cross-edition constant');
     await mc.fn('speed_inc');
-    eq(await mc.score('.speed', 'ir'), expected.get('.MAXSPEED') + step, 'after one Speed + click');
+    eq(await mc.score('.speed', 'ir'), expected.get('.DEFAULTSPEED') + step, 'after one Speed + click');
     eq(await mc.score('.spdflt', 'ir'), 0, 'no longer the default');
   });
 
   test('Speed - subtracts one .SPEEDSTEP', async ({ mc, expected }) => {
     await mc.fn('speed_dec');
-    eq(await mc.score('.speed', 'ir'), expected.get('.MAXSPEED'), 'back to default');
+    eq(await mc.score('.speed', 'ir'), expected.get('.DEFAULTSPEED'), 'back to default');
     eq(await mc.score('.spdflt', 'ir'), 1, 'reported as default again');
   });
 
@@ -50,7 +50,7 @@ export default defineSuite('ride speed state machine', ({ test }) => {
     await mc.fn('speed_inc');
     await mc.fn('speed_inc');
     await mc.fn('speed_reset');
-    eq(await mc.score('.speed', 'ir'), expected.get('.MAXSPEED'), 'after [Reset]');
+    eq(await mc.score('.speed', 'ir'), expected.get('.DEFAULTSPEED'), 'after [Reset]');
     eq(await mc.score('.spdflt', 'ir'), 1, '.spdflt answers default');
   });
 
@@ -94,7 +94,7 @@ export default defineSuite('ride speed state machine', ({ test }) => {
     await mc.fn('speed_down');
     eq(await mc.score('.fast', 'ir'), 0, '.fast cleared');
     const rule = await speedRule(mc);
-    if (rule !== null) eq(rule, expected.get('.MAXSPEED'), 'gamerule back to the land speed');
+    if (rule !== null) eq(rule, expected.get('.DEFAULTSPEED'), 'gamerule back to the land speed');
   });
 
   test('sky mode: Speed +/- and Reset tune the sky cruise (.skyspd), not the land speed', async ({ mc, expected }) => {

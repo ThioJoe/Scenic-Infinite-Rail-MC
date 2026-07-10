@@ -58,9 +58,9 @@ execute if score .agginit ir matches 0 run scoreboard players set .agginit ir 1
 # like the modes: seed it from the config default only when it has never
 # been set (or was left at an invalid <= 0), so a speed chosen with the
 # Speed +/- items survives /reload, ride restarts and rejoins. Runs after
-# config on both editions, so .MAXSPEED is already applied here.
+# config on both editions, so .DEFAULTSPEED is already applied here.
 scoreboard players add .speed ir 0
-execute if score .speed ir matches ..0 run scoreboard players operation .speed ir = .MAXSPEED cfg_ride
+execute if score .speed ir matches ..0 run scoreboard players operation .speed ir = .DEFAULTSPEED cfg_ride
 
 # The adjustable SKY cruise speed (.skyspd -- what the ride cruises at while
 # sky mode is on; the Speed +/- items and Reset tune it in sky mode via the

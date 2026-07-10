@@ -4,7 +4,7 @@
 # reason to tune them per world. They live in `ir` with the runtime state.
 # Called once per load, right beside config: from load.mcfunction on Java,
 # from the script's init() on Bedrock. (Java's fixed-point helpers .C2/.C10/
-# .C12/.C16/.C1000 stay in load.mcfunction -- they exist only because
+# .C16/.C1000 stay in load.mcfunction -- they exist only because
 # scoreboards are int-only, and Bedrock does that math in floats.)
 
 # How much one click of the "Speed -"/"Speed +" hotbar items changes the

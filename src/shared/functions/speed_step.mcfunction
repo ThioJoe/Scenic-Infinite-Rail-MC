@@ -2,7 +2,7 @@
 #
 # There are THREE adjustable cruise speeds, and this file tunes whichever one
 # is active right now:
-#   .speed  (ir) -- the LAND cruising speed (default .MAXSPEED).
+#   .speed  (ir) -- the LAND cruising speed (default .DEFAULTSPEED).
 #   .ocnspd (ir) -- the OCEAN cruise speed (default .OCEANSPEED), used while
 #                   the ocean sprint owns the ride (.fast 1). Adjustable in
 #                   BOTH directions -- the old max(.OCEANSPEED, .speed) rule
@@ -31,7 +31,7 @@
 #                          the three scores as the virtual pace target).
 #         .speed / .ocnspd / .skyspd -- the active one gets the result.
 #         .spdflt (ir) --  1 = the new value equals the active config default
-#                          (.MAXSPEED / .OCEANSPEED / .SKYSPEED -- the
+#                          (.DEFAULTSPEED / .OCEANSPEED / .SKYSPEED -- the
 #                          caller's message appends "(default)").
 #
 # Floored at 1 (and a +one-step click from that floor rejoins the .SPEEDSTEP
@@ -48,7 +48,7 @@
 # (.fast 1), else land. The math below runs on .spcur, so there is one code
 # path for all three, and the result is written back to the active target.
 scoreboard players operation .spcur ir = .speed ir
-scoreboard players operation .spdef ir = .MAXSPEED cfg_ride
+scoreboard players operation .spdef ir = .DEFAULTSPEED cfg_ride
 execute unless score .SKYMODE ir matches 1 if score .fast ir matches 1 run scoreboard players operation .spcur ir = .ocnspd ir
 execute unless score .SKYMODE ir matches 1 if score .fast ir matches 1 run scoreboard players operation .spdef ir = .OCEANSPEED cfg_ride
 execute if score .SKYMODE ir matches 1 run scoreboard players operation .spcur ir = .skyspd ir

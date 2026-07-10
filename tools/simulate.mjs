@@ -12,7 +12,7 @@
 //
 //    - the two edition copies make IDENTICAL decisions column for column
 //    - every elevation change is one contiguous 45-degree event
-//    - events only start when |target - railY| >= #DEADBAND (checked exactly;
+//    - events only start when |target - railY| >= #MIN_CHANGE (checked exactly;
 //      a climb may also start at diff >= 1 on near-scan ground contact)
 //    - climbs never start ahead of schedule (the 45-degree cone + #UPEARLY)
 //    - flat gaps between events respect #SAMEGAP / #TURNGAP minus the
@@ -183,42 +183,48 @@ function inRange(v, range) {
 // 48 blocks, hand target+railY to the shared decide, act on the returned dir.
 // Every knob is read from the emitted config.mcfunction via the interpreter.
 // ---------------------------------------------------------------------------
-const CFG_KEYS = ['HOVER', 'DEADBAND', 'SAMEGAP', 'TURNGAP', 'GAPRATIO', 'GAPMATCH',
-  'GAPSTRETCH', 'UPCLAMP', 'DOWNCLAMP', 'UPLOOK', 'UPGRACE', 'UPEARLY',
-  'DOWNLOOK', 'DOWNGRACE', 'CAMBLEND', 'CAMLIFT', 'CAMSMOOTH', 'CAMAHEAD',
+const CFG_KEYS = ['HOVER', 'MIN_CHANGE', 'SAMEGAP', 'TURNGAP', 'GAPRATIO', 'GAPMATCH',
+  'GAPSTRETCH', 'DOWNCLAMP', 'UPGRACE', 'UPEARLY',
+  'DOWNLOOK_AHEAD', 'DOWNGRACE', 'SAMPLE_WINDOW', 'SAMPLE_BLOCK_INTERVAL',
+  'CAMBLEND', 'CAMLIFT', 'CAMSMOOTH', 'RIDER_BEHIND', 'PACE_CART_BEHIND',
   'SLOPECLEAR'];
 // The objective each knob lives in (the config split -- must match
-// config.mcfunction; camera knobs live in cfg_camera, .GAPSTRETCH in
-// cfg_ride (cfg_terrain is at the 15-row sidebar cap), the rest of
-// CFG_KEYS in cfg_terrain, and the sky knobs used by the sky-mode test in
-// cfg_ride).
+// config.mcfunction; camera knobs + .RIDER_BEHIND live in cfg_camera,
+// .GAPSTRETCH and .PACE_CART_BEHIND in cfg_ride, the rest of CFG_KEYS in
+// cfg_terrain, and the sky knobs used by the sky-mode test in cfg_ride).
 const CFG_OBJ = Object.fromEntries(CFG_KEYS.map((k) => [
-  k, k.startsWith('CAM') ? 'cfg_camera' : k === 'GAPSTRETCH' ? 'cfg_ride' : 'cfg_terrain',
+  k, k.startsWith('CAM') || k === 'RIDER_BEHIND' ? 'cfg_camera'
+    : k === 'GAPSTRETCH' || k === 'PACE_CART_BEHIND' ? 'cfg_ride' : 'cfg_terrain',
 ]));
 const readCfg = (sim) => Object.fromEntries(CFG_KEYS.map((k) => [k, sim.get(k, CFG_OBJ[k])]));
 
 function advance(sim, S, surface, cfg) {
+  // One reading every SAMPLE_BLOCK_INTERVAL out to SAMPLE_WINDOW, the count
+  // doubling as the divisor (Java's derived .winn; 12 at the defaults).
+  // Down-clamped only -- terrain above the line registers at full height.
+  const step = Math.max(1, cfg.SAMPLE_BLOCK_INTERVAL);
+  const count = Math.max(1, Math.floor(cfg.SAMPLE_WINDOW / step));
   const lo = S.avg - cfg.DOWNCLAMP;
-  const hi = S.avg + cfg.UPCLAMP;
   let sum = 0;
-  for (let off = 4; off <= 48; off += 4) {
-    let s = surface(S.headX + off);
+  for (let i = 1; i <= count; i++) {
+    let s = surface(S.headX + i * step);
     if (s === undefined || s <= -63) s = S.avg;
-    sum += Math.min(Math.max(s, lo), hi);
+    sum += Math.max(s, lo);
   }
-  S.avg = Math.floor(sum / 12);
+  S.avg = Math.floor(sum / count);
   const target = S.avg + cfg.HOVER;
 
   // The near-ground scan (Java's near_scan/near_step, Bedrock's nearScan),
   // at odd offsets +1, +3, ..., folded into PAIRS (min of two consecutive
   // probes -- erases 1-2 wide spikes like tree trunks): the highest pair
-  // within .DOWNLOOK (the descent guard's floor basis) and .UPLOOK (the
+  // within .DOWNLOOK_AHEAD (the descent guard's floor basis) and anywhere
+  // in the walk -- the climb side always scans the full sample window (the
   // climb contact trigger), plus the climb schedule .gcone -- over pairs
   // above railY - HOVER (ground actually in the way), the highest 45-degree
   // projection pair - near-distance. Sentinels: -10000 for the maxes and a
   // nothing-to-climb schedule (its gate holds); +32000 for a no-data
   // schedule (gate never holds -- plain average behavior).
-  const w = Math.min(48, Math.max(cfg.UPLOOK, cfg.DOWNLOOK));
+  const w = Math.max(1, cfg.SAMPLE_WINDOW);
   const gbase = S.railY - cfg.HOVER;
   let gfloor = null;
   let gmax = null;
@@ -232,11 +238,9 @@ function advance(sim, S, surface, cfg) {
     if (prev !== null) {
       const pmin = Math.min(prev, s);
       const nd = off - 2;
-      if (off <= cfg.DOWNLOOK && (gfloor === null || pmin > gfloor)) gfloor = pmin;
-      if (off <= cfg.UPLOOK) {
-        if (gmax === null || pmin > gmax) gmax = pmin;
-        if (pmin > gbase && (gcone === null || pmin - nd > gcone)) gcone = pmin - nd;
-      }
+      if (off <= cfg.DOWNLOOK_AHEAD && (gfloor === null || pmin > gfloor)) gfloor = pmin;
+      if (gmax === null || pmin > gmax) gmax = pmin;
+      if (pmin > gbase && (gcone === null || pmin - nd > gcone)) gcone = pmin - nd;
     }
     prev = s;
   }
@@ -249,7 +253,7 @@ function advance(sim, S, surface, cfg) {
   // gap-blocked, verify the whole plan ahead of time -- the shifted
   // 45-degree path must clear ground by #DOWNGRACE everywhere, and the
   // landing must be a real stretch (ground at the landing level, within
-  // #DEADBAND under the hover line, for #GAPSTRETCH columns; ground still
+  // #MIN_CHANGE under the hover line, for #GAPSTRETCH columns; ground still
   // falling away fails). .sver = the verified horizon (0 = no/off); the
   // shared consider_start jumps the gap when it covers descent + stretch.
   let sver = 0;
@@ -257,8 +261,8 @@ function advance(sim, S, surface, cfg) {
     const stretch = cfg.GAPSTRETCH;
     const D = S.railY - target;
     const H = D + stretch;
-    if (stretch >= 1 && D >= cfg.DEADBAND && H <= 96) {
-      const band = S.railY - D - cfg.HOVER - cfg.DEADBAND;
+    if (stretch >= 1 && D >= cfg.MIN_CHANGE && H <= 96) {
+      const band = S.railY - D - cfg.HOVER - cfg.MIN_CHANGE;
       let sprev = null;
       for (let off = 1; off <= H + 1; off += 2) {
         const s = surface(S.headX + off);
@@ -337,7 +341,7 @@ const TERRAINS = {
   mesa: { settles: true, f: (x) => (x < 200 ? 64 : x < 320 ? 89 : 64) },
   // A narrow 10-high ridge the 12-sample average dilutes to diff=1 (inside
   // the deadband): only the early-climb ground-contact rule reacts, starting
-  // a climb below #DEADBAND and crest-pushing #UPGRACE past the target --
+  // a climb below #MIN_CHANGE and crest-pushing #UPGRACE past the target --
   // exercises the contact-start path of the invariant checks.
   ridge: { settles: true, f: (x) => (x >= 300 && x < 308 ? 74 : 64) },
   // A long 1:2 downhill face: descents must come down it in gap-paced
@@ -381,7 +385,7 @@ function checkInvariants(name, ride, settles) {
   log.forEach((step, i) => {
     const { dir, veg, retro, gfloor, gmax, gcone, sver } = step;
     const diff = step.target - step.railYBefore;
-    const floorReal = cfg.DOWNLOOK >= 1 && gfloor > -10000;
+    const floorReal = cfg.DOWNLOOK_AHEAD >= 1 && gfloor > -10000;
     const digNow = floorReal && step.railYBefore - 1 < gfloor + cfg.DOWNGRACE;
 
     // A descent may only end while it still wants to go lower (diff <= -1)
@@ -445,19 +449,19 @@ function checkInvariants(name, ride, settles) {
         if (dir === 1) {
           // A climb may also start inside the deadband on ground contact
           // (diff >= 1 and the near scan sees terrain above the rail).
-          const contact = cfg.UPLOOK >= 1 && diff >= 1 && gmax > step.railYBefore;
-          if (diff < cfg.DEADBAND && !contact) {
-            fail(`${name}: climb started with diff=${diff} < DEADBAND=${cfg.DEADBAND} and no ground contact at column ${i}`);
+          const contact = diff >= 1 && gmax > step.railYBefore; // the climb side is always on
+          if (diff < cfg.MIN_CHANGE && !contact) {
+            fail(`${name}: climb started with diff=${diff} < MIN_CHANGE=${cfg.MIN_CHANGE} and no ground contact at column ${i}`);
           }
           // The climb schedule: no climb may begin before it is due -- the
           // rail must already be within #HOVER + #UPEARLY of the highest
           // 45-degree-projected surface ahead (decide's #due gate).
-          if (cfg.UPLOOK >= 1 && gcone < 32000
+          if (gcone < 32000
             && step.railYBefore >= gcone + cfg.HOVER + cfg.UPEARLY) {
             fail(`${name}: climb started ahead of schedule (rail ${step.railYBefore} >= cone ${gcone}+${cfg.HOVER}+${cfg.UPEARLY}) at column ${i}`);
           }
         } else {
-          if (-diff < cfg.DEADBAND) fail(`${name}: descent started with diff=${diff} inside DEADBAND=${cfg.DEADBAND} at column ${i}`);
+          if (-diff < cfg.MIN_CHANGE) fail(`${name}: descent started with diff=${diff} inside MIN_CHANGE=${cfg.MIN_CHANGE} at column ${i}`);
           // Descent starts additionally need clear runway for at least two
           // steps above the descent floor (decide's #dig2 veto).
           if (floorReal && step.railYBefore - 2 < gfloor + cfg.DOWNGRACE) {
@@ -481,21 +485,21 @@ function checkInvariants(name, ride, settles) {
   if (settles) {
     const last = log[log.length - 1];
     const drift = Math.abs(last.target - S.railY);
-    if (drift >= cfg.DEADBAND + 1) fail(`${name}: rail ended ${drift} blocks from target`);
+    if (drift >= cfg.MIN_CHANGE + 1) fail(`${name}: rail ended ${drift} blocks from target`);
   }
   return discounted;
 }
 
 // The mesa's specific promise (the descent guard): once the line has crested
 // onto the tabletop it never goes below the tabletop surface again until the
-// drop-off at x=320 -- the descent start is vetoed until the whole #DOWNLOOK
+// drop-off at x=320 -- the descent start is vetoed until the whole #DOWNLOOK_AHEAD
 // runway is past the edge, so there is no early trench and no rim notch at
 // all. (The old average-chasing behavior started the descent ~45 columns
 // early and trenched down through the tabletop to get a head start on the
 // valley beyond.)
 function checkMesa(ride) {
   const { S, cfg } = ride;
-  if (cfg.DOWNLOOK < 1) return;
+  if (cfg.DOWNLOOK_AHEAD < 1) return;
   const top = 89; // the mesa terrain's tabletop surface
   let crest = -1;
   for (let x = 200; x <= 280; x++) {
@@ -523,7 +527,7 @@ function checkCamera(name, ride) {
   for (let px = 0; px < trackY.length - 80; px += 0.4) {
     const maxi = trackY.length - 1;
     const fx = px - Math.floor(px);
-    const index = Math.min(Math.max(Math.floor(px) + cfg.CAMAHEAD, 0), maxi);
+    const index = Math.min(Math.max(Math.floor(px) + cfg.PACE_CART_BEHIND - cfg.RIDER_BEHIND, 0), maxi);
     const r = camHeight({
       trackY, index, fx,
       lift10: cfg.CAMLIFT, blend: cfg.CAMBLEND, smooth: cfg.CAMSMOOTH, s2,

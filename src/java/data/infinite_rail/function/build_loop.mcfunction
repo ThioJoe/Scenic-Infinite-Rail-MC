@@ -1,4 +1,4 @@
-# Builds columns while the head is closer than .AHEAD blocks to the cart
+# Builds columns while the head is closer than .PACE_CART_BEHIND blocks to the cart
 # and this tick's budget is not exhausted.
 #
 # THE HEAD MUST BE SELECTABLE (loaded, in an entity-ticking chunk) or no
@@ -15,4 +15,4 @@
 # the head's chunk is back. main warns in chat when the head stays missing.
 scoreboard players operation .gap ir = .headX ir
 scoreboard players operation .gap ir -= .cartX ir
-execute if score .budget ir matches 1.. if score .gap ir < .AHEAD cfg_ride if entity @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:build_step
+execute if score .budget ir matches 1.. if score .gap ir < .PACE_CART_BEHIND cfg_ride if entity @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:build_step

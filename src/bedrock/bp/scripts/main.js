@@ -45,8 +45,9 @@
 //                                                  pre-load new terrain
 //
 //  The per-column pipeline is IDENTICAL to Java's advance.mcfunction:
-//    1. sampleWindow() -> average surface of the next 48 blocks (12 samples,
-//       clamped +/-UPCLAMP/DOWNCLAMP, void reads fall back to the average)
+//    1. sampleWindow() -> average surface of the next .SAMPLE_WINDOW blocks
+//       (one sample every .SAMPLE_BLOCK_INTERVAL,
+//       clamped at most DOWNCLAMP below the average, void reads fall back)
 //    2. target = avg + HOVER  ->  written to the scoreboard, along with the
 //       near-ground scan's .gfloor/.gmax/.gcone (nearScan -- slope timing)
 //    3. "function infinite_rail/decide"  (the SHARED brain; reads .target,
@@ -138,13 +139,10 @@ const SCOUT_Y = 180;     // cruising altitude (irrelevant to chunk ticking)
 // (>= 4 chunks = 64 blocks) with a chunk to spare, or a coverage hole opens
 // between the two and the head can never walk across it.
 const SCOUT_LEAD_MAX = 144;
-// How far past the head buildReady() requires loaded chunks (the first third
-// of the 48-block sample window; the rest may lag and fall back per-sample).
+// How far past the head buildReady() requires loaded chunks (the first
+// third of the default 48-block .SAMPLE_WINDOW; the rest may lag and fall
+// back per-sample).
 const BUILD_MARGIN = 17;
-// How far past the head sample_window actually reaches. The scout post aims
-// to keep this whole span inside its bubble -- samples beyond it don't break
-// anything (they fall back to the rolling average) but cost probe attempts.
-const SAMPLE_REACH = 48;
 // Ticking-area names from older versions of this pack, removed on cleanup.
 const LEGACY_AREAS = ['ir_area_a', 'ir_area_b', 'ir_t0', 'ir_t1', 'ir_t2', 'ir_t3'];
 const PREFIX = '§6[Scenic Rail]§r ';
@@ -271,17 +269,26 @@ const HIST_PERSIST = 1024;
 // re-read from the scoreboard every tick, so live "/scoreboard players set
 // .HOVER ir 8" tweaks work mid-ride exactly like Java.
 const CONFIG_DEFAULTS = {
-  HOVER: 2, TUNNEL: 6, CAMHEIGHT: 0, CAMBLEND: 6, CAMSMOOTH: 6, CAMLIFT: 20,
-  CAMAHEAD: 64, CAMMODE: 0, CARTYOFF: 12, AUTOSTART: 1,
-  MAXSPEED: 8, OCEANSPEED: 32, OCEANCHUNKS: 6, LANDCHUNKS: 3, DEADBAND: 2,
+  HOVER: 2, TUNNELCLEAR: 6, CAMHEIGHT: 0, CAMBLEND: 6, CAMSMOOTH: 6, CAMLIFT: 20,
+  RIDER_BEHIND: 160, CAMMODE: 0, CARTYOFF: 12, AUTOSTART: 1,
+  DEFAULTSPEED: 8, OCEANSPEED: 32, OCEANCHUNKS: 6, LANDCHUNKS: 3, MIN_CHANGE: 2,
   SAMEGAP: 50, TURNGAP: 50, GAPRATIO: 50, GAPMATCH: 50,
-  SLOPECLEAR: 6, UPCLAMP: 250, DOWNCLAMP: 30,
-  UPLOOK: 75, UPGRACE: 10, UPEARLY: 2, DOWNLOOK: 250, DOWNGRACE: 1,
-  GAPSTRETCH: 50,
-  AHEAD: 224, GENAHEAD: 192, MAXTICK: 15, DEBUGMODE: 0,
+  SLOPECLEAR: 6, DOWNCLAMP: 30,
+  UPGRACE: 10, UPEARLY: 2, DOWNLOOK_AHEAD: 250, DOWNGRACE: 1,
+  GAPSTRETCH: 50, SAMPLE_WINDOW: 48, SAMPLE_BLOCK_INTERVAL: 4,
+  PACE_CART_BEHIND: 224, TERRAIN_GENAHEAD: 192, BUILD_PER_TICK: 15, DEBUGMODE: 0,
   SKYY: 120, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 32, SEAPICKLE: 4,
   CARTSOUND: 1,
 };
+
+// The rig's lead over the virtual pace position, derived from the two
+// head-relative distance knobs (every distance in the config is measured
+// from the build head): the pace rides .PACE_CART_BEHIND behind the head,
+// the rider .RIDER_BEHIND, so the rig leads the pace by the difference
+// (64 at the defaults -- the old .CAMAHEAD).
+function camAhead() {
+  return cfg('PACE_CART_BEHIND') - cfg('RIDER_BEHIND');
+}
 
 // Which objective each knob lives in. The tunables are split into three
 // sidebar-sized groups (a vanilla sidebar shows ONE objective, max 15 rows)
@@ -289,14 +296,15 @@ const CONFIG_DEFAULTS = {
 // in `ir` with the runtime state. Must match config.mcfunction and Java's
 // load.mcfunction.
 const CFG_GROUPS = {
-  cfg_terrain: ['HOVER', 'TUNNEL', 'DEADBAND', 'SAMEGAP', 'TURNGAP',
-    'GAPRATIO', 'GAPMATCH', 'SLOPECLEAR', 'UPCLAMP', 'DOWNCLAMP', 'UPLOOK',
-    'UPGRACE', 'UPEARLY', 'DOWNLOOK', 'DOWNGRACE'],
-  cfg_camera: ['CAMHEIGHT', 'CAMBLEND', 'CAMSMOOTH', 'CAMLIFT', 'CAMAHEAD',
+  cfg_terrain: ['HOVER', 'TUNNELCLEAR', 'MIN_CHANGE', 'SAMEGAP', 'TURNGAP',
+    'GAPRATIO', 'GAPMATCH', 'SLOPECLEAR', 'DOWNCLAMP',
+    'UPGRACE', 'UPEARLY', 'DOWNLOOK_AHEAD', 'DOWNGRACE',
+    'SAMPLE_WINDOW', 'SAMPLE_BLOCK_INTERVAL'],
+  cfg_camera: ['CAMHEIGHT', 'CAMBLEND', 'CAMSMOOTH', 'CAMLIFT', 'RIDER_BEHIND',
     'CAMMODE', 'CARTYOFF'],
-  cfg_ride: ['MAXSPEED', 'OCEANSPEED', 'OCEANCHUNKS', 'LANDCHUNKS', 'SKYY',
+  cfg_ride: ['DEFAULTSPEED', 'OCEANSPEED', 'OCEANCHUNKS', 'LANDCHUNKS', 'SKYY',
     'SKYSPEED', 'TORCHODDS', 'TORCHRANGE', 'SEAPICKLE', 'GAPSTRETCH',
-    'AHEAD', 'GENAHEAD', 'MAXTICK', 'CARTSOUND'],
+    'PACE_CART_BEHIND', 'TERRAIN_GENAHEAD', 'BUILD_PER_TICK', 'CARTSOUND'],
 };
 const CFG_OBJ = {}; // knob name -> objective id (defaults to OBJ)
 for (const [obj, keys] of Object.entries(CFG_GROUPS)) {
@@ -556,14 +564,14 @@ function lightLevel() {
 }
 
 // The ride's land cruising speed: the .speed state score (adjusted by the
-// Speed +/- items and the Ride Settings form's slider; seeded from .MAXSPEED by
+// Speed +/- items and the Ride Settings form's slider; seeded from .DEFAULTSPEED by
 // the shared modes_init, clamped 1..64 by the shared speed_step). Falls
 // back to the config default where the score is unreadable (cmd-bridge
 // worlds -- there live speed changes degrade to the config value, like
 // every other live tweak).
 function landSpeed() {
   const v = getScore('speed', 0);
-  return v >= 1 ? v : cfg('MAXSPEED');
+  return v >= 1 ? v : cfg('DEFAULTSPEED');
 }
 
 // The ride's SKY cruising speed: the .skyspd state score (adjusted by the
@@ -671,7 +679,7 @@ function showRideMenu(player) {
       ? `Sky cruise speed, blocks/s (default ${cfg('SKYSPEED')})`
       : S.fast
         ? `Ocean cruise speed, blocks/s (default ${cfg('OCEANSPEED')})`
-        : `Ride speed, blocks/s (default ${cfg('MAXSPEED')})`, 1, 64, { defaultValue: current.speed, valueStep: 1 })
+        : `Ride speed, blocks/s (default ${cfg('DEFAULTSPEED')})`, 1, 64, { defaultValue: current.speed, valueStep: 1 })
     .submitButton('Apply');
   form.show(player).then((r) => {
     if (r.canceled || !r.formValues) return;
@@ -1057,7 +1065,7 @@ function probeSurface(x, z) {
       // The isSolid/isLiquid comparisons are deliberately against literal
       // true/false: if they are unavailable on this module version they read
       // undefined, and the block is ACCEPTED as surface -- a flower
-      // miscounted as ground costs a block of noise (well inside .DEADBAND),
+      // miscounted as ground costs a block of noise (well inside .MIN_CHANGE),
       // whereas skipping everything would freeze the terrain average and
       // flatline the whole ride.
       // Step down with getBlock, NOT getTopmostBlock(pos, y-1) -- the latter
@@ -1077,23 +1085,27 @@ function probeSurface(x, z) {
   return undefined;
 }
 
-// sample_window.mcfunction: 12 surface samples at +4..+48 blocks east of the
-// head, each clamped to [avg-DOWNCLAMP, avg+UPCLAMP] around the previous
-// average, summed and floor-divided by 12 (scoreboard division semantics).
+// sample_window.mcfunction: one surface sample every .SAMPLE_BLOCK_INTERVAL
+// blocks out to .SAMPLE_WINDOW east of the head (12 samples at +4..+48 with
+// the defaults), each clamped to at most .DOWNCLAMP below the previous
+// average (no upward clamp -- approaching mountains register at their full
+// height), summed and floor-divided by the derived sample count (Java's
+// .winn). Both knobs are floored at 1 so a zero can neither loop in place
+// nor divide by zero.
 function sampleWindow() {
+  const step = Math.max(1, cfg('SAMPLE_BLOCK_INTERVAL'));
+  const count = Math.max(1, Math.floor(cfg('SAMPLE_WINDOW') / step));
   const lo = S.avg - cfg('DOWNCLAMP');
-  const hi = S.avg + cfg('UPCLAMP');
   let sum = 0;
   let bad = 0;
-  for (let off = 4; off <= 48; off += 4) {
-    let s = surfaceY(S.headX + off, S.centerZ);
+  for (let i = 1; i <= count; i++) {
+    let s = surfaceY(S.headX + i * step, S.centerZ);
     if (s === undefined || s <= -63) { s = S.avg; bad += 1; } // void: discard
     if (s < lo) s = lo;
-    if (s > hi) s = hi;
     sum += s;
   }
-  S.avg = Math.floor(sum / 12);
-  S.lastBad = bad; // surfaced in the debug roll line: 12/12 = probe is broken
+  S.avg = Math.floor(sum / count);
+  S.lastBad = bad; // surfaced in the debug roll line: all-bad = probe is broken
 }
 
 // The near-ground scan feeding the shared brain's slope-timing guards
@@ -1105,20 +1117,21 @@ function sampleWindow() {
 // the dig-down can't: a 1-2 block spike of REAL terrain (rock fins) only
 // catches one probe of a pair, so the min drops it, while real ground
 // (4+ wide) spans both probes and registers.
-// Three scores result: .gfloor (highest pair within .DOWNLOOK -- the
-// descent guard), .gmax (highest pair within .UPLOOK -- the climb contact
-// trigger) and .gcone (the climb schedule: over pairs actually in the way,
-// above railY - HOVER, the highest 45-degree projection pair - distance).
+// Three scores result: .gfloor (highest pair within .DOWNLOOK_AHEAD -- the
+// descent guard), .gmax (highest pair anywhere in the walk -- the climb
+// contact trigger; the climb side has no reach knob, it always scans the
+// full .SAMPLE_WINDOW, the line's whole planning horizon) and .gcone (the
+// climb schedule: over pairs actually in the way, above railY - HOVER, the
+// highest 45-degree projection pair - distance).
 // Sentinels: -10000 for .gfloor/.gmax (their guards fail open without
 // data) and for a .gcone with nothing to climb for (the schedule gate
 // holds); +32000 for .gcone when the scan got no valid probes at all
-// (reverts to plain average-driven behavior). The reads hit the per-column
-// surface memo the 48-block sample window already fills, so the scan costs
-// no extra real probes.
+// (reverts to plain average-driven behavior). The walk's reach IS the
+// sample window, so the reads hit the per-column surface memo the window
+// already fills and the scan costs no extra real probes.
 function nearScan() {
-  const up = cfg('UPLOOK');
-  const down = cfg('DOWNLOOK');
-  const w = Math.min(48, Math.max(up, down));
+  const down = cfg('DOWNLOOK_AHEAD');
+  const w = Math.max(1, cfg('SAMPLE_WINDOW'));
   const gbase = S.railY - cfg('HOVER');
   let gfloor = null;
   let gmax = null;
@@ -1133,10 +1146,8 @@ function nearScan() {
       const pmin = Math.min(prev, s);
       const nd = off - 2; // the pair's near end
       if (off <= down && (gfloor === null || pmin > gfloor)) gfloor = pmin;
-      if (off <= up) {
-        if (gmax === null || pmin > gmax) gmax = pmin;
-        if (pmin > gbase && (gcone === null || pmin - nd > gcone)) gcone = pmin - nd;
-      }
+      if (gmax === null || pmin > gmax) gmax = pmin;
+      if (pmin > gbase && (gcone === null || pmin - nd > gcone)) gcone = pmin - nd;
     }
     prev = s;
   }
@@ -1152,7 +1163,7 @@ function nearScan() {
 // stays clear of ground by .DOWNGRACE -- so the floor guard cannot cut it
 // into pieces and the shifted descent is the SAME single event to the
 // SAME landing -- and (2) the landing really is a STRETCH: ground sitting
-// at the landing level (within .DEADBAND under the hover line) for
+// at the landing level (within .MIN_CHANGE under the hover line) for
 // .GAPSTRETCH columns, so the calm the gap exists to guarantee simply
 // happens at the bottom. Ground still falling away past the landing fails
 // (a gentle downhill face keeps its gap-paced swoops). Probes at odd
@@ -1166,9 +1177,9 @@ function shiftScan(target) {
   const D = S.railY - target;
   const H = D + stretch;
   let sver = 0;
-  if (stretch >= 1 && D >= cfg('DEADBAND') && H <= 96) {
+  if (stretch >= 1 && D >= cfg('MIN_CHANGE') && H <= 96) {
     const grace = cfg('DOWNGRACE');
-    const band = S.railY - D - cfg('HOVER') - cfg('DEADBAND');
+    const band = S.railY - D - cfg('HOVER') - cfg('MIN_CHANGE');
     let prev = null;
     for (let off = 1; off <= H + 1; off += 2) {
       const s = surfaceY(S.headX + off, S.centerZ);
@@ -1223,7 +1234,7 @@ function clearSoft(x, y, z) {
 // Terrain (stone, dirt, ...) is never spared, so tunnels are unchanged.
 function placeColumn(x, y, dir, veg) {
   const z = S.centerZ;
-  const carveH = dir === 0 ? cfg('TUNNEL') : cfg('TUNNEL') + 1; // .TUNNELUP
+  const carveH = dir === 0 ? cfg('TUNNELCLEAR') : cfg('TUNNELCLEAR') + 1; // .TUNNELUP
   dim.fillBlocks(
     new BlockVolume({ x, y, z }, { x, y: y + 1, z }),
     AIR, { ignoreChunkBoundErrors: true },
@@ -1320,7 +1331,7 @@ function maybeTorch(x) {
 // retro_clear/retro_fill is the same fill, clamped the same way.
 function retroClear(headX) {
   const k = Math.min(cfg('SLOPECLEAR'), headX - S.trackBase);
-  const h = cfg('TUNNEL');
+  const h = cfg('TUNNELCLEAR');
   if (k < 0 || h < 2) return;
   dim.fillBlocks(
     new BlockVolume({ x: headX - k, y: S.railY + 2, z: S.centerZ },
@@ -1407,8 +1418,8 @@ let stallWarned = false;
 let lastBuildErrAt = -1e9; // rate limit: a stuck column would otherwise spam every tick
 
 function buildLoop() {
-  let budget = cfg('MAXTICK');
-  const ahead = cfg('AHEAD');
+  let budget = cfg('BUILD_PER_TICK');
+  const ahead = cfg('PACE_CART_BEHIND');
   let built = false;
   while (budget > 0 && S.headX - Math.floor(S.paceX) < ahead) {
     if (!buildReady()) break;
@@ -1456,18 +1467,18 @@ function buildLoop() {
 // ahead of the ride, stepping only onto ground whose chunk is already open
 // (its own bubble requests the next chunks; the rider's render distance
 // generates them), so between the rider's bubble and the scout's the whole
-// corridor from the rig to ~.AHEAD blocks ahead of the pace stays readable.
+// corridor from the rig to ~.PACE_CART_BEHIND blocks ahead of the pace stays readable.
 
 // The scout's post: far enough ahead that its bubble covers the ENTIRE
-// sample window of a head at full gap (head at paceX + .AHEAD, sampling to
-// +SAMPLE_REACH, +8 slack) -- covering only the buildReady margin, as an
+// sample window of a head at full gap (head at paceX + .PACE_CART_BEHIND,
+// sampling to +.SAMPLE_WINDOW, +8 slack) -- covering only the buildReady margin, as an
 // earlier version did, left the far samples poking past the bubble into
 // border chunks every column at full gap. Never behind the rig, and never
 // so far ahead that the bubble detaches from the rider's own (see
 // SCOUT_LEAD_MAX); past that ceiling the far samples degrade gracefully.
 function scoutTargetX() {
-  const lead = cfg('AHEAD') - cfg('CAMAHEAD') + SAMPLE_REACH + 8 - SCOUT_REACH;
-  return S.paceX + cfg('CAMAHEAD') + Math.min(SCOUT_LEAD_MAX, Math.max(16, lead));
+  const lead = cfg('PACE_CART_BEHIND') - camAhead() + cfg('SAMPLE_WINDOW') + 8 - SCOUT_REACH;
+  return S.paceX + camAhead() + Math.min(SCOUT_LEAD_MAX, Math.max(16, lead));
 }
 
 // Per-tick scout keeper + mover, same self-healing pattern as the rig: a
@@ -1479,7 +1490,7 @@ function tickScout() {
   if (!scout) {
     S.scoutMissing += 1;
     if (S.scoutMissing > 40) {
-      const rigX = S.paceX + cfg('CAMAHEAD');
+      const rigX = S.paceX + camAhead();
       if (chunkLoaded(rigX, S.centerZ)) {
         try {
           scout = dim.spawnEntity(SCOUT_TYPE, { x: rigX, y: SCOUT_Y, z: S.centerZ + 0.5 });
@@ -1506,7 +1517,7 @@ function tickScout() {
     // mean the scout is stranded way off post, e.g. after a resume: snap
     // it home to the rig instead.)
     if (step < 0) {
-      const rigX = S.paceX + cfg('CAMAHEAD');
+      const rigX = S.paceX + camAhead();
       if (chunkLoaded(rigX, S.centerZ)) {
         try { scout.teleport({ x: rigX, y: SCOUT_Y, z: S.centerZ + 0.5 }); } catch { /* retry */ }
       }
@@ -1559,7 +1570,7 @@ function oceanCheck() {
   // above any water anyway) -- skip the whole ocean system. tickPace resets
   // the counters and .fast on the toggle-off transition.
   if (modeOn('SKYMODE')) return;
-  const rigX = S.paceX + cfg('CAMAHEAD');
+  const rigX = S.paceX + camAhead();
   const chunkNow = Math.floor(rigX / 16);
   if (chunkNow === S.lastChunk) return;
   S.lastChunk = chunkNow;
@@ -1656,7 +1667,7 @@ function tickPace() {
   // with the remaining track buffer, so a starved builder reads as the ride
   // gently easing off -- a hard positional clamp here made the cart surge and
   // jerk whenever the buffer ran low at ocean speed.
-  const headroom = (S.headX - cfg('CAMAHEAD') - 8) - S.paceX;
+  const headroom = (S.headX - camAhead() - 8) - S.paceX;
   const allowed = Math.max(0, Math.min(S.targetSpeed, headroom / 40));
   if (S.paceSpeed < allowed) S.paceSpeed = Math.min(allowed, S.paceSpeed + accel);
   else if (S.paceSpeed > allowed) S.paceSpeed = Math.max(allowed, S.paceSpeed - accel * 2);
@@ -1674,7 +1685,7 @@ function camFollow() {
   if (S.trackY.length === 0) return undefined;
   const maxi = S.trackY.length - 1;
   const fx = S.paceX - Math.floor(S.paceX);
-  let ci = Math.floor(S.paceX) - S.trackBase + cfg('CAMAHEAD');
+  let ci = Math.floor(S.paceX) - S.trackBase + camAhead();
   ci = Math.min(Math.max(ci, 0), maxi);
 
   const r = camHeight({
@@ -1686,7 +1697,8 @@ function camFollow() {
   return r.sy;
 }
 
-// cam_move: fly the rig to CAMAHEAD blocks east of the pace position at the
+// cam_move: fly the rig camAhead() blocks east of the pace position (i.e.
+// .RIDER_BEHIND behind the build head) at the
 // smoothed height. The rig's two visible-motion pieces are driven the SAME
 // way but INDEPENDENTLY: the seat (carrying the player, the ride's only
 // mount) and the cart prop, which is NOT mounted on anything -- it is pure
@@ -1851,7 +1863,7 @@ function tickSound() {
 
 function camMove(seat, cart, sy) {
   const target = {
-    x: S.paceX + cfg('CAMAHEAD'),
+    x: S.paceX + camAhead(),
     y: sy + CART_REST + cfg('CAMHEIGHT') / 10,
     z: S.centerZ + 0.5,
   };
@@ -2130,7 +2142,7 @@ function begin(player) {
   dbg(`ride speed set to §f${landSpeed()}§7 blocks/s`);
 
   // Wait (up to ~50 s) for the ticking area to load/generate both the start
-  // column and the rig position (startX + .CAMAHEAD, where the ride cart
+  // column and the rig position (startX + camAhead(), where the ride cart
   // spawns), then finish the launch. Ticking-area generation is asynchronous
   // with no guaranteed latency, so this polls rather than assuming a delay.
   let waited = 0;
@@ -2139,7 +2151,7 @@ function begin(player) {
     waited += 1;
     if (waited === 40) say('§7Still generating the starting terrain...');
     const ready = chunkLoaded(startX, S.centerZ)
-      && chunkLoaded(startX + cfg('CAMAHEAD'), S.centerZ);
+      && chunkLoaded(startX + camAhead(), S.centerZ);
     if (!ready && waited < 200) return;
     system.clearRun(poll);
     try {
@@ -2195,12 +2207,12 @@ function beginPhase2(startX) {
   // has run yet, matching Java's begin, where .veg starts at 0).
   try { placeColumn(startX, S.railY, 0, false); } catch { /* still generating; loop heals it */ }
   S.paceX = startX + 0.5;
-  S.lastChunk = Math.floor((S.paceX + cfg('CAMAHEAD')) / 16);
+  S.lastChunk = Math.floor((S.paceX + camAhead()) / 16);
   S.oceanRun = 0;
   S.landRun = 0;
 
   // Pre-build past the rig position so the viewer starts on ready track.
-  const preBudget = cfg('CAMAHEAD') + 32;
+  const preBudget = camAhead() + 32;
   for (let i = 0; i < preBudget; i++) {
     if (!buildReady()) break;
     try { advance(); } catch { break; }
@@ -2217,7 +2229,7 @@ function beginPhase2(startX) {
   S.s2 = S.railY;
   const sy = camFollow() ?? S.railY;
   const rigPos = {
-    x: S.paceX + cfg('CAMAHEAD'),
+    x: S.paceX + camAhead(),
     y: sy + CART_REST + cfg('CAMHEIGHT') / 10,
     z: S.centerZ + 0.5,
   };
@@ -2459,6 +2471,15 @@ function init() {
   // numbers deliberately kept out of the user config.
   runCmd(`function ${NS}/consts`);
 
+  // The distance knobs' ordering invariant (all measured from the build
+  // head; Java's load warns the same way): a rig at or behind the pace
+  // position glides over unsmoothed track and the ocean check samples the
+  // wrong chunk. (.SAMPLE_WINDOW vs .TERRAIN_GENAHEAD is Java's forceload
+  // concern -- here the scout's post already scales with the window.)
+  if (camAhead() <= 0) {
+    say('§eConfig warning: .RIDER_BEHIND must stay BELOW .PACE_CART_BEHIND (the camera rig has to ride ahead of the hidden pace position). The ride will misbehave until one of them is adjusted.');
+  }
+
   loadState();
   if (S.started) say('§7Ride resumed. Run §b/function infinite_rail/stop§7 to end it.');
   else say('§7Loaded. A fresh world starts the ride automatically; run §b/function infinite_rail/start§7 to (re)start it here.');
@@ -2643,7 +2664,7 @@ function tick() {
     S.rigMissing += 1;
     if (S.rigMissing > 40) {
       const sy = camFollow();
-      const rigX = S.paceX + cfg('CAMAHEAD');
+      const rigX = S.paceX + camAhead();
       if (sy !== undefined && chunkLoaded(rigX, S.centerZ)) {
         try {
           seat = spawnRig({

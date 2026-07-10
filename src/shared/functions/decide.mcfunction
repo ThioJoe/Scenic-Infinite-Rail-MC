@@ -14,8 +14,9 @@
 # digs through the not-terrain list -- trees, structures -- and the scan
 # reads the rest in probe PAIRS so 1-2 block spikes of real terrain are
 # invisible to all three):
-#   .gfloor = highest ground within .DOWNLOOK  (the descent floor's basis)
-#   .gmax   = highest ground within .UPLOOK    (the climb contact trigger)
+#   .gfloor = highest ground within .DOWNLOOK_AHEAD (the descent floor's basis)
+#   .gmax   = highest ground within the scan's full reach -- the whole
+#             .SAMPLE_WINDOW (the climb contact trigger)
 #   .gcone  = the climb "schedule": over ground actually in the way (above
 #             .railY - .HOVER -- what the line already clears level needs no
 #             climb), the highest 45-DEGREE PROJECTION, height - distance:
@@ -51,8 +52,10 @@ scoreboard players operation .diff ir -= .railY ir
 scoreboard players operation .slope0 ir = .slope ir
 
 # --- Ground-contact guards (fed by each edition's near-ground scan) ---
-# Sentinels: .gfloor/.gmax arrive as -10000 when a scan window is 0 or
-# found no generated terrain (their guards fail open, the rules go inert).
+# Sentinels: .gfloor/.gmax arrive as -10000 when a scan window is 0 (the
+# down side's .DOWNLOOK_AHEAD; the climb side always scans the full sample
+# window) or found no generated terrain (their guards fail open, the rules
+# go inert).
 # .gcone arrives as -10000 when nothing within the scan needs climbing (the
 # schedule gate HOLDS -- there is nothing to be due for) and +32000 when
 # the scan had no data at all (the gate never holds -- plain average-driven
@@ -61,7 +64,7 @@ scoreboard players operation .slope0 ir = .slope ir
 # operands; .gcone is deliberately NOT seeded -- if it was never written,
 # the .cgate operation fails and .due stays 1, the correct fail-open.
 #   .dig  = one more DOWN step would land the rail below the descent floor
-#           (.gfloor + .DOWNGRACE -- the tallest ground within .DOWNLOOK).
+#           (.gfloor + .DOWNGRACE -- the tallest ground within .DOWNLOOK_AHEAD).
 #           An in-progress descent ENDS here, resting just above the ground
 #           it was about to cut into; once the ground falls away, the next
 #           descent event carries on -- >= .SAMEGAP later, like any other.
@@ -71,7 +74,7 @@ scoreboard players operation .slope0 ir = .slope ir
 #           START here (no clear runway; hold the level and wait for the
 #           drop-off instead of opening an event that would stop at once).
 #   .push = the rail is not yet a full .HOVER above the highest ground
-#           within .UPLOOK (.railY < .gmax + .HOVER) and may still overshoot
+#           within the scan (.railY < .gmax + .HOVER) and may still overshoot
 #           the target (below .target + .UPGRACE) -- an in-progress climb
 #           keeps climbing until it rides at proper hover height over the
 #           obstruction, instead of ending under (or skimming along) it and
@@ -83,7 +86,8 @@ scoreboard players operation .slope0 ir = .slope ir
 #           because the average saw a mountain coming. The flat gap keeps
 #           counting while a climb is held, so waiting costs nothing.
 # Sky mode bypasses all of these: it holds .SKYY dead level and punches
-# through whatever it meets. A scan window of 0 disables that side entirely.
+# through whatever it meets. .DOWNLOOK_AHEAD 0 disables the descent side
+# entirely; the climb side is always on (its no-data sentinels stay inert).
 scoreboard players add .gfloor ir 0
 scoreboard players add .gmax ir 0
 scoreboard players set .dig ir 0
@@ -94,18 +98,18 @@ scoreboard players operation .glim ir = .gfloor ir
 scoreboard players operation .glim ir += .DOWNGRACE cfg_terrain
 scoreboard players operation .rnext ir = .railY ir
 scoreboard players remove .rnext ir 1
-execute unless score .SKYMODE ir matches 1 if score .DOWNLOOK cfg_terrain matches 1.. if score .rnext ir < .glim ir run scoreboard players set .dig ir 1
+execute unless score .SKYMODE ir matches 1 if score .DOWNLOOK_AHEAD cfg_terrain matches 1.. if score .rnext ir < .glim ir run scoreboard players set .dig ir 1
 scoreboard players remove .rnext ir 1
-execute unless score .SKYMODE ir matches 1 if score .DOWNLOOK cfg_terrain matches 1.. if score .rnext ir < .glim ir run scoreboard players set .dig2 ir 1
+execute unless score .SKYMODE ir matches 1 if score .DOWNLOOK_AHEAD cfg_terrain matches 1.. if score .rnext ir < .glim ir run scoreboard players set .dig2 ir 1
 scoreboard players operation .glift ir = .target ir
 scoreboard players operation .glift ir += .UPGRACE cfg_terrain
 scoreboard players operation .gtop ir = .gmax ir
 scoreboard players operation .gtop ir += .HOVER cfg_terrain
-execute unless score .SKYMODE ir matches 1 if score .UPLOOK cfg_terrain matches 1.. if score .railY ir < .gtop ir if score .railY ir < .glift ir run scoreboard players set .push ir 1
+execute unless score .SKYMODE ir matches 1 if score .railY ir < .gtop ir if score .railY ir < .glift ir run scoreboard players set .push ir 1
 scoreboard players operation .cgate ir = .gcone ir
 scoreboard players operation .cgate ir += .HOVER cfg_terrain
 scoreboard players operation .cgate ir += .UPEARLY cfg_terrain
-execute unless score .SKYMODE ir matches 1 if score .UPLOOK cfg_terrain matches 1.. if score .railY ir >= .cgate ir run scoreboard players set .due ir 0
+execute unless score .SKYMODE ir matches 1 if score .railY ir >= .cgate ir run scoreboard players set .due ir 0
 
 # --- Continue an in-progress climb/descent until it reaches the target ---
 # A climb also continues past the target while ground is still at or above

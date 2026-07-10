@@ -1,4 +1,4 @@
-# Restore the land cruising speed (.speed -- the config default .MAXSPEED
+# Restore the land cruising speed (.speed -- the config default .DEFAULTSPEED
 # unless adjusted with the Speed +/- items). Called by ocean_check once, on
 # the transition back to land (after .LANDCHUNKS non-ocean chunks). Not
 # re-applied afterwards, so you can still tweak the gamerule by hand on land.

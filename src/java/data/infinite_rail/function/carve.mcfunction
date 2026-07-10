@@ -1,5 +1,5 @@
 # Carves this column's clearance bore: 3 wide (Z-1..Z+1), from the rail cell
-# up to .ch blocks above it (.TUNNEL for flat columns, .TUNNELUP for slopes --
+# up to .ch blocks above it (.TUNNELCLEAR for flat columns, .TUNNELUP for slopes --
 # the caller sets both the .ch score and storage infinite_rail:carve h before
 # calling). Runs positioned at the head (the rail cell).
 #

@@ -1,7 +1,7 @@
 # Rolling chunk management, run every 16 blocks of head travel, positioned
 # at the head marker.
 
-# Force-generate terrain .GENAHEAD blocks ahead of the head (so the heightmap
+# Force-generate terrain .TERRAIN_GENAHEAD blocks ahead of the head (so the heightmap
 # scanner always has real data) and release chunks far behind; there is no
 # going back. forceload needs literal coordinates, so the distances (length,
 # and a torch-mode-aware width) are computed into storage and handed to a

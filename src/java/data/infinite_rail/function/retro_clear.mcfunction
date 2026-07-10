@@ -12,5 +12,5 @@ scoreboard players operation .rt ir = .headX ir
 scoreboard players operation .rt ir -= .trackBase ir
 scoreboard players operation .rk ir < .rt ir
 execute store result storage infinite_rail:carve k int 1 run scoreboard players get .rk ir
-execute store result storage infinite_rail:carve h int 1 run scoreboard players get .TUNNEL cfg_terrain
+execute store result storage infinite_rail:carve h int 1 run scoreboard players get .TUNNELCLEAR cfg_terrain
 function infinite_rail:retro_fill with storage infinite_rail:carve

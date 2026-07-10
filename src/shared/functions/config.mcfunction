@@ -39,7 +39,8 @@ scoreboard players set .HOVER cfg_terrain 2
 # i.e. the tunnel/headroom height. Slope columns automatically carve one block
 # taller. Keep it at least 3 (the tunnel light sits at rail+3). Bigger = airier
 # tunnels and cuttings at the cost of more blocks changed per column.
-scoreboard players set .TUNNEL cfg_terrain 6
+# (Named like .SLOPECLEAR: both describe what the carve clears.)
+scoreboard players set .TUNNELCLEAR cfg_terrain 6
 
 
 # --- Smooth camera (the ride rig) --------------------------------------------
@@ -49,9 +50,9 @@ scoreboard players set .TUNNEL cfg_terrain 6
 # climbs begin rising BEFORE the corner, steady 45-degree runs are followed
 # exactly parallel with zero lag, and descents use a reactive exponential
 # glide. The camera never drops below the rail line. Meanwhile a hidden
-# "pace cart" rides the physical rails .CAMAHEAD blocks BEHIND the viewer and
-# sets the speed -- however fast the rails push it -- so the rig inherits real
-# cart pace without any of its bounce.
+# "pace cart" rides the physical rails (.PACE_CART_BEHIND - .RIDER_BEHIND)
+# blocks BEHIND the viewer and sets the speed -- however fast the rails push
+# it -- so the rig inherits real cart pace without any of its bounce.
 
 # EXTRA rig height above the rail line, in TENTHS of a block. 0 = the ride
 # cart rests on the smoothed line exactly like a cart on a rail (recommended).
@@ -88,14 +89,19 @@ scoreboard players set .CAMSMOOTH cfg_camera 6
 # 25 seems to be an optimal number for smooth transitions.
 scoreboard players set .CAMLIFT cfg_camera 20
 
-# How many blocks the viewer rides AHEAD of the hidden pace cart. Bigger
-# pushes the empty pacing cart further behind you (it's only visible looking
-# backward). Keep it at least ~40 below .AHEAD so there's always smoothed
-# track under the rig. Applied cleanly on the next ride start; changing it
-# mid-ride shifts the view by the difference once.
+# How many blocks BEHIND THE BUILD HEAD the viewer (the camera rig) rides.
+# Like every distance knob this is measured from the head -- the column
+# currently being decided/built -- so all the forward-planning knobs read on
+# one ruler. The hidden pace cart rides .PACE_CART_BEHIND behind the head
+# (below), so the cart trails the viewer by (.PACE_CART_BEHIND -
+# .RIDER_BEHIND) blocks -- 64 at the defaults (it's only visible looking
+# backward). Keep this BELOW .PACE_CART_BEHIND (the rig must lead the cart)
+# and at least ~40 above 0 so there's always smoothed track under the rig.
+# Applied cleanly on the next ride start; changing it mid-ride shifts the
+# view by the difference once.
 # (On Bedrock the pace cart is a virtual position computed by the script, so
 # there is nothing to see behind you; the knob works the same.)
-scoreboard players set .CAMAHEAD cfg_camera 64
+scoreboard players set .RIDER_BEHIND cfg_camera 160
 
 # BEDROCK EDITION ONLY (ignored on Java). Camera mode:
 #   0 = native rig (recommended): you sit in the gliding cart with the normal
@@ -141,20 +147,21 @@ scoreboard players set .AUTOSTART ir 1
 #
 # The speed applied at ride start (and restored after every ocean sprint) is
 # the ADJUSTABLE ride speed -- the .speed state score, nudged .SPEEDSTEP
-# blocks/s per click by the "Speed -"/"Speed +" hotbar items (clamped 1..64)
+# blocks/s per click by the "Speed -"/"Speed +" hotbar items (floored at 1)
 # and reset from the Ride Settings menu. (.SPEEDSTEP is a fixed cross-edition
-# constant in the shared consts.mcfunction, deliberately not a setting here.) .MAXSPEED below is its DEFAULT: what .speed starts
-# out as, and what Reset returns it to. On Java it is applied once per
-# change, NOT continuously enforced, so you can still change /gamerule
-# yourself mid-ride if you like.
+# constant in the shared consts.mcfunction, deliberately not a setting here.)
+# .DEFAULTSPEED below is its DEFAULT: what .speed starts out as, and what
+# Reset returns it to. On Java it is applied once per change, NOT
+# continuously enforced, so you can still change /gamerule yourself mid-ride
+# if you like.
 
 # Default ride speed (blocks/second). Vanilla minecart default is 8; raise
 # it for a brisker journey.
-scoreboard players set .MAXSPEED cfg_ride 8
+scoreboard players set .DEFAULTSPEED cfg_ride 8
 
 # The DEFAULT speed while crossing open ocean (see below). 0 disables the
-# whole ocean speed-up feature and the speed stays at .MAXSPEED everywhere.
-# Like .MAXSPEED and .SKYSPEED this is only the SEED for an adjustable state
+# whole ocean speed-up feature and the speed stays at .DEFAULTSPEED everywhere.
+# Like .DEFAULTSPEED and .SKYSPEED this is only the SEED for an adjustable state
 # score (.ocnspd): while the ocean sprint is on, the Speed -/+/Reset hotbar
 # items tune the ocean cruise itself -- faster OR slower than this -- and a
 # chosen ocean speed persists across reloads/rejoins; Reset returns it here.
@@ -165,7 +172,7 @@ scoreboard players set .OCEANSPEED cfg_ride 32
 scoreboard players set .OCEANCHUNKS cfg_ride 6
 
 # How many consecutive non-ocean chunks after a speed-up before it reverts to
-# .MAXSPEED (so brief islands/gaps don't keep flipping the speed).
+# .DEFAULTSPEED (so brief islands/gaps don't keep flipping the speed).
 scoreboard players set .LANDCHUNKS cfg_ride 3
 
 
@@ -179,7 +186,7 @@ scoreboard players set .LANDCHUNKS cfg_ride 3
 
 # Minimum height difference (in blocks) before a new climb/descent is started.
 # Also acts as hysteresis, so small terrain noise never nudges the rail.
-scoreboard players set .DEADBAND cfg_terrain 2
+scoreboard players set .MIN_CHANGE cfg_terrain 2
 
 # Minimum flat blocks between two changes in the SAME direction.
 # Higher = fewer, longer swoops. Terrain that rises faster than this allows
@@ -234,7 +241,7 @@ scoreboard players set .GAPMATCH cfg_terrain 50
 # count as a stretch (gentle downhill faces keep their gap-paced swoops).
 # This knob is the required stretch length, in columns. 0 = off. The scan
 # reaches at most 96 blocks, so descents deeper than about 96 minus this
-# never shift (they wait out their gap as before); keep .GENAHEAD
+# never shift (they wait out their gap as before); keep .TERRAIN_GENAHEAD
 # comfortably above the reach. Lives in cfg_ride only because cfg_terrain
 # is full (a scoreboard sidebar shows at most 15 rows).
 scoreboard players set .GAPSTRETCH cfg_ride 50
@@ -259,31 +266,43 @@ scoreboard players set .GAPSTRETCH cfg_ride 50
 scoreboard players set .SLOPECLEAR cfg_terrain 6
 
 
-# --- Terrain-smoothing sensitivity -----------------------------------------
-# The line's DESIRED height each column is the average of 12 terrain readings
-# spread over the next 48 blocks, plus .HOVER. These two knobs clamp each
-# reading: terrain more than this many blocks ABOVE/BELOW the current average
-# only counts as this far above/below. In plain terms they set how much of a
-# height feature the line acknowledges at all.
+# --- Terrain sampling & smoothing -------------------------------------------
+# The line's DESIRED height each column is the average of terrain readings
+# taken every .SAMPLE_BLOCK_INTERVAL blocks over the next .SAMPLE_WINDOW
+# blocks ahead of the build head, plus .HOVER. All the "how far ahead"
+# knobs in this file are measured from that same head, so they read on one
+# ruler; keep the ordering  .SAMPLE_WINDOW <= .TERRAIN_GENAHEAD  (below) so
+# the whole window always reads generated terrain (load warns if violated).
 
-# Terrain higher than the current line by more than this reads as only this
-# many blocks higher. With 250 it is effectively unlimited: every mountain
-# ahead raises the desired height to its full size, so the ride goes over
-# everything it can (WHEN the climb starts is a separate question -- see
-# .UPEARLY below). Lowering it toward ~5 makes the desired height rise
-# sluggishly, so tall terrain gets tunneled into at mid-height instead.
-scoreboard players set .UPCLAMP cfg_terrain 250
+# How far ahead (blocks, from the build head) the terrain-averaging window
+# reaches. This is the line's planning horizon: it also caps the near-ground
+# scan feeding the slope-timing guards (.DOWNLOOK_AHEAD below, and the
+# climb-side scan which always uses this full reach). Longer = smoother,
+# earlier-reacting line that averages away small features; shorter = a more
+# reactive line that hugs local terrain. (The sample count is derived:
+# .SAMPLE_WINDOW / .SAMPLE_BLOCK_INTERVAL readings -- 12 at the defaults.)
+scoreboard players set .SAMPLE_WINDOW cfg_terrain 48
+
+# The spacing (blocks) between terrain readings inside the window. Smaller =
+# denser sampling (more probes per column -- costlier); larger = cheaper but
+# features narrower than the spacing can slip between readings. The sample
+# count per column is .SAMPLE_WINDOW / this.
+scoreboard players set .SAMPLE_BLOCK_INTERVAL cfg_terrain 4
 
 # Terrain lower than the current line by more than this reads as only this
 # many blocks lower. This is why a narrow 60-deep ravine is crossed as a
 # dead-level bridge (it reads as a 20-deep dip diluted across the average)
 # while a broad valley still lowers the line properly. Bigger = the line
 # dives after every hole; smaller = it bridges more and descends less.
+# (There is deliberately no upward twin: terrain ABOVE the line always
+# registers at its full height, so every mountain ahead raises the desired
+# height to its full size and the ride goes over everything it can -- WHEN
+# the climb starts is the near scan's job, .UPEARLY below.)
 scoreboard players set .DOWNCLAMP cfg_terrain 30
 
 
 # --- Ground-aware slope timing (the near-ground scan) ------------------------
-# The lookahead average above decides WHERE the rail wants to be; these five
+# The lookahead average above decides WHERE the rail wants to be; these four
 # knobs decide WHEN to move, by checking the actual ground surface just ahead
 # of the build head. Without them, slopes are timed purely by the average --
 # which lags/dilutes around edges, so the line would ramp up dozens of blocks
@@ -295,18 +314,16 @@ scoreboard players set .DOWNCLAMP cfg_terrain 30
 # falls away. The .SAMEGAP / .TURNGAP spacing rules always keep the final
 # say; these guards only hold events back or stop them early, never squeeze
 # them closer together.
-
-# How far ahead (blocks) the climb-side ground scan reaches. This is both
-# the contact detector (a climb may begin inside the deadband when the level
-# line would physically hit ground in this range) and the reach of the climb
-# SCHEDULE (see .UPEARLY) -- so it also bounds the tallest wall that can be
-# crested without any tunneling: a rise taller than this reach hits the line
-# before the ramp can finish. Effective maximum 48 (the scan's cap). 0 =
-# climb timing is ruled by the average alone (the old behavior).
-scoreboard players set .UPLOOK cfg_terrain 75
+#
+# The CLIMB side has no reach knob: it always scans the full .SAMPLE_WINDOW
+# (the line's whole planning horizon) -- the contact detector (a climb may
+# begin inside the .MIN_CHANGE deadband when the level line would physically
+# hit ground ahead) and the climb SCHEDULE (see .UPEARLY) both use it. That
+# reach also bounds the tallest wall crestable without tunneling: a rise
+# taller than the window hits the line before a 45-degree ramp can finish.
 
 # How many blocks ABOVE its average-derived target a climb may overshoot to
-# clear ground the .UPLOOK scan still sees at or above the rail line.
+# clear ground the climb-side scan still sees at or above the rail line.
 # Without this, a wide hilltop ends its climb at the crest-diluted average
 # and tunnels right under the summit. Bigger = hills are crested over more
 # often; smaller = ridgetops get punched through as before. 0 = climbs stop
@@ -325,19 +342,22 @@ scoreboard players set .UPGRACE cfg_terrain 10
 # -- the old ramp-up-way-early behavior).
 scoreboard players set .UPEARLY cfg_terrain 2
 
-# How far ahead (blocks) to scan for ground under a would-be descent step.
-# A descent never steps down into (or within .DOWNGRACE of) the TALLEST
-# surface in this range -- so descents physically cannot trench. When ground
-# blocks the next step the descent ENDS, resting just above that ground, and
-# the line carries on downward as a NEW event (>= .SAMEGAP later, exactly
-# like any other) once the ground has dropped away -- long descents down
-# rough slopes become clean 45-degree swoops separated by proper benches,
-# never 1-2 column stair-steps. The window is also the "clear runway"
-# requirement: dips and gaps NARROWER than this are crossed level (bridged)
-# instead of dipped into. Bigger = a calmer line that only descends into
-# wider openings; smaller = hugs every little hollow. 0 = descent timing is
-# ruled by the average alone (the old plow-prone behavior).
-scoreboard players set .DOWNLOOK cfg_terrain 250
+# How far ahead (blocks, from the build head) to scan for ground under a
+# would-be descent step. A descent never steps down into (or within
+# .DOWNGRACE of) the TALLEST surface in this range -- so descents physically
+# cannot trench. When ground blocks the next step the descent ENDS, resting
+# just above that ground, and the line carries on downward as a NEW event
+# (>= .SAMEGAP later, exactly like any other) once the ground has dropped
+# away -- long descents down rough slopes become clean 45-degree swoops
+# separated by proper benches, never 1-2 column stair-steps. The window is
+# also the "clear runway" requirement: dips and gaps NARROWER than this are
+# crossed level (bridged) instead of dipped into. Bigger = a calmer line
+# that only descends into wider openings; smaller = hugs every little
+# hollow. HARD-CAPPED at .SAMPLE_WINDOW (the scan never reaches past the
+# sampling horizon -- values above it just mean "the full window", like the
+# default here). 0 = descent timing is ruled by the average alone (the old
+# plow-prone behavior).
+scoreboard players set .DOWNLOOK_AHEAD cfg_terrain 250
 
 # The clearance a descending step keeps above that tallest scanned surface.
 # 0 = a descent may touch down exactly onto the highest nearby ground;
@@ -348,26 +368,35 @@ scoreboard players set .DOWNGRACE cfg_terrain 1
 
 
 # --- Performance / world generation ----------------------------------------
+# The build HEAD (the column currently being decided/built) is the zero
+# point every distance in this file is measured from. Ahead of it (+east):
+# the sampling window (.SAMPLE_WINDOW) and the generated corridor
+# (.TERRAIN_GENAHEAD). Behind it: the rig (.RIDER_BEHIND) and the hidden
+# pace cart (.PACE_CART_BEHIND). Keep the ordering
+#   .SAMPLE_WINDOW <= .TERRAIN_GENAHEAD      (scan only generated terrain)
+#   .RIDER_BEHIND  <  .PACE_CART_BEHIND      (the rig must lead the cart)
+# -- load warns if either is violated.
 
-# How far ahead of the (hidden) pace cart the RAILS are kept built. The
-# viewer rides .CAMAHEAD ahead of that cart, so the visible track ahead of
-# them is roughly .AHEAD - .CAMAHEAD. Keep this comfortably above .CAMAHEAD,
-# and below ~250 (the rolling forceload releases chunks 256 behind the build
+# How many blocks BEHIND the build head the (hidden) pace cart rides --
+# equivalently: how far ahead of the cart the rails are kept built. The
+# viewer glides .RIDER_BEHIND behind the head, so the visible track ahead of
+# them is roughly this minus .RIDER_BEHIND. Keep it above .RIDER_BEHIND, and
+# below ~250 (the rolling forceload releases chunks 256 behind the build
 # head -- the pace cart must never fall into that zone).
-scoreboard players set .AHEAD cfg_ride 224
+scoreboard players set .PACE_CART_BEHIND cfg_ride 224
 
-# How far ahead of the track head (in blocks) terrain is force-GENERATED, so the
-# world exists before the rails reach it. Separate from .AHEAD: rails are built
-# .AHEAD ahead of the cart, and chunks are generated .GENAHEAD ahead of the rail
-# head -- so terrain exists roughly .AHEAD + .GENAHEAD blocks ahead of the cart.
-# Bigger = more generation time (fewer flat "not generated yet" spots if the
-# ride outruns world-gen) at the cost of more loaded chunks. Keep it above ~64
-# (the heightmap scanner samples 48 blocks past the head).
-scoreboard players set .GENAHEAD cfg_ride 192
+# How far ahead of the build head (in blocks) terrain is force-GENERATED, so
+# the world exists before the sampling window and the rails reach it. Terrain
+# therefore exists roughly .PACE_CART_BEHIND + .TERRAIN_GENAHEAD blocks ahead
+# of the cart. Bigger = more generation time (fewer flat "not generated yet"
+# spots if the ride outruns world-gen) at the cost of more loaded chunks.
+# Keep it comfortably above .SAMPLE_WINDOW (the scanner must only ever read
+# generated terrain).
+scoreboard players set .TERRAIN_GENAHEAD cfg_ride 192
 
 # Maximum track columns built per game tick. Higher = better catch-up if the
 # server hitches, at the cost of more work per tick.
-scoreboard players set .MAXTICK cfg_ride 15
+scoreboard players set .BUILD_PER_TICK cfg_ride 15
 
 
 # --- Ride modes (see the mode_* functions) -----------------------------------
@@ -476,3 +505,29 @@ scoreboard players set .CARTSOUND cfg_ride 1
 # being set but the cart never gets faster, recreate the world with that
 # experiment/feature turned on.
 scoreboard players set .DEBUGMODE ir 0
+
+
+# --- Legacy cleanup (renamed / retired settings) -----------------------------
+# These scores were renamed or retired; old worlds still carry them in the
+# save (and they would linger forever on the Debug menu's sidebar views).
+# Resetting a score that was never set is a harmless no-op, so this block
+# costs nothing on fresh worlds. The renames (old -> new):
+#   .TUNNEL -> .TUNNELCLEAR          .DEADBAND -> .MIN_CHANGE
+#   .MAXSPEED -> .DEFAULTSPEED       .DOWNLOOK -> .DOWNLOOK_AHEAD
+#   .AHEAD -> .PACE_CART_BEHIND      .GENAHEAD -> .TERRAIN_GENAHEAD
+#   .MAXTICK -> .BUILD_PER_TICK      .CAMAHEAD -> .RIDER_BEHIND (now measured
+#                                     from the build head: old 64 ahead of the
+#                                     cart == new 160 behind the head)
+# Retired outright:
+#   .UPLOOK  -- the climb-side scan now always uses the full .SAMPLE_WINDOW
+#   .UPCLAMP -- terrain above the line always registers at full height
+scoreboard players reset .TUNNEL cfg_terrain
+scoreboard players reset .DEADBAND cfg_terrain
+scoreboard players reset .UPCLAMP cfg_terrain
+scoreboard players reset .UPLOOK cfg_terrain
+scoreboard players reset .DOWNLOOK cfg_terrain
+scoreboard players reset .CAMAHEAD cfg_camera
+scoreboard players reset .MAXSPEED cfg_ride
+scoreboard players reset .AHEAD cfg_ride
+scoreboard players reset .GENAHEAD cfg_ride
+scoreboard players reset .MAXTICK cfg_ride

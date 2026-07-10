@@ -36,8 +36,8 @@ export default defineSuite('long ride endurance', ({ test }) => {
 
   test('build gap bounded by .AHEAD for the whole run endpoint', async ({ mc }) => {
     const gap = await mc.score('.gap', 'ir');
-    const ahead = await mc.score('.AHEAD', 'cfg_ride');
-    const maxTick = await mc.score('.MAXTICK', 'cfg_ride');
+    const ahead = await mc.score('.PACE_CART_BEHIND', 'cfg_ride');
+    const maxTick = await mc.score('.BUILD_PER_TICK', 'cfg_ride');
     between(gap, 1, ahead + maxTick, '.gap within bounds');
   });
 
@@ -79,8 +79,8 @@ export default defineSuite('long ride endurance', ({ test }) => {
     const seatY = await mc.entityNum('@e[type=item_display,tag=ir_seat,limit=1]', 'Pos[1]');
     const cartX = await mc.entityNum('@e[type=minecart,tag=ir_cart,limit=1]', 'Pos[0]');
     ok(seatX !== null && cartX !== null, 'rig + cart alive');
-    const camAhead = await mc.score('.CAMAHEAD', 'cfg_camera');
-    closeTo(seatX - cartX, camAhead, 2.5, 'seat still .CAMAHEAD ahead of the pace cart');
+    const camAhead = (await mc.score('.PACE_CART_BEHIND', 'cfg_ride')) - (await mc.score('.RIDER_BEHIND', 'cfg_camera'));
+    closeTo(seatX - cartX, camAhead, 2.5, 'seat still the rig lead ahead of the pace cart');
     const base = await mc.score('.trackBase', 'ir');
     const idx = Math.min(await mc.trackLen() - 1, Math.max(0, Math.floor(seatX) - base));
     const lineY = await mc.trackY(idx);

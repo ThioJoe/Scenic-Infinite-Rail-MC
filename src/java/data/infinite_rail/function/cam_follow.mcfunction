@@ -1,7 +1,7 @@
 # Per-tick camera driver (see CONTEXT.md 7g). The rider sits -- permanently,
 # mounted exactly once per ride -- in a real minecart (ir_ride) glued to the
 # invisible camera seat (ir_seat), and this function flies that rig along a
-# CONSTRUCTED S-curve .CAMAHEAD blocks ahead of the hidden pace cart, built
+# CONSTRUCTED S-curve (.PACE_CART_BEHIND - .RIDER_BEHIND) blocks ahead of the hidden pace cart, built
 # from the track's recorded profile:
 #
 #   lifted(x) = min( max of railY over [x .. x+.CAMLIFT+2],  railY(x)+.CAMLIFT )
@@ -35,7 +35,8 @@ execute unless data storage infinite_rail:track y[0] run return 0
 # --- Pace-cart position -> rig column index .ci and sub-block fraction .fx ---
 # Both derive from ONE fixed-point read (.cxm = X*1000) so they can never
 # disagree about which column the cart is in; floorMod keeps the fraction
-# correct west of X=0. The rig rides .CAMAHEAD columns ahead of the cart.
+# correct west of X=0. The rig rides (.PACE_CART_BEHIND - .RIDER_BEHIND)
+# columns ahead of the cart (both knobs measure from the build head).
 execute store result score .cxm ir run data get entity @e[type=minecart,tag=ir_cart,limit=1] Pos[0] 1000
 scoreboard players operation .fx ir = .cxm ir
 scoreboard players operation .fx ir %= .C1000 ir
@@ -45,7 +46,8 @@ scoreboard players operation .ci ir = .cxm ir
 scoreboard players operation .ci ir -= .fx ir
 scoreboard players operation .ci ir /= .C1000 ir
 scoreboard players operation .ci ir -= .trackBase ir
-scoreboard players operation .ci ir += .CAMAHEAD cfg_camera
+scoreboard players operation .ci ir += .PACE_CART_BEHIND cfg_ride
+scoreboard players operation .ci ir -= .RIDER_BEHIND cfg_camera
 scoreboard players operation .cmaxi ir = .headX ir
 scoreboard players operation .cmaxi ir -= .trackBase ir
 execute if score .ci ir matches ..-1 run scoreboard players set .ci ir 0

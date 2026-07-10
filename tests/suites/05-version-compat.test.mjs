@@ -42,7 +42,7 @@ export default defineSuite('server version compatibility', ({ test }) => {
     ok(rule, 'max-speed rule name in storage');
     const v = await gameruleQuery(mc, rule);
     note(`${rule} = ${v}`);
-    if (v === null) fail(`gamerule '${rule}' does not exist on this server version -- every speed control (.MAXSPEED, Speed +/- items, ocean sprint, sky cruise) is inert`);
+    if (v === null) fail(`gamerule '${rule}' does not exist on this server version -- every speed control (.DEFAULTSPEED, Speed +/- items, ocean sprint, sky cruise) is inert`);
   });
 
   test('weather/daylight-cycle gamerules exist (rain & time modes)', async ({ mc }) => {

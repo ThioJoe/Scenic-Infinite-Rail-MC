@@ -1,5 +1,5 @@
 # Running flat: begin a climb/descent only if BOTH hold:
-#   1. the target is at least .DEADBAND blocks away (ignore small terrain noise), and
+#   1. the target is at least .MIN_CHANGE blocks away (ignore small terrain noise), and
 #   2. enough flat distance has passed since the last event --
 #        .SAMEGAP columns to slope again in the SAME direction, or
 #        .TURNGAP columns to reverse direction
@@ -11,9 +11,9 @@
 # ("build a bridge instead of going down").
 
 scoreboard players set .want ir 0
-execute if score .diff ir >= .DEADBAND cfg_terrain run scoreboard players set .want ir 1
+execute if score .diff ir >= .MIN_CHANGE cfg_terrain run scoreboard players set .want ir 1
 scoreboard players set .ndead ir 0
-scoreboard players operation .ndead ir -= .DEADBAND cfg_terrain
+scoreboard players operation .ndead ir -= .MIN_CHANGE cfg_terrain
 execute if score .diff ir <= .ndead ir run scoreboard players set .want ir -1
 
 # --- Ground-contact overrides (the near scan; see decide's guard block) ---
@@ -25,13 +25,15 @@ execute if score .diff ir <= .ndead ir run scoreboard players set .want ir -1
 # cause a gap-block later.
 execute if score .want ir matches 1 if score .due ir matches 0 run scoreboard players set .want ir 0
 # Climb EARLY (inside the deadband): the level line is about to plow into
-# terrain within .UPLOOK (.gmax above the rail), the average confirms rising
+# terrain within the near scan's reach (.gmax above the rail -- the climb
+# side always scans the full sample window; .gmax's no-data sentinel keeps
+# this inert when there is nothing to read), the average confirms rising
 # ground (.diff >= 1), and the schedule agrees (.due): want the climb now
 # instead of tunneling in and climbing late. The spacing gaps below still
 # have the final say.
-execute unless score .SKYMODE ir matches 1 if score .UPLOOK cfg_terrain matches 1.. if score .want ir matches 0 if score .diff ir matches 1.. if score .gmax ir > .railY ir if score .due ir matches 1 run scoreboard players set .want ir 1
+execute unless score .SKYMODE ir matches 1 if score .want ir matches 0 if score .diff ir matches 1.. if score .gmax ir > .railY ir if score .due ir matches 1 run scoreboard players set .want ir 1
 # Descend LATE: never START a descent without clear runway -- if there is
-# not room for even two steps above the tallest ground within .DOWNLOOK
+# not room for even two steps above the tallest ground within .DOWNLOOK_AHEAD
 # (.dig2, from decide), hold the level and let the ground fall away first.
 # The descent then begins at the drop-off and glides down in open air,
 # rather than opening an event that would stop on its first step.
@@ -77,7 +79,7 @@ scoreboard players operation .gmag ir *= .want ir
 # (and the schedule forces climbs to start exactly there), so the size of
 # what is coming is taken from the near scan instead where it reads larger:
 # .gmax + .HOVER - .railY, the climbing actually needed to hover over the
-# highest ground within .UPLOOK. (.gmax's no-data sentinel -10000 makes
+# highest ground within the scan. (.gmax's no-data sentinel -10000 makes
 # .gup hugely negative -- the max then keeps the average's answer.)
 # Descents hold ON TOP of the drop while the average falls away below, so
 # .diff already shows a descent's full size by the time one is wanted.

@@ -28,10 +28,9 @@ scoreboard objectives add ir_menu trigger
 # menu_tick hands it to speed_click (which tells them apart by custom_data).
 scoreboard objectives add ir_click minecraft.used:minecraft.carrot_on_a_stick
 
-# Internal constant: number of heightmap samples averaged per column. This is
-# fixed by the sample count in sample_window.mcfunction -- do not change it
-# here on its own, so it stays out of the user config.
-scoreboard players set .C12 ir 12
+# (The old .C12 sample-count constant is gone: the count is now derived per
+# column by sample_window -- .SAMPLE_WINDOW / .SAMPLE_BLOCK_INTERVAL, into
+# .winn -- so the window is a real config knob instead of a hardcoded 12.)
 
 # Internal constants for the camera math: fixed-point multipliers
 # (.CAMHEIGHT/.CAMLIFT are configured in tenths of a block; heights are
@@ -58,9 +57,17 @@ function infinite_rail:modes_init
 
 # Derived from the tunables above: slope columns carve one block taller than
 # flat ones for extra headroom as the cart rises/falls. Recomputed here so it
-# tracks .TUNNEL on every /reload.
-scoreboard players operation .TUNNELUP ir = .TUNNEL cfg_terrain
+# tracks .TUNNELCLEAR on every /reload.
+scoreboard players operation .TUNNELUP ir = .TUNNELCLEAR cfg_terrain
 scoreboard players add .TUNNELUP ir 1
+
+# The distance knobs' ordering invariants (all measured from the build head
+# -- see config.mcfunction). Violations don't crash anything, they just
+# quietly degrade the ride (samples reading ungenerated air fall back to
+# the rolling average; a rig behind the pace cart glides over unsmoothed
+# track), so say so loudly once per (re)load instead.
+execute if score .SAMPLE_WINDOW cfg_terrain > .TERRAIN_GENAHEAD cfg_ride run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Config warning: .SAMPLE_WINDOW is larger than .TERRAIN_GENAHEAD, so the terrain scanner reaches past the generated corridor -- far samples will fall back to the rolling average. Raise .TERRAIN_GENAHEAD or shrink the window.","color":"yellow"}]
+execute if score .RIDER_BEHIND cfg_camera >= .PACE_CART_BEHIND cfg_ride run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Config warning: .RIDER_BEHIND must stay BELOW .PACE_CART_BEHIND (the camera rig has to ride ahead of the hidden pace cart). The ride will misbehave until one of them is adjusted.","color":"yellow"}]
 
 # Load the version-specific command/gamerule names (e.g. the minecart max-speed
 # gamerule name into storage infinite_rail:speed rule). The base names.mcfunction
@@ -73,7 +80,7 @@ function infinite_rail:names
 # 65536 commands / 65536 execution forks, and a chain that exceeds a budget
 # is TRUNCATED SILENTLY, which is undebuggable in the field. The launch no
 # longer depends on this (it is phased across ticks -- launch_tick), but
-# heavy config values (.MAXTICK, .UPLOOK) deserve headroom. Names are
+# heavy config values (.BUILD_PER_TICK, .SAMPLE_WINDOW) deserve headroom. Names are
 # version-dependent (snake_case on 26.x), so they come from names.mcfunction
 # via set_rule.
 data modify storage infinite_rail:rule rule set from storage infinite_rail:names chain_length

@@ -16,8 +16,8 @@ export default defineSuite('ride bootstrap & build pipeline', ({ test }) => {
     eq(await mc.score('.started', 'ir'), 2, 'begin hands off to the phased launch');
     eq(await mc.score('.autodone', 'ir'), 1, 'auto-starter disarmed forever');
     const headX = await mc.score('.headX', 'ir');
-    const camAhead = await mc.score('.CAMAHEAD', 'cfg_camera');
-    eq(await mc.score('.pregoal', 'ir'), headX + camAhead + 32, 'runway goal = start + .CAMAHEAD + 32');
+    const camAhead = (await mc.score('.PACE_CART_BEHIND', 'cfg_ride')) - (await mc.score('.RIDER_BEHIND', 'cfg_camera'));
+    eq(await mc.score('.pregoal', 'ir'), headX + camAhead + 32, 'runway goal = start + the rig lead + 32');
     eq(await mc.score('.trackBase', 'ir'), headX, 'track history anchored at the head');
     eq(await mc.trackLen(), 1, 'history holds exactly the first column');
     eq(await mc.trackY(0), await mc.score('.railY', 'ir'), 'column 0 recorded at .railY');
@@ -96,15 +96,15 @@ export default defineSuite('ride bootstrap & build pipeline', ({ test }) => {
     ok(m && parseInt(m[1], 10) >= 10, `expected many disguise displays, got ${m?.[1]}`);
   });
 
-  test('pace cart rolls east and the camera rig flies .CAMAHEAD ahead', { timeout: 240000 }, async ({ mc, note }) => {
+  test('pace cart rolls east and the camera rig flies the rig lead ahead', { timeout: 240000 }, async ({ mc, note }) => {
     await summonRig(mc);
     const cartX0 = await mc.entityNum('@e[type=minecart,tag=ir_cart,limit=1]', 'Pos[0]');
     await mc.sprint(300, { timeoutMs: 120000 });
     const cartX = await mc.entityNum('@e[type=minecart,tag=ir_cart,limit=1]', 'Pos[0]');
     ok(cartX > cartX0 + 30, `pace cart should roll east (moved ${(cartX - cartX0).toFixed(1)} blocks in 300 ticks)`);
     const seatX = await mc.entityNum('@e[type=item_display,tag=ir_seat,limit=1]', 'Pos[0]');
-    const camAhead = await mc.score('.CAMAHEAD', 'cfg_camera');
-    closeTo(seatX - cartX, camAhead, 2.5, 'rig rides .CAMAHEAD blocks ahead of the pace cart');
+    const camAhead = (await mc.score('.PACE_CART_BEHIND', 'cfg_ride')) - (await mc.score('.RIDER_BEHIND', 'cfg_camera'));
+    closeTo(seatX - cartX, camAhead, 2.5, 'rig rides (.PACE_CART_BEHIND - .RIDER_BEHIND) blocks ahead of the pace cart');
     note(`cart ${cartX0.toFixed(1)} -> ${cartX.toFixed(1)}, seat ${seatX.toFixed(1)}`);
   });
 
@@ -124,11 +124,11 @@ export default defineSuite('ride bootstrap & build pipeline', ({ test }) => {
     includes(r, 'ir_ride', 'seat carries the ride cart as passenger');
   });
 
-  test('builder keeps the head within .AHEAD of the cart', async ({ mc }) => {
+  test('builder keeps the head within .PACE_CART_BEHIND of the cart', async ({ mc }) => {
     const gap = await mc.score('.gap', 'ir');
-    const ahead = await mc.score('.AHEAD', 'cfg_ride');
-    const maxTick = await mc.score('.MAXTICK', 'cfg_ride');
-    between(gap, 1, ahead + maxTick, `.gap (${gap}) must stay within .AHEAD (${ahead})`);
+    const ahead = await mc.score('.PACE_CART_BEHIND', 'cfg_ride');
+    const maxTick = await mc.score('.BUILD_PER_TICK', 'cfg_ride');
+    between(gap, 1, ahead + maxTick, `.gap (${gap}) must stay within .PACE_CART_BEHIND (${ahead})`);
   });
 
   test('chunk pipeline healthy: head never went missing', async ({ mc }) => {
