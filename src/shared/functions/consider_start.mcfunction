@@ -92,6 +92,34 @@ execute if score .GAPMATCH cfg_terrain matches 1.. if score .gmag ir < .gth ir r
 execute unless score .want ir matches 0 run scoreboard players operation .need ir -= .gapcut ir
 execute unless score .need ir matches 0.. run scoreboard players set .need ir 0
 
+# --- The stretch shift (descents only; the "logical second pass") ---
+# A gap-blocked descent may jump the gap ENTIRELY when the native shift
+# scan has already verified, over the terrain ahead, everything the wait
+# was for: the whole planned 45-degree descent path stays clear of ground
+# (so the floor guard cannot cut it into pieces -- the shifted descent is
+# the SAME single event to the SAME landing level), and the landing is a
+# real STRETCH -- .GAPSTRETCH columns of ground sitting at the landing
+# level -- so the calm the gap exists to guarantee simply happens at the
+# bottom instead of up on a clifftop bridge. .sver is the scan's verified
+# horizon in blocks (0 = not verified / not applicable / feature off;
+# never written by an old native side = the comparison fails, the correct
+# fail-closed); the shift fires when it covers the descent (|.diff|, via
+# the .want sign trick) plus the landing stretch. And like the credit, the
+# shift must be WORTH IT: the descent must be at least .GAPMATCH percent
+# of the gap it is jumping (.need, after the credit -- .gmag still holds
+# |.diff| here for a descent), or a verified but tiny dip could jump a
+# big gap and busy up gently rolling terrain -- the exact bobbing the
+# gaps exist to stop. Climbs have no shift: their just-in-time start is
+# the climb schedule's job (.due), and a gap-late climb is what the
+# credit above is for.
+scoreboard players operation .swant ir = .diff ir
+scoreboard players operation .swant ir *= .want ir
+scoreboard players operation .swant ir += .GAPSTRETCH cfg_ride
+scoreboard players operation .sbig ir = .need ir
+scoreboard players operation .sbig ir *= .GAPMATCH cfg_terrain
+scoreboard players operation .sbig ir /= .C100 ir
+execute unless score .want ir matches 0.. if score .GAPSTRETCH cfg_ride matches 1.. if score .sver ir >= .swant ir if score .gmag ir >= .sbig ir run scoreboard players set .need ir 0
+
 # Enough distance -> start the event; otherwise hold (tunnel/bridge) and keep
 # counting. The .slope guard skips the increment when start_event just fired
 # (it sets .slope nonzero and zeroes .flat).

@@ -222,6 +222,23 @@ scoreboard players set .GAPRATIO cfg_terrain 50
 # requirement (any wanted change may use the discount).
 scoreboard players set .GAPMATCH cfg_terrain 50
 
+# The stretch shift: a DESCENT that is only waiting for a spacing gap may
+# jump the gap entirely when a "logical second pass" over the terrain ahead
+# verifies the whole plan before anything is built: the entire 45-degree
+# descent path must stay clear of the ground (by .DOWNGRACE -- so it lands
+# as ONE unbroken swoop at the same level it would have reached anyway),
+# and the landing must be a real STRETCH -- this many columns of ground
+# sitting at the landing level. The calm the gap exists to guarantee then
+# simply happens at the bottom, instead of as a long flat bridge
+# overshooting a peak. Ground still falling away past the landing does NOT
+# count as a stretch (gentle downhill faces keep their gap-paced swoops).
+# This knob is the required stretch length, in columns. 0 = off. The scan
+# reaches at most 96 blocks, so descents deeper than about 96 minus this
+# never shift (they wait out their gap as before); keep .GENAHEAD
+# comfortably above the reach. Lives in cfg_ride only because cfg_terrain
+# is full (a scoreboard sidebar shows at most 15 rows).
+scoreboard players set .GAPSTRETCH cfg_ride 50
+
 
 # --- Track clearing / vegetation sparing ------------------------------------
 # The carve spares natural vegetation (trees, leaves, giant mushrooms, bamboo,

@@ -17,8 +17,10 @@
 //    - climbs never start ahead of schedule (the 45-degree cone + #UPEARLY)
 //    - flat gaps between events respect #SAMEGAP / #TURNGAP minus the
 //      big-event gap credit (#GAPRATIO / #GAPMATCH -- a large previous event
-//      shortens the next gap), recomputed exactly; and on the purpose-built
-//      terrains the credit must actually engage at least once
+//      shortens the next gap) and minus the stretch shift (#GAPSTRETCH -- a
+//      scan-verified descent onto a landing stretch jumps its gap outright),
+//      recomputed exactly; and on the purpose-built terrains both must
+//      actually engage at least once, without splitting the shifted descent
 //    - descents never step below the descent floor (the TALLEST near-scan
 //      surface + #DOWNGRACE -- no trenching), never start without two-step
 //      runway, and never end while the floor below is still clear
@@ -182,13 +184,16 @@ function inRange(v, range) {
 // Every knob is read from the emitted config.mcfunction via the interpreter.
 // ---------------------------------------------------------------------------
 const CFG_KEYS = ['HOVER', 'DEADBAND', 'SAMEGAP', 'TURNGAP', 'GAPRATIO', 'GAPMATCH',
-  'UPCLAMP', 'DOWNCLAMP', 'UPLOOK', 'UPGRACE', 'UPEARLY', 'DOWNLOOK', 'DOWNGRACE',
-  'CAMBLEND', 'CAMLIFT', 'CAMSMOOTH', 'CAMAHEAD', 'SLOPECLEAR'];
+  'GAPSTRETCH', 'UPCLAMP', 'DOWNCLAMP', 'UPLOOK', 'UPGRACE', 'UPEARLY',
+  'DOWNLOOK', 'DOWNGRACE', 'CAMBLEND', 'CAMLIFT', 'CAMSMOOTH', 'CAMAHEAD',
+  'SLOPECLEAR'];
 // The objective each knob lives in (the config split -- must match
-// config.mcfunction; camera knobs live in cfg_camera, the rest of CFG_KEYS
-// in cfg_terrain, and the sky knobs used by the sky-mode test in cfg_ride).
+// config.mcfunction; camera knobs live in cfg_camera, .GAPSTRETCH in
+// cfg_ride (cfg_terrain is at the 15-row sidebar cap), the rest of
+// CFG_KEYS in cfg_terrain, and the sky knobs used by the sky-mode test in
+// cfg_ride).
 const CFG_OBJ = Object.fromEntries(CFG_KEYS.map((k) => [
-  k, k.startsWith('CAM') ? 'cfg_camera' : 'cfg_terrain',
+  k, k.startsWith('CAM') ? 'cfg_camera' : k === 'GAPSTRETCH' ? 'cfg_ride' : 'cfg_terrain',
 ]));
 const readCfg = (sim) => Object.fromEntries(CFG_KEYS.map((k) => [k, sim.get(k, CFG_OBJ[k])]));
 
@@ -239,11 +244,42 @@ function advance(sim, S, surface, cfg) {
   gmax ??= -10000;
   gcone ??= valid === 0 ? 32000 : -10000;
 
+  // The stretch-shift scan (Java's shift_scan/shift_step, Bedrock's
+  // shiftScan; CONTEXT.md section 7l): while a wanted descent could be
+  // gap-blocked, verify the whole plan ahead of time -- the shifted
+  // 45-degree path must clear ground by #DOWNGRACE everywhere, and the
+  // landing must be a real stretch (ground at the landing level, within
+  // #DEADBAND under the hover line, for #GAPSTRETCH columns; ground still
+  // falling away fails). .sver = the verified horizon (0 = no/off); the
+  // shared consider_start jumps the gap when it covers descent + stretch.
+  let sver = 0;
+  {
+    const stretch = cfg.GAPSTRETCH;
+    const D = S.railY - target;
+    const H = D + stretch;
+    if (stretch >= 1 && D >= cfg.DEADBAND && H <= 96) {
+      const band = S.railY - D - cfg.HOVER - cfg.DEADBAND;
+      let sprev = null;
+      for (let off = 1; off <= H + 1; off += 2) {
+        const s = surface(S.headX + off);
+        if (s === undefined || s <= -63) break;
+        if (sprev !== null) {
+          const pmin = Math.min(sprev, s);
+          if (pmin > S.railY - Math.min(off, D) - cfg.DOWNGRACE) break;
+          if (off > D && pmin < band) break;
+          sver = off;
+        }
+        sprev = s;
+      }
+    }
+  }
+
   sim.set('target', target);
   sim.set('railY', S.railY);
   sim.set('gfloor', gfloor);
   sim.set('gmax', gmax);
   sim.set('gcone', gcone);
+  sim.set('sver', sver);
   sim.call('decide');
   const dir = sim.get('dir');
   // The carve-mode answers: veg (may this column spare vegetation?) and
@@ -258,7 +294,7 @@ function advance(sim, S, surface, cfg) {
   else if (dir === 1) S.railY += 1;
   S.headX += 1;
   S.track.push(S.railY);
-  return { dir, target, railYBefore, veg, retro, gfloor, gmax, gcone };
+  return { dir, target, railYBefore, veg, retro, gfloor, gmax, gcone, sver };
 }
 
 function runRide(fnDirs, surface, columns) {
@@ -312,6 +348,11 @@ const TERRAINS = {
   // is one big event, so the big-event gap credit must let the line REVERSE
   // and come back down before a full #TURNGAP of clifftop bridge has been
   // built past the summit (the loop below asserts a discounted reversal).
+  // The long flat plain past x=280 is also the stretch shift's home case:
+  // once the average converges onto the bottom, the verified plan (clear
+  // path + a #GAPSTRETCH landing stretch) must jump the remaining gap
+  // entirely -- earlier than even the credit allows -- while still coming
+  // down as ONE unbroken swoop (the loop below asserts both).
   peak: { settles: true, f: (x) => (x < 200 ? 64 : x < 240 ? 64 + (x - 200) : x < 280 ? 104 - (x - 240) : 64) },
   // One big ascent as two 35-block walls 80 apart: too tall for a single
   // event, so the second climb REPEATS the direction and is normally paced
@@ -336,9 +377,9 @@ function checkInvariants(name, ride, settles) {
   // actually USED the credit (flats below the undiscounted gap) so the
   // purpose-built terrains can assert the feature engaged at all.
   let flats = 99, lastDir = 0, inEvent = 0, vbuf = 0, run = 0;
-  const discounted = { same: 0, turn: 0 };
+  const discounted = { same: 0, turn: 0, shift: 0 };
   log.forEach((step, i) => {
-    const { dir, veg, retro, gfloor, gmax, gcone } = step;
+    const { dir, veg, retro, gfloor, gmax, gcone, sver } = step;
     const diff = step.target - step.railYBefore;
     const floorReal = cfg.DOWNLOOK >= 1 && gfloor > -10000;
     const digNow = floorReal && step.railYBefore - 1 < gfloor + cfg.DOWNGRACE;
@@ -386,7 +427,19 @@ function checkInvariants(name, ride, settles) {
         let mag = diff * dir;
         if (dir === 1) mag = Math.max(mag, gmax + cfg.HOVER - step.railYBefore);
         if (cfg.GAPMATCH >= 1 && mag < Math.floor(run * cfg.GAPMATCH / 100)) cut = 0;
-        const need = Math.max(0, base - cut);
+        let need = Math.max(0, base - cut);
+        // The stretch shift (descents only): a scan-verified plan (the whole
+        // path + a #GAPSTRETCH landing stretch, .sver covering both) jumps
+        // the gap entirely -- exactly consider_start's .swant comparison,
+        // including its worth-it test (the descent must be at least
+        // #GAPMATCH percent of the gap it is jumping).
+        const shifted = dir === -1 && cfg.GAPSTRETCH >= 1
+          && sver >= -diff + cfg.GAPSTRETCH
+          && -diff >= Math.floor(need * cfg.GAPMATCH / 100);
+        if (shifted) {
+          if (flats < need) discounted.shift += 1;
+          need = 0;
+        }
         if (flats < need) fail(`${name}: event started after ${flats} flat columns (needed ${need} = ${base} - credit ${base - need}) at column ${i}`);
         if (flats < base) discounted[sameDir ? 'same' : 'turn'] += 1;
         if (dir === 1) {
@@ -533,6 +586,28 @@ for (const [name, { settles, f: surface }] of Object.entries(TERRAINS)) {
       fail('bigsteps: the big-event gap credit never engaged (no same-direction climb started inside the full SAMEGAP)');
     } else if (name === 'bigsteps') {
       ok(`bigsteps: the credit let ${discounted.same} same-direction climb(s) start inside the full SAMEGAP (chaining the big ascent sooner)`);
+    }
+  }
+
+  // The stretch shift's home case: on peak the verified plan must jump the
+  // remaining (credit-discounted) gap at least once, and doing so must NOT
+  // split the descent -- the whole ride stays exactly one climb and one
+  // descent (no new plateaus, no extra events).
+  if (name === 'peak' && java.cfg.GAPSTRETCH >= 1) {
+    if (discounted.shift < 1) {
+      fail('peak: the stretch shift never engaged (no descent jumped the gap on a verified landing stretch)');
+    } else {
+      ok(`peak: the stretch shift let ${discounted.shift} descent(s) jump the gap onto the verified landing stretch`);
+    }
+    let evCount = 0, inE = 0;
+    for (const s of java.log) {
+      if (s.dir !== 0 && inE === 0) evCount += 1;
+      inE = s.dir;
+    }
+    if (evCount !== 2) {
+      fail(`peak: expected exactly 2 events (one climb, one shifted descent), got ${evCount} -- the shift split or duplicated an event`);
+    } else {
+      ok('peak: still exactly one climb and one unbroken descent (the shift moved it, never split it)');
     }
   }
 }

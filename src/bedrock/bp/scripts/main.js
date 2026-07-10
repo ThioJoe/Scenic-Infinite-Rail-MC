@@ -235,6 +235,7 @@ const CONFIG_DEFAULTS = {
   SAMEGAP: 50, TURNGAP: 50, GAPRATIO: 50, GAPMATCH: 50,
   SLOPECLEAR: 6, UPCLAMP: 250, DOWNCLAMP: 30,
   UPLOOK: 75, UPGRACE: 10, UPEARLY: 2, DOWNLOOK: 250, DOWNGRACE: 1,
+  GAPSTRETCH: 50,
   AHEAD: 224, GENAHEAD: 192, MAXTICK: 15, DEBUGMODE: 0,
   SKYY: 120, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 32, SEAPICKLE: 4,
   CARTSOUND: 1,
@@ -252,8 +253,8 @@ const CFG_GROUPS = {
   cfg_camera: ['CAMHEIGHT', 'CAMBLEND', 'CAMSMOOTH', 'CAMLIFT', 'CAMAHEAD',
     'CAMMODE', 'CARTYOFF'],
   cfg_ride: ['MAXSPEED', 'OCEANSPEED', 'OCEANCHUNKS', 'LANDCHUNKS', 'SKYY',
-    'SKYSPEED', 'TORCHODDS', 'TORCHRANGE', 'SEAPICKLE', 'AHEAD', 'GENAHEAD',
-    'MAXTICK', 'CARTSOUND'],
+    'SKYSPEED', 'TORCHODDS', 'TORCHRANGE', 'SEAPICKLE', 'GAPSTRETCH',
+    'AHEAD', 'GENAHEAD', 'MAXTICK', 'CARTSOUND'],
 };
 const CFG_OBJ = {}; // knob name -> objective id (defaults to OBJ)
 for (const [obj, keys] of Object.entries(CFG_GROUPS)) {
@@ -1102,6 +1103,46 @@ function nearScan() {
   brainSet('gcone', gcone ?? (valid === 0 ? 32000 : -10000));
 }
 
+// The stretch-shift scan (CONTEXT.md section 7l; Java's shift_scan/
+// shift_step): the "logical second pass" that lets a gap-blocked DESCENT
+// jump the spacing gap. Before anything is built, verify the whole plan
+// over the terrain ahead: (1) the entire shifted 45-degree descent path
+// stays clear of ground by .DOWNGRACE -- so the floor guard cannot cut it
+// into pieces and the shifted descent is the SAME single event to the
+// SAME landing -- and (2) the landing really is a STRETCH: ground sitting
+// at the landing level (within .DEADBAND under the hover line) for
+// .GAPSTRETCH columns, so the calm the gap exists to guarantee simply
+// happens at the bottom. Ground still falling away past the landing fails
+// (a gentle downhill face keeps its gap-paced swoops). Probes at odd
+// offsets, paired mins (the near scan's spike eraser), out to descent +
+// .GAPSTRETCH capped at 96; the surface memo makes the walk nearly free.
+// Output: .sver, the verified horizon in blocks, written EVERY column
+// (0 = not verified / not applicable / off); consider_start jumps the gap
+// when it covers descent + stretch.
+function shiftScan(target) {
+  const stretch = cfg('GAPSTRETCH');
+  const D = S.railY - target;
+  const H = D + stretch;
+  let sver = 0;
+  if (stretch >= 1 && D >= cfg('DEADBAND') && H <= 96) {
+    const grace = cfg('DOWNGRACE');
+    const band = S.railY - D - cfg('HOVER') - cfg('DEADBAND');
+    let prev = null;
+    for (let off = 1; off <= H + 1; off += 2) {
+      const s = surfaceY(S.headX + off, S.centerZ);
+      if (s === undefined || s <= -63) break;
+      if (prev !== null) {
+        const pmin = Math.min(prev, s);
+        if (pmin > S.railY - Math.min(off, D) - grace) break;
+        if (off > D && pmin < band) break;
+        sver = off;
+      }
+      prev = s;
+    }
+  }
+  brainSet('sver', sver);
+}
+
 // --- Column placement ----------------------------------------------------------
 // place_flat / place_up / place_down + carve + support, in native block API
 // calls. Same order as Java: carve the bore first, then the support (the rail
@@ -1262,6 +1303,7 @@ function advance() {
   brainSet('target', target);
   brainSet('railY', S.railY);
   nearScan();
+  shiftScan(target);
   dim.runCommand(`function ${NS}/decide`);
   const dir = brainGetDir();
   // The brain's carve-mode answers (see decide/start_event in src/shared):

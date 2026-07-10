@@ -14,6 +14,12 @@ scoreboard players operation .target ir += .HOVER cfg_terrain
 # --- 2b. Near-ground scan: .gfloor/.gmax for decide's slope-timing guards ---
 execute at @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:near_scan
 
+# --- 2c. Stretch-shift scan: .sver for consider_start's gap jump (7l) ---
+# The "logical second pass": while a wanted descent is gap-blocked, verify
+# the whole planned descent + landing stretch ahead of time; a verified
+# plan lets consider_start start the descent immediately.
+execute at @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:shift_scan
+
 # --- 3. Decide this column's slope: -1, 0, or +1 (event model) ---
 function infinite_rail:decide
 
