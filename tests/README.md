@@ -98,6 +98,7 @@ toggles) are all covered directly.
 | `20-torch` | `torch_auto` night-window boundaries (12541/12542, 23459/23460, day-wrapped clocks), `time_now` predicate bridge, and **physical** torch counts beside fresh track in four mode×time combinations (including the all-important "day + auto ⇒ zero torches") |
 | `30-modes` | every toggle & tri-state score, density presets, time modes moving the real clock, sky mode steering an actual ride to exactly `.SKYY` and back down |
 | `40-ride` | begin/launch phases under frozen ticks, runway goal, track-history consistency, 45° contiguity, physical rail/support/light spot checks, disguise displays, pace-cart motion, rig distance & height, keeper gluing, `.gap` bounds, `.hdmiss` |
+| `45-vegwall` | vegetation & structures are invisible to the slope logic: dense log + planks walls built across the path must not make the line climb (the probe's not-terrain dig-down, end to end) |
 | `50-longride` | 2 400 ticks of sprinting: sustained building, cart progress, contiguity + physical checks along the whole line, rig still on-profile, no errors |
 | `60-lifecycle` | `/reload` mid-ride (state survives, config refreshes, build continues), `stop` teardown (entities gone, forceloads cleared, **track remains**), stopped-stays-stopped, second ride restarts cleanly |
 
@@ -154,7 +155,9 @@ tests in the same suite would see it.
   **`ctx.note(msg)`** — attaches info lines to the report.
 - **`lib/ride.mjs`** — `placeSurrogate(mc, {x,z})`, `beginRide(mc)`,
   `awaitLaunched(mc)`, `startRide(mc, {x,z})` (all three), `summonRig(mc)`,
-  `checkColumn(mc, x, y, z)` → rail/support/light, `stopRide(mc)`,
+  `checkColumn(mc, x, y, z, prevY)` → rail/support/light (pass the previous
+  column's recorded Y too: an ascending column's blocks physically sit one
+  below its recorded exit height — the check uses `min(prevY, y)`), `stopRide(mc)`,
   `SURROGATE_TAG`.
 - **Assertions** (`lib/harness.mjs`) — `eq, neq, ok, between, closeTo, includes,
   fail(msg), skip(reason)`.

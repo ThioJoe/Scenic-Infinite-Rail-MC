@@ -272,10 +272,10 @@ const CONFIG_DEFAULTS = {
   HOVER: 2, TUNNELCLEAR: 6, CAMHEIGHT: 0, CAMBLEND: 6, CAMSMOOTH: 6, CAMLIFT: 20,
   RIDER_BEHIND: 160, CAMMODE: 0, CARTYOFF: 12, AUTOSTART: 1,
   DEFAULTSPEED: 8, OCEANSPEED: 32, OCEANCHUNKS: 6, LANDCHUNKS: 3, MIN_CHANGE: 2,
-  SAMEGAP: 50, TURNGAP: 50, GAPRATIO: 50, GAPMATCH: 50,
+  SAMEGAP: 50, TURNGAP_TOP: 50, TURNGAP_BOTTOM: 50, GAPRATIO: 50, GAPMATCH: 75,
   SLOPECLEAR: 6, DOWNCLAMP: 30,
-  UPGRACE: 10, UPEARLY: 2, DOWNLOOK_AHEAD: 250, DOWNGRACE: 1,
-  GAPSTRETCH: 50, SAMPLE_WINDOW: 48, SAMPLE_BLOCK_INTERVAL: 4,
+  UPGRACE: 20, DOWNLOOK_AHEAD: 250, PLOW_GRACE_UP: 0, PLOW_GRACE_DOWN: 0,
+  SHIFT_REQ_BOTTOM: 30, SAMPLE_WINDOW: 64, SAMPLE_BLOCK_INTERVAL: 4,
   PACE_CART_BEHIND: 224, TERRAIN_GENAHEAD: 192, BUILD_PER_TICK: 15, DEBUGMODE: 0,
   SKYY: 120, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 32, SEAPICKLE: 4,
   CARTSOUND: 1,
@@ -296,14 +296,16 @@ function camAhead() {
 // in `ir` with the runtime state. Must match config.mcfunction and Java's
 // load.mcfunction.
 const CFG_GROUPS = {
-  cfg_terrain: ['HOVER', 'TUNNELCLEAR', 'MIN_CHANGE', 'SAMEGAP', 'TURNGAP',
-    'GAPRATIO', 'GAPMATCH', 'SLOPECLEAR', 'DOWNCLAMP',
-    'UPGRACE', 'UPEARLY', 'DOWNLOOK_AHEAD', 'DOWNGRACE',
-    'SAMPLE_WINDOW', 'SAMPLE_BLOCK_INTERVAL'],
+  // (.SAMPLE_BLOCK_INTERVAL lives in `ir` with .DEBUGMODE/.AUTOSTART --
+  // cfg_terrain is back at the 15-row sidebar cap.)
+  cfg_terrain: ['HOVER', 'TUNNELCLEAR', 'MIN_CHANGE', 'SAMEGAP', 'TURNGAP_TOP',
+    'TURNGAP_BOTTOM', 'GAPRATIO', 'GAPMATCH', 'SLOPECLEAR', 'DOWNCLAMP',
+    'UPGRACE', 'DOWNLOOK_AHEAD', 'PLOW_GRACE_DOWN', 'PLOW_GRACE_UP',
+    'SAMPLE_WINDOW'],
   cfg_camera: ['CAMHEIGHT', 'CAMBLEND', 'CAMSMOOTH', 'CAMLIFT', 'RIDER_BEHIND',
     'CAMMODE', 'CARTYOFF'],
   cfg_ride: ['DEFAULTSPEED', 'OCEANSPEED', 'OCEANCHUNKS', 'LANDCHUNKS', 'SKYY',
-    'SKYSPEED', 'TORCHODDS', 'TORCHRANGE', 'SEAPICKLE', 'GAPSTRETCH',
+    'SKYSPEED', 'TORCHODDS', 'TORCHRANGE', 'SEAPICKLE', 'SHIFT_REQ_BOTTOM',
     'PACE_CART_BEHIND', 'TERRAIN_GENAHEAD', 'BUILD_PER_TICK', 'CARTSOUND'],
 };
 const CFG_OBJ = {}; // knob name -> objective id (defaults to OBJ)
@@ -1156,29 +1158,30 @@ function nearScan() {
   brainSet('gcone', gcone ?? (valid === 0 ? 32000 : -10000));
 }
 
-// The stretch-shift scan (CONTEXT.md section 7l; Java's shift_scan/
+// The descent-shift scan (CONTEXT.md section 7l; Java's shift_scan/
 // shift_step): the "logical second pass" that lets a gap-blocked DESCENT
 // jump the spacing gap. Before anything is built, verify the whole plan
 // over the terrain ahead: (1) the entire shifted 45-degree descent path
-// stays clear of ground by .DOWNGRACE -- so the floor guard cannot cut it
-// into pieces and the shifted descent is the SAME single event to the
-// SAME landing -- and (2) the landing really is a STRETCH: ground sitting
-// at the landing level (within .MIN_CHANGE under the hover line) for
-// .GAPSTRETCH columns, so the calm the gap exists to guarantee simply
-// happens at the bottom. Ground still falling away past the landing fails
-// (a gentle downhill face keeps its gap-paced swoops). Probes at odd
-// offsets, paired mins (the near scan's spike eraser), out to descent +
-// .GAPSTRETCH capped at 96; the surface memo makes the walk nearly free.
-// Output: .sver, the verified horizon in blocks, written EVERY column
-// (0 = not verified / not applicable / off); consider_start jumps the gap
-// when it covers descent + stretch.
+// stays clear of ground -- beyond the .PLOW_GRACE_DOWN levels the swoop
+// may cut through -- so the floor guard cannot cut it into pieces and the
+// shifted descent is the SAME single event to the SAME landing -- and
+// (2) the landing really is a BOTTOM: ground sitting at the landing level
+// (within .MIN_CHANGE under the hover line) for .SHIFT_REQ_BOTTOM
+// columns, so the calm the gap exists to guarantee simply happens at the
+// bottom. Ground still falling away past the landing fails (a gentle
+// downhill face keeps its gap-paced swoops). Probes at odd offsets,
+// paired mins (the near scan's spike eraser), out to descent +
+// .SHIFT_REQ_BOTTOM capped at 96; the surface memo makes the walk nearly
+// free. Output: .sver, the verified horizon in blocks, written EVERY
+// column (0 = not verified / not applicable / off); consider_start jumps
+// the gap when it covers descent + bottom.
 function shiftScan(target) {
-  const stretch = cfg('GAPSTRETCH');
+  const stretch = cfg('SHIFT_REQ_BOTTOM');
   const D = S.railY - target;
   const H = D + stretch;
   let sver = 0;
   if (stretch >= 1 && D >= cfg('MIN_CHANGE') && H <= 96) {
-    const grace = cfg('DOWNGRACE');
+    const grace = cfg('PLOW_GRACE_DOWN');
     const band = S.railY - D - cfg('HOVER') - cfg('MIN_CHANGE');
     let prev = null;
     for (let off = 1; off <= H + 1; off += 2) {
@@ -1186,7 +1189,7 @@ function shiftScan(target) {
       if (s === undefined || s <= -63) break;
       if (prev !== null) {
         const pmin = Math.min(prev, s);
-        if (pmin > S.railY - Math.min(off, D) - grace) break;
+        if (pmin > S.railY - Math.min(off, D) + grace) break;
         if (off > D && pmin < band) break;
         sver = off;
       }
@@ -1324,20 +1327,27 @@ function maybeTorch(x) {
 }
 
 // A slope just started (the shared start_event raised .retro): retroactively
-// clear the FULL center bore over the last .SLOPECLEAR columns -- the camera
+// clear the center bore over the last .SLOPECLEAR columns -- the camera
 // lifts off the rail line before the slope arrives, so vegetation spared
 // over those (flat, same-elevation) columns must go after all. Vertical
-// only: the cells left and right of the track keep their plants. Java's
-// retro_clear/retro_fill is the same fill, clamped the same way.
+// only: the cells left and right of the track keep their plants. Only
+// VEGETATION is removed -- the one other thing in an already-carved bore is
+// the pack's own track light at rail+3, which a blanket air-fill used to
+// DELETE (every slope start left the .SLOPECLEAR columns behind it dark).
+// Java's retro_fill is the same clear via `fill ... replace
+// #infinite_rail:keep`, clamped the same way.
 function retroClear(headX) {
   const k = Math.min(cfg('SLOPECLEAR'), headX - S.trackBase);
   const h = cfg('TUNNELCLEAR');
   if (k < 0 || h < 2) return;
-  dim.fillBlocks(
-    new BlockVolume({ x: headX - k, y: S.railY + 2, z: S.centerZ },
-      { x: headX, y: S.railY + h, z: S.centerZ }),
-    AIR, { ignoreChunkBoundErrors: true },
-  );
+  for (let x = headX - k; x <= headX; x++) {
+    for (let y = S.railY + 2; y <= S.railY + h; y++) {
+      try {
+        const b = dim.getBlock({ x, y, z: S.centerZ });
+        if (b && isVegetation(b.typeId ?? '')) dim.setBlockType({ x, y, z: S.centerZ }, 'minecraft:air');
+      } catch { /* border chunk: the next slope's clear catches it */ }
+    }
+  }
 }
 
 // --- The build loop ------------------------------------------------------------

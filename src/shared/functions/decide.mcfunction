@@ -64,12 +64,14 @@ scoreboard players operation .slope0 ir = .slope ir
 # operands; .gcone is deliberately NOT seeded -- if it was never written,
 # the .cgate operation fails and .due stays 1, the correct fail-open.
 #   .dig  = one more DOWN step would land the rail below the descent floor
-#           (.gfloor + .DOWNGRACE -- the tallest ground within .DOWNLOOK_AHEAD).
-#           An in-progress descent ENDS here, resting just above the ground
-#           it was about to cut into; once the ground falls away, the next
-#           descent event carries on -- >= .SAMEGAP later, like any other.
-#           So descents never trench, and never micro-stair-step either:
-#           every stop is a real event end, paced by the gaps.
+#           (.gfloor - .PLOW_GRACE_DOWN -- the tallest ground within
+#           .DOWNLOOK_AHEAD, minus the levels a descent may cut into it).
+#           An in-progress descent ENDS here, resting on (or, with grace,
+#           slightly into) the ground it was about to trench through; once
+#           the ground falls away, the next descent event carries on -- >=
+#           .SAMEGAP later, like any other. So descents never trench, and
+#           never micro-stair-step either: every stop is a real event end,
+#           paced by the gaps.
 #   .dig2 = there is not even room for TWO down steps -- a descent must not
 #           START here (no clear runway; hold the level and wait for the
 #           drop-off instead of opening an event that would stop at once).
@@ -79,8 +81,11 @@ scoreboard players operation .slope0 ir = .slope ir
 #           keeps climbing until it rides at proper hover height over the
 #           obstruction, instead of ending under (or skimming along) it and
 #           then parking a block low inside the deadband.
-#   .due  = the climb schedule says NOW: the rail is within .UPEARLY blocks
-#           of the height the 45-degree cone demands (.gcone + .HOVER).
+#   .due  = the climb schedule says NOW: the rail has reached the height the
+#           45-degree cone demands (.gcone + .HOVER, less the crest
+#           clearance .PLOW_GRACE_UP trades away to start later -- the
+#           late-shift: each grace level delays the ramp one column, cutting
+#           into hover clearance first and the leading face beyond that).
 #           consider_start refuses to begin a climb before it is due, which
 #           is what stops the line ramping up dozens of blocks early just
 #           because the average saw a mountain coming. The flat gap keeps
@@ -95,7 +100,7 @@ scoreboard players set .dig2 ir 0
 scoreboard players set .push ir 0
 scoreboard players set .due ir 1
 scoreboard players operation .glim ir = .gfloor ir
-scoreboard players operation .glim ir += .DOWNGRACE cfg_terrain
+scoreboard players operation .glim ir -= .PLOW_GRACE_DOWN cfg_terrain
 scoreboard players operation .rnext ir = .railY ir
 scoreboard players remove .rnext ir 1
 execute unless score .SKYMODE ir matches 1 if score .DOWNLOOK_AHEAD cfg_terrain matches 1.. if score .rnext ir < .glim ir run scoreboard players set .dig ir 1
@@ -108,7 +113,7 @@ scoreboard players operation .gtop ir += .HOVER cfg_terrain
 execute unless score .SKYMODE ir matches 1 if score .railY ir < .gtop ir if score .railY ir < .glift ir run scoreboard players set .push ir 1
 scoreboard players operation .cgate ir = .gcone ir
 scoreboard players operation .cgate ir += .HOVER cfg_terrain
-scoreboard players operation .cgate ir += .UPEARLY cfg_terrain
+scoreboard players operation .cgate ir -= .PLOW_GRACE_UP cfg_terrain
 execute unless score .SKYMODE ir matches 1 if score .railY ir >= .cgate ir run scoreboard players set .due ir 0
 
 # --- Continue an in-progress climb/descent until it reaches the target ---

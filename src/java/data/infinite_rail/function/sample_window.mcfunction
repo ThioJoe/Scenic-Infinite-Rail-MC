@@ -27,7 +27,7 @@ scoreboard players operation .lo ir -= .DOWNCLAMP cfg_terrain
 # Derived count: floor(.SAMPLE_WINDOW / .SAMPLE_BLOCK_INTERVAL), each side
 # floored at 1 so a zero/negative knob can neither hop in place nor hand
 # advance a divide-by-zero.
-scoreboard players operation .wstep ir = .SAMPLE_BLOCK_INTERVAL cfg_terrain
+scoreboard players operation .wstep ir = .SAMPLE_BLOCK_INTERVAL ir
 execute unless score .wstep ir matches 1.. run scoreboard players set .wstep ir 1
 scoreboard players operation .winn ir = .SAMPLE_WINDOW cfg_terrain
 scoreboard players operation .winn ir /= .wstep ir

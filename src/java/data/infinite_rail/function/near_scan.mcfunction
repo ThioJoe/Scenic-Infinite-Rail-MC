@@ -10,7 +10,7 @@
 # wide) spans both probes and registers. The pairs boil down to three
 # scores for the shared decide:
 #   .gfloor = highest pair within .DOWNLOOK_AHEAD (the descent guard: a
-#             down-step may never land below .gfloor + .DOWNGRACE)
+#             down-step may never land below .gfloor - .PLOW_GRACE_DOWN)
 #   .gmax   = highest pair anywhere in the walk (the climb contact trigger
 #             -- the climb side has no reach knob, it always uses the full
 #             sample window, the line's whole planning horizon)

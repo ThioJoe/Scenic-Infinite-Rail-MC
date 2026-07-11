@@ -14,15 +14,15 @@
 //    - every elevation change is one contiguous 45-degree event
 //    - events only start when |target - railY| >= #MIN_CHANGE (checked exactly;
 //      a climb may also start at diff >= 1 on near-scan ground contact)
-//    - climbs never start ahead of schedule (the 45-degree cone + #UPEARLY)
-//    - flat gaps between events respect #SAMEGAP / #TURNGAP minus the
+//    - climbs never start ahead of schedule (the 45-degree cone, less #PLOW_GRACE_UP)
+//    - flat gaps between events respect #SAMEGAP / #TURNGAP_TOP / #TURNGAP_BOTTOM minus the
 //      big-event gap credit (#GAPRATIO / #GAPMATCH -- a large previous event
-//      shortens the next gap) and minus the stretch shift (#GAPSTRETCH -- a
+//      shortens the next gap) and minus the descent shift (#SHIFT_REQ_BOTTOM -- a
 //      scan-verified descent onto a landing stretch jumps its gap outright),
 //      recomputed exactly; and on the purpose-built terrains both must
 //      actually engage at least once, without splitting the shifted descent
 //    - descents never step below the descent floor (the TALLEST near-scan
-//      surface + #DOWNGRACE -- no trenching), never start without two-step
+//      surface - #PLOW_GRACE_DOWN -- no trenching), never start without two-step
 //      runway, and never end while the floor below is still clear
 //    - on terrain that settles, the rail converges onto terrain + #HOVER
 //
@@ -183,18 +183,21 @@ function inRange(v, range) {
 // 48 blocks, hand target+railY to the shared decide, act on the returned dir.
 // Every knob is read from the emitted config.mcfunction via the interpreter.
 // ---------------------------------------------------------------------------
-const CFG_KEYS = ['HOVER', 'MIN_CHANGE', 'SAMEGAP', 'TURNGAP', 'GAPRATIO', 'GAPMATCH',
-  'GAPSTRETCH', 'DOWNCLAMP', 'UPGRACE', 'UPEARLY',
-  'DOWNLOOK_AHEAD', 'DOWNGRACE', 'SAMPLE_WINDOW', 'SAMPLE_BLOCK_INTERVAL',
+const CFG_KEYS = ['HOVER', 'MIN_CHANGE', 'SAMEGAP', 'TURNGAP_TOP', 'TURNGAP_BOTTOM',
+  'GAPRATIO', 'GAPMATCH',
+  'SHIFT_REQ_BOTTOM', 'DOWNCLAMP', 'UPGRACE', 'PLOW_GRACE_UP', 'PLOW_GRACE_DOWN',
+  'DOWNLOOK_AHEAD', 'SAMPLE_WINDOW', 'SAMPLE_BLOCK_INTERVAL',
   'CAMBLEND', 'CAMLIFT', 'CAMSMOOTH', 'RIDER_BEHIND', 'PACE_CART_BEHIND',
   'SLOPECLEAR'];
 // The objective each knob lives in (the config split -- must match
 // config.mcfunction; camera knobs + .RIDER_BEHIND live in cfg_camera,
-// .GAPSTRETCH and .PACE_CART_BEHIND in cfg_ride, the rest of CFG_KEYS in
+// .SHIFT_REQ_BOTTOM and .PACE_CART_BEHIND in cfg_ride,
+// .SAMPLE_BLOCK_INTERVAL in `ir`, the rest of CFG_KEYS in
 // cfg_terrain, and the sky knobs used by the sky-mode test in cfg_ride).
 const CFG_OBJ = Object.fromEntries(CFG_KEYS.map((k) => [
   k, k.startsWith('CAM') || k === 'RIDER_BEHIND' ? 'cfg_camera'
-    : k === 'GAPSTRETCH' || k === 'PACE_CART_BEHIND' ? 'cfg_ride' : 'cfg_terrain',
+    : k === 'SHIFT_REQ_BOTTOM' || k === 'PACE_CART_BEHIND' ? 'cfg_ride'
+      : k === 'SAMPLE_BLOCK_INTERVAL' ? 'ir' : 'cfg_terrain',
 ]));
 const readCfg = (sim) => Object.fromEntries(CFG_KEYS.map((k) => [k, sim.get(k, CFG_OBJ[k])]));
 
@@ -251,14 +254,15 @@ function advance(sim, S, surface, cfg) {
   // The stretch-shift scan (Java's shift_scan/shift_step, Bedrock's
   // shiftScan; CONTEXT.md section 7l): while a wanted descent could be
   // gap-blocked, verify the whole plan ahead of time -- the shifted
-  // 45-degree path must clear ground by #DOWNGRACE everywhere, and the
+  // 45-degree path must clear ground everywhere (beyond #PLOW_GRACE_DOWN
+  // levels of cut-through), and the
   // landing must be a real stretch (ground at the landing level, within
-  // #MIN_CHANGE under the hover line, for #GAPSTRETCH columns; ground still
+  // #MIN_CHANGE under the hover line, for #SHIFT_REQ_BOTTOM columns; ground still
   // falling away fails). .sver = the verified horizon (0 = no/off); the
   // shared consider_start jumps the gap when it covers descent + stretch.
   let sver = 0;
   {
-    const stretch = cfg.GAPSTRETCH;
+    const stretch = cfg.SHIFT_REQ_BOTTOM;
     const D = S.railY - target;
     const H = D + stretch;
     if (stretch >= 1 && D >= cfg.MIN_CHANGE && H <= 96) {
@@ -269,7 +273,7 @@ function advance(sim, S, surface, cfg) {
         if (s === undefined || s <= -63) break;
         if (sprev !== null) {
           const pmin = Math.min(sprev, s);
-          if (pmin > S.railY - Math.min(off, D) - cfg.DOWNGRACE) break;
+          if (pmin > S.railY - Math.min(off, D) + cfg.PLOW_GRACE_DOWN) break;
           if (off > D && pmin < band) break;
           sver = off;
         }
@@ -350,11 +354,11 @@ const TERRAINS = {
   hillside: { settles: true, f: (x) => (x < 150 ? 96 : Math.max(64, 96 - Math.floor((x - 150) / 2))) },
   // A tall NARROW mountain (1:1 faces, 40 above the base plain): the ascent
   // is one big event, so the big-event gap credit must let the line REVERSE
-  // and come back down before a full #TURNGAP of clifftop bridge has been
+  // and come back down before a full #TURNGAP_TOP of clifftop bridge has been
   // built past the summit (the loop below asserts a discounted reversal).
   // The long flat plain past x=280 is also the stretch shift's home case:
   // once the average converges onto the bottom, the verified plan (clear
-  // path + a #GAPSTRETCH landing stretch) must jump the remaining gap
+  // path + a #SHIFT_REQ_BOTTOM landing bottom) must jump the remaining gap
   // entirely -- earlier than even the credit allows -- while still coming
   // down as ONE unbroken swoop (the loop below asserts both).
   peak: { settles: true, f: (x) => (x < 200 ? 64 : x < 240 ? 64 + (x - 200) : x < 280 ? 104 - (x - 240) : 64) },
@@ -370,7 +374,7 @@ function checkInvariants(name, ride, settles) {
   // Mirror the algorithm's own #flat accounting exactly: end_event zeroes the
   // counter ON the event-ending flat column, and each subsequent flat column
   // adds 1 -- so at an event-start column, `flats` equals the #flat the shared
-  // brain compared against #SAMEGAP/#TURNGAP. `run` mirrors #evrun (the last
+  // brain compared against #SAMEGAP/#TURNGAP_*. `run` mirrors #evrun (the last
   // event's sloped-column count = its height), the big-event gap credit's
   // input: at an event start the brain shrinks the required gap by
   // run * #GAPRATIO / 100 (the knobs are PERCENTS -- x100 fixed point, so
@@ -386,7 +390,7 @@ function checkInvariants(name, ride, settles) {
     const { dir, veg, retro, gfloor, gmax, gcone, sver } = step;
     const diff = step.target - step.railYBefore;
     const floorReal = cfg.DOWNLOOK_AHEAD >= 1 && gfloor > -10000;
-    const digNow = floorReal && step.railYBefore - 1 < gfloor + cfg.DOWNGRACE;
+    const digNow = floorReal && step.railYBefore - 1 < gfloor - cfg.PLOW_GRACE_DOWN;
 
     // A descent may only end while it still wants to go lower (diff <= -1)
     // if the next step would have landed below the descent floor -- ending
@@ -410,19 +414,20 @@ function checkInvariants(name, ride, settles) {
     if (dir !== 0) {
       if (inEvent !== 0 && dir !== inEvent) fail(`${name}: direction flip inside an event at column ${i}`);
       // The descent dig-guard: no descending column may ever land the rail
-      // below the descent floor (the TALLEST scanned surface + #DOWNGRACE)
+      // below the descent floor (the TALLEST scanned surface - #PLOW_GRACE_DOWN)
       // -- descents physically cannot trench.
       if (dir === -1 && digNow) {
-        fail(`${name}: descent stepped below the descent floor (rail ${step.railYBefore - 1} < ${gfloor}+${cfg.DOWNGRACE}) at column ${i}`);
+        fail(`${name}: descent stepped below the descent floor (rail ${step.railYBefore - 1} < ${gfloor}-${cfg.PLOW_GRACE_DOWN}) at column ${i}`);
       }
       if (inEvent === 0) {
         // event start: check the deadband and the gap the brain just approved
-        // -- the base #SAMEGAP/#TURNGAP minus the big-event gap credit
+        // -- the base #SAMEGAP/#TURNGAP_* minus the big-event gap credit
         // (run * #GAPRATIO / 100, guarded by the run * #GAPMATCH / 100
         // worth-it test, floored at 0 -- exactly consider_start's
         // arithmetic).
         const sameDir = dir === lastDir;
-        const base = sameDir ? cfg.SAMEGAP : cfg.TURNGAP;
+        const base = sameDir ? cfg.SAMEGAP
+          : dir === 1 ? cfg.TURNGAP_BOTTOM : cfg.TURNGAP_TOP;
         let cut = cfg.GAPRATIO >= 1 ? Math.floor(run * cfg.GAPRATIO / 100) : 0;
         // The worth-it size of the wanted move: |diff|, except climbs also
         // consult the near scan (#gmax + #HOVER - railY) -- the average
@@ -432,13 +437,13 @@ function checkInvariants(name, ride, settles) {
         if (dir === 1) mag = Math.max(mag, gmax + cfg.HOVER - step.railYBefore);
         if (cfg.GAPMATCH >= 1 && mag < Math.floor(run * cfg.GAPMATCH / 100)) cut = 0;
         let need = Math.max(0, base - cut);
-        // The stretch shift (descents only): a scan-verified plan (the whole
-        // path + a #GAPSTRETCH landing stretch, .sver covering both) jumps
+        // The descent shift: a scan-verified plan (the whole path + a
+        // #SHIFT_REQ_BOTTOM landing bottom, .sver covering both) jumps
         // the gap entirely -- exactly consider_start's .swant comparison,
         // including its worth-it test (the descent must be at least
         // #GAPMATCH percent of the gap it is jumping).
-        const shifted = dir === -1 && cfg.GAPSTRETCH >= 1
-          && sver >= -diff + cfg.GAPSTRETCH
+        const shifted = dir === -1 && cfg.SHIFT_REQ_BOTTOM >= 1
+          && sver >= -diff + cfg.SHIFT_REQ_BOTTOM
           && -diff >= Math.floor(need * cfg.GAPMATCH / 100);
         if (shifted) {
           if (flats < need) discounted.shift += 1;
@@ -454,17 +459,18 @@ function checkInvariants(name, ride, settles) {
             fail(`${name}: climb started with diff=${diff} < MIN_CHANGE=${cfg.MIN_CHANGE} and no ground contact at column ${i}`);
           }
           // The climb schedule: no climb may begin before it is due -- the
-          // rail must already be within #HOVER + #UPEARLY of the highest
+          // rail must already have reached the cone's demand (#HOVER above
+          // it, less #PLOW_GRACE_UP) -- the highest
           // 45-degree-projected surface ahead (decide's #due gate).
           if (gcone < 32000
-            && step.railYBefore >= gcone + cfg.HOVER + cfg.UPEARLY) {
-            fail(`${name}: climb started ahead of schedule (rail ${step.railYBefore} >= cone ${gcone}+${cfg.HOVER}+${cfg.UPEARLY}) at column ${i}`);
+            && step.railYBefore >= gcone + cfg.HOVER - cfg.PLOW_GRACE_UP) {
+            fail(`${name}: climb started ahead of schedule (rail ${step.railYBefore} >= cone ${gcone}+${cfg.HOVER}-${cfg.PLOW_GRACE_UP}) at column ${i}`);
           }
         } else {
           if (-diff < cfg.MIN_CHANGE) fail(`${name}: descent started with diff=${diff} inside MIN_CHANGE=${cfg.MIN_CHANGE} at column ${i}`);
           // Descent starts additionally need clear runway for at least two
           // steps above the descent floor (decide's #dig2 veto).
-          if (floorReal && step.railYBefore - 2 < gfloor + cfg.DOWNGRACE) {
+          if (floorReal && step.railYBefore - 2 < gfloor - cfg.PLOW_GRACE_DOWN) {
             fail(`${name}: descent started without two-step room above the descent floor at column ${i}`);
           }
         }
@@ -493,10 +499,13 @@ function checkInvariants(name, ride, settles) {
 // The mesa's specific promise (the descent guard): once the line has crested
 // onto the tabletop it never goes below the tabletop surface again until the
 // drop-off at x=320 -- the descent start is vetoed until the whole #DOWNLOOK_AHEAD
-// runway is past the edge, so there is no early trench and no rim notch at
-// all. (The old average-chasing behavior started the descent ~45 columns
-// early and trenched down through the tabletop to get a head start on the
-// valley beyond.)
+// runway is past the edge, so there is no early trench. (The old
+// average-chasing behavior started the descent ~45 columns early and
+// trenched down through the tabletop to get a head start on the valley
+// beyond.) The interior tolerance is #PLOW_GRACE_DOWN (the deliberate
+// cut-through allowance); the final 2 columns before the drop-off are
+// excluded, because the scan's pair-min spans the rim there and a
+// touch-down descent may notch 1 block into the very edge by design.
 function checkMesa(ride) {
   const { S, cfg } = ride;
   if (cfg.DOWNLOOK_AHEAD < 1) return;
@@ -506,9 +515,9 @@ function checkMesa(ride) {
     if (S.track[x] >= top + cfg.HOVER) { crest = x; break; }
   }
   if (crest < 0) return fail('mesa: the line never reached cruising height over the tabletop');
-  for (let x = crest; x <= 319; x++) {
-    if (S.track[x] < top) {
-      return fail(`mesa: the rail dipped into the tabletop (railY ${S.track[x]} < ${top} at x=${x})`);
+  for (let x = crest; x <= 317; x++) {
+    if (S.track[x] < top - cfg.PLOW_GRACE_DOWN) {
+      return fail(`mesa: the rail dipped into the tabletop (railY ${S.track[x]} < ${top}-${cfg.PLOW_GRACE_DOWN} at x=${x})`);
     }
   }
   ok(`mesa: rides the tabletop level (from x=${crest}) and descends only at the drop-off`);
@@ -582,9 +591,9 @@ for (const [name, { settles, f: surface }] of Object.entries(TERRAINS)) {
   // starves it) would still pass every structural invariant above.
   if (java.cfg.GAPRATIO >= 1) {
     if (name === 'peak' && discounted.turn < 1) {
-      fail('peak: the big-event gap credit never engaged (no reversal started inside the full TURNGAP)');
+      fail('peak: the big-event gap credit never engaged (no reversal started inside the full turn gap)');
     } else if (name === 'peak') {
-      ok(`peak: the credit let ${discounted.turn} reversal(s) start inside the full TURNGAP (descending off the summit early)`);
+      ok(`peak: the credit let ${discounted.turn} reversal(s) start inside the full turn gap (descending off the summit early)`);
     }
     if (name === 'bigsteps' && discounted.same < 1) {
       fail('bigsteps: the big-event gap credit never engaged (no same-direction climb started inside the full SAMEGAP)');
@@ -597,7 +606,7 @@ for (const [name, { settles, f: surface }] of Object.entries(TERRAINS)) {
   // remaining (credit-discounted) gap at least once, and doing so must NOT
   // split the descent -- the whole ride stays exactly one climb and one
   // descent (no new plateaus, no extra events).
-  if (name === 'peak' && java.cfg.GAPSTRETCH >= 1) {
+  if (name === 'peak' && java.cfg.SHIFT_REQ_BOTTOM >= 1) {
     if (discounted.shift < 1) {
       fail('peak: the stretch shift never engaged (no descent jumped the gap on a verified landing stretch)');
     } else {

@@ -80,7 +80,8 @@ export default defineSuite('ride bootstrap & build pipeline', ({ test }) => {
     for (let s = 0; s < samples; s++) {
       const i = Math.floor((s * (len - 1)) / (samples - 1));
       const y = await mc.trackY(i);
-      const col = await checkColumn(mc, base + i, y, z);
+      const prevY = i > 0 ? await mc.trackY(i - 1) : y;
+      const col = await checkColumn(mc, base + i, y, z, prevY);
       if (col.rail !== 'match' || col.support !== 'match' || col.light !== 'match') {
         bad.push(`x=${base + i} y=${y}: rail=${col.rail} support=${col.support} light=${col.light}`);
       }

@@ -22,8 +22,9 @@
 #  so the in-game Debug menu can show any whole group on the scoreboard
 #  sidebar (a vanilla sidebar displays one objective, max 15 rows). The
 #  objective name is right there in each line below; use the same name in
-#  /scoreboard commands. (.DEBUGMODE and .AUTOSTART stay in the plain `ir`
-#  objective with the runtime state.)
+#  /scoreboard commands. (.DEBUGMODE, .AUTOSTART and .SAMPLE_BLOCK_INTERVAL
+#  stay in the plain `ir` objective with the runtime state -- not worth
+#  sidebar rows.)
 # =============================================================================
 
 
@@ -196,17 +197,27 @@ scoreboard players set .MIN_CHANGE cfg_terrain 2
 # stretching out big mountain work.)
 scoreboard players set .SAMEGAP cfg_terrain 50
 
-# Minimum flat blocks required before the rail may REVERSE direction.
-# Higher = no quick up-then-down bobbing; small bumps get tunneled through and
-# small dips get bridged across. (Also shortened by the big-event gap credit
-# below -- so a 40-block climb up a narrow mountain doesn't shoot a
-# TURNGAP-long bridge past the peak before it may come back down.)
-scoreboard players set .TURNGAP cfg_terrain 50
+# Minimum flat blocks required before the rail may REVERSE direction --
+# split by WHICH reversal, because the two read differently on a ride:
+# there are legitimate reasons to come back down soon after a climb (off a
+# narrow peak), but a descent followed quickly by a climb reads as a
+# pointless dip. Both are shortened by the big-event gap credit below (so
+# a 40-block climb up a narrow mountain doesn't shoot a gap-long bridge
+# past the peak before it may come back down).
+
+# ...at the TOP: flat blocks required after a CLIMB before the rail may
+# descend again. Lower = comes back down off peaks sooner.
+scoreboard players set .TURNGAP_TOP cfg_terrain 50
+
+# ...at the BOTTOM: flat blocks required after a DESCENT before the rail
+# may climb again. Higher = never dips into a hollow just to climb right
+# back out; small dips get bridged across instead.
+scoreboard players set .TURNGAP_BOTTOM cfg_terrain 50
 
 # --- The big-event gap credit --------------------------------------------
 # Long gaps make calm, stately track on ordinary terrain -- but after a LARGE
 # elevation change they misfire: reaching the top of a tall narrow mountain,
-# the line must run a full .TURNGAP of flat bridge past the peak before it
+# the line must run a full .TURNGAP_TOP of flat bridge past the peak before it
 # may descend; and one big ascent too tall for a single event gets its climbs
 # spread .SAMEGAP apart, tunneling in between. A big event was clearly a
 # major terrain feature, so it EARNS the next event an earlier start: the
@@ -229,22 +240,26 @@ scoreboard players set .GAPRATIO cfg_terrain 50
 # requirement (any wanted change may use the discount).
 scoreboard players set .GAPMATCH cfg_terrain 75
 
-# The stretch shift: a DESCENT that is only waiting for a spacing gap may
-# jump the gap entirely when a "logical second pass" over the terrain ahead
-# verifies the whole plan before anything is built: the entire 45-degree
-# descent path must stay clear of the ground (by .DOWNGRACE -- so it lands
-# as ONE unbroken swoop at the same level it would have reached anyway),
-# and the landing must be a real STRETCH -- this many columns of ground
-# sitting at the landing level. The calm the gap exists to guarantee then
-# simply happens at the bottom, instead of as a long flat bridge
-# overshooting a peak. Ground still falling away past the landing does NOT
-# count as a stretch (gentle downhill faces keep their gap-paced swoops).
-# This knob is the required stretch length, in columns. 0 = off. The scan
-# reaches at most 96 blocks, so descents deeper than about 96 minus this
-# never shift (they wait out their gap as before); keep .TERRAIN_GENAHEAD
-# comfortably above the reach. Lives in cfg_ride only because cfg_terrain
-# is full (a scoreboard sidebar shows at most 15 rows).
-scoreboard players set .GAPSTRETCH cfg_ride 30
+# The descent shift's required BOTTOM: a DESCENT that is only waiting for a
+# spacing gap may jump the gap entirely (descend sooner, right at the
+# drop-off) when a "logical second pass" over the terrain ahead verifies
+# the whole plan before anything is built: the entire 45-degree descent
+# path must stay clear of the ground (up to .PLOW_GRACE_DOWN levels of
+# cut-through allowed -- so it lands as ONE unbroken swoop at the same
+# level it would have reached anyway), and the landing must be a real
+# BOTTOM -- this many columns of ground sitting at the landing level, i.e.
+# this many columns of straight ridable track at the bottom. The calm the
+# gap exists to guarantee then simply happens down there, instead of as a
+# long flat bridge overshooting a peak. Ground still falling away past the
+# landing does NOT count (gentle downhill faces keep their gap-paced
+# swoops). This knob is the required bottom length, in columns. 0 = the
+# shift is off. The scan reaches at most 96 blocks, so descents deeper
+# than about 96 minus this never shift (they wait out their gap as
+# before); keep .TERRAIN_GENAHEAD comfortably above the reach. Lives in
+# cfg_ride only because cfg_terrain is full (a scoreboard sidebar shows at
+# most 15 rows). (The ASCENT side's late-shift needs no verification scan
+# -- see .PLOW_GRACE_UP below.)
+scoreboard players set .SHIFT_REQ_BOTTOM cfg_ride 30
 
 
 # --- Track clearing / vegetation sparing ------------------------------------
@@ -286,8 +301,10 @@ scoreboard players set .SAMPLE_WINDOW cfg_terrain 64
 # The spacing (blocks) between terrain readings inside the window. Smaller =
 # denser sampling (more probes per column -- costlier); larger = cheaper but
 # features narrower than the spacing can slip between readings. The sample
-# count per column is .SAMPLE_WINDOW / this.
-scoreboard players set .SAMPLE_BLOCK_INTERVAL cfg_terrain 4
+# count per column is .SAMPLE_WINDOW / this. (Lives in the plain `ir`
+# objective with .DEBUGMODE/.AUTOSTART -- an advanced knob not worth one of
+# cfg_terrain's 15 sidebar rows.)
+scoreboard players set .SAMPLE_BLOCK_INTERVAL ir 4
 
 # Terrain lower than the current line by more than this reads as only this
 # many blocks lower. This is why a narrow 60-deep ravine is crossed as a
@@ -297,7 +314,7 @@ scoreboard players set .SAMPLE_BLOCK_INTERVAL cfg_terrain 4
 # (There is deliberately no upward twin: terrain ABOVE the line always
 # registers at its full height, so every mountain ahead raises the desired
 # height to its full size and the ride goes over everything it can -- WHEN
-# the climb starts is the near scan's job, .UPEARLY below.)
+# the climb starts is the near scan's schedule, below.)
 scoreboard players set .DOWNCLAMP cfg_terrain 30
 
 
@@ -308,19 +325,21 @@ scoreboard players set .DOWNCLAMP cfg_terrain 30
 # which lags/dilutes around edges, so the line would ramp up dozens of blocks
 # before a mountain, trench down early to get off one, and dip into valley
 # floors it is about to leave anyway. With them: climbs start "on schedule"
-# (just early enough for a 45-degree ramp to crest what is coming, plus
-# .UPEARLY blocks of slack), and descents never cut into ground -- they stop
-# just above it and continue, .SAMEGAP-paced like every other event, once it
-# falls away. The .SAMEGAP / .TURNGAP spacing rules always keep the final
-# say; these guards only hold events back or stop them early, never squeeze
-# them closer together.
+# (at the LAST possible column from which a 45-degree ramp still crests what
+# is coming at hover height -- there is deliberately no earlier-than-needed
+# slack; .PLOW_GRACE_UP below can push the start even LATER), and descents
+# never cut into ground beyond .PLOW_GRACE_DOWN -- they stop on it and
+# continue, .SAMEGAP-paced like every other event, once it falls away. The
+# .SAMEGAP / .TURNGAP_* spacing rules always keep the final say; these
+# guards only hold events back or stop them early, never squeeze them
+# closer together.
 #
 # The CLIMB side has no reach knob: it always scans the full .SAMPLE_WINDOW
 # (the line's whole planning horizon) -- the contact detector (a climb may
 # begin inside the .MIN_CHANGE deadband when the level line would physically
-# hit ground ahead) and the climb SCHEDULE (see .UPEARLY) both use it. That
-# reach also bounds the tallest wall crestable without tunneling: a rise
-# taller than the window hits the line before a 45-degree ramp can finish.
+# hit ground ahead) and the climb SCHEDULE both use it. That reach also
+# bounds the tallest wall crestable without tunneling: a rise taller than
+# the window hits the line before a 45-degree ramp can finish.
 
 # How many blocks ABOVE its average-derived target a climb may overshoot to
 # clear ground the climb-side scan still sees at or above the rail line.
@@ -330,41 +349,50 @@ scoreboard players set .DOWNCLAMP cfg_terrain 30
 # exactly at the target, never overshooting.
 scoreboard players set .UPGRACE cfg_terrain 20
 
-# The climb schedule's slack, in blocks: how much sooner than STRICTLY
-# NECESSARY a climb may begin. The scan projects every surface ahead onto a
-# 45-degree line ("to clear that point from here, the rail must already be
-# at its height minus its distance"); a climb is held back -- even when the
-# average is begging for one -- until the rail is within this many blocks of
-# that projected height. 0 = ramps start at the last possible column and
-# top out exactly at the crest; bigger = earlier, longer, more leisurely
-# ramps that finish about this many blocks before the crest; ~50+ =
-# no schedule at all (climbs start as soon as the average sees the mountain
-# -- the old ramp-up-way-early behavior).
-scoreboard players set .UPEARLY cfg_terrain 2
-
 # How far ahead (blocks, from the build head) to scan for ground under a
-# would-be descent step. A descent never steps down into (or within
-# .DOWNGRACE of) the TALLEST surface in this range -- so descents physically
-# cannot trench. When ground blocks the next step the descent ENDS, resting
-# just above that ground, and the line carries on downward as a NEW event
-# (>= .SAMEGAP later, exactly like any other) once the ground has dropped
-# away -- long descents down rough slopes become clean 45-degree swoops
-# separated by proper benches, never 1-2 column stair-steps. The window is
-# also the "clear runway" requirement: dips and gaps NARROWER than this are
-# crossed level (bridged) instead of dipped into. Bigger = a calmer line
-# that only descends into wider openings; smaller = hugs every little
-# hollow. HARD-CAPPED at .SAMPLE_WINDOW (the scan never reaches past the
-# sampling horizon -- values above it just mean "the full window", like the
-# default here). 0 = descent timing is ruled by the average alone (the old
-# plow-prone behavior).
+# would-be descent step. A descent never steps down into the TALLEST
+# surface in this range (beyond .PLOW_GRACE_DOWN levels of cut-through) --
+# so descents cannot trench. When ground blocks the next step the descent
+# ENDS, resting on that ground, and the line carries on downward as a NEW
+# event (>= .SAMEGAP later, exactly like any other) once the ground has
+# dropped away -- long descents down rough slopes become clean 45-degree
+# swoops separated by proper benches, never 1-2 column stair-steps. The
+# window is also the "clear runway" requirement: dips and gaps NARROWER
+# than this are crossed level (bridged) instead of dipped into. Bigger = a
+# calmer line that only descends into wider openings; smaller = hugs every
+# little hollow. HARD-CAPPED at .SAMPLE_WINDOW (the scan never reaches
+# past the sampling horizon -- values above it just mean "the full
+# window", like the default here). 0 = descent timing is ruled by the
+# average alone (the old plow-prone behavior).
 scoreboard players set .DOWNLOOK_AHEAD cfg_terrain 250
 
-# The clearance a descending step keeps above that tallest scanned surface.
-# 0 = a descent may touch down exactly onto the highest nearby ground;
-# higher values stop descents sooner / keep the line flying higher over
-# terrain it crosses. Keep it BELOW .HOVER, or descents end just short of
-# their target even over flat ground and the line rides permanently high.
-scoreboard players set .DOWNGRACE cfg_terrain 0
+# --- The plow graces: trade a little digging for better slope placement ----
+# Both are "how many vertical block levels the line may CUT INTO the ground
+# to place a slope where it reads better", one per direction, 0 = never cut
+# more than today. The line still prefers not to cut at all -- the grace
+# only applies where tolerating a shallow cut lets the slope sit
+# meaningfully earlier (descents) or later (climbs), and the carve simply
+# opens the bore through whatever it crosses.
+
+# DESCENTS (shift/end them SOONER): how many levels below the tallest
+# scanned ground (within .DOWNLOOK_AHEAD) a descending step may cut. This
+# relaxes both the descent floor -- a descent ends this deep INTO the
+# highest nearby ground instead of stopping on top of it -- and the descent
+# shift's path check (.SHIFT_REQ_BOTTOM above): a planned swoop may carve
+# through bumps up to this tall on its way down, so one shallow lip on an
+# otherwise-clear drop no longer blocks the whole early descent. 0 = only
+# ever touch down on the surface, never into it.
+scoreboard players set .PLOW_GRACE_DOWN cfg_terrain 0
+
+# CLIMBS (shift them LATER): how many blocks of crest clearance the climb
+# schedule may give up to start later. The schedule normally releases a
+# climb at the last column from which the 45-degree ramp still clears
+# everything coming at full .HOVER height; each grace level here delays
+# that by one column, letting the ramp arrive that much lower -- shaving
+# hover clearance first, then (past .HOVER levels) genuinely cutting into
+# the leading face, which the carve bores through. 0 = always crest with
+# full hover clearance, never cut.
+scoreboard players set .PLOW_GRACE_UP cfg_terrain 0
 
 
 # --- Performance / world generation ----------------------------------------

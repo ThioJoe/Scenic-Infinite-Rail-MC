@@ -82,13 +82,21 @@ export async function trackPairSamples(mc, len, n = 20) {
 }
 
 /**
- * Physically verify one column: powered rail at (x, y), redstone-block
- * support below it, light block 3 above. Region must be loaded.
+ * Physically verify one column: powered rail, redstone-block support below
+ * it, light block 3 above. Region must be loaded.
+ *
+ * `y` is the column's RECORDED height (the track-history value) and `prevY`
+ * the previous column's. The recorded value is the column's EXIT height:
+ * advance places a CLIMB column's ascending rail at the old level and only
+ * then steps the head (and .railY) up -- so an ascending column's blocks
+ * physically sit one below its recorded height. The rule for the physical
+ * rail level is min(prevY, y): climbs sit at prevY, descents and flats at y.
  */
-export async function checkColumn(mc, x, y, z) {
+export async function checkColumn(mc, x, y, z, prevY = y) {
+  const railY = Math.min(y, prevY);
   return {
-    rail: await mc.blockIs(x, y, z, 'minecraft:powered_rail'),
-    support: await mc.blockIs(x, y - 1, z, 'minecraft:redstone_block'),
-    light: await mc.blockIs(x, y + 3, z, 'minecraft:light'),
+    rail: await mc.blockIs(x, railY, z, 'minecraft:powered_rail'),
+    support: await mc.blockIs(x, railY - 1, z, 'minecraft:redstone_block'),
+    light: await mc.blockIs(x, railY + 3, z, 'minecraft:light'),
   };
 }

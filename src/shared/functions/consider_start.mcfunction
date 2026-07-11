@@ -1,9 +1,10 @@
 # Running flat: begin a climb/descent only if BOTH hold:
 #   1. the target is at least .MIN_CHANGE blocks away (ignore small terrain noise), and
 #   2. enough flat distance has passed since the last event --
-#        .SAMEGAP columns to slope again in the SAME direction, or
-#        .TURNGAP columns to reverse direction
-#      (a large previous event shortens either gap -- the big-event gap
+#        .SAMEGAP columns to slope again in the SAME direction,
+#        .TURNGAP_TOP columns to descend after a climb (at a top), or
+#        .TURNGAP_BOTTOM columns to climb after a descent (at a bottom)
+#      (a large previous event shortens any of them -- the big-event gap
 #       credit below).
 # If a change is wanted but a gap forbids it, we hold the current height. That
 # is deliberate: terrain rising into us then becomes a tunnel ("punch through
@@ -18,11 +19,11 @@ execute if score .diff ir <= .ndead ir run scoreboard players set .want ir -1
 
 # --- Ground-contact overrides (the near scan; see decide's guard block) ---
 # Climb ON SCHEDULE: even when the average already wants a climb, hold it
-# until the 45-degree cone says it is due (.due, from decide -- the rail is
-# within .UPEARLY blocks of the height needed to crest what is coming).
-# This is what keeps the ramp from starting dozens of blocks before the
-# mountain; the flat gap keeps counting while held, so the wait can never
-# cause a gap-block later.
+# until the 45-degree cone says it is due (.due, from decide -- the rail has
+# reached the height needed to crest what is coming, less the clearance
+# .PLOW_GRACE_UP trades away to start later). This is what keeps the ramp
+# from starting dozens of blocks before the mountain; the flat gap keeps
+# counting while held, so the wait can never cause a gap-block later.
 execute if score .want ir matches 1 if score .due ir matches 0 run scoreboard players set .want ir 0
 # Climb EARLY (inside the deadband): the level line is about to plow into
 # terrain within the near scan's reach (.gmax above the rail -- the climb
@@ -42,14 +43,18 @@ execute unless score .want ir matches 0.. if score .dig2 ir matches 1 run scoreb
 # No change wanted: stay flat and keep counting toward the next gap.
 execute if score .want ir matches 0 run scoreboard players add .flat ir 1
 
-# Change wanted: required gap is .SAMEGAP to repeat the last direction, else .TURNGAP.
+# Change wanted: required gap is .SAMEGAP to repeat the last direction, else
+# the reversal gap for THIS reversal -- .TURNGAP_BOTTOM to climb again after
+# a descent (want +1, at a bottom), .TURNGAP_TOP to descend again after a
+# climb (want -1, at a top).
 execute unless score .want ir matches 0 if score .want ir = .lastDir ir run scoreboard players operation .need ir = .SAMEGAP cfg_terrain
-execute unless score .want ir matches 0 unless score .want ir = .lastDir ir run scoreboard players operation .need ir = .TURNGAP cfg_terrain
+execute if score .want ir matches 1.. unless score .want ir = .lastDir ir run scoreboard players operation .need ir = .TURNGAP_BOTTOM cfg_terrain
+execute unless score .want ir matches 0.. unless score .want ir = .lastDir ir run scoreboard players operation .need ir = .TURNGAP_TOP cfg_terrain
 
 # --- The big-event gap credit (the "gap adjuster") ---
 # The gaps exist to stop small bobbing, but after a LARGE climb/descent the
 # full gap itself reads as a mistake: a long flat bridge overshooting a peak
-# before the line may come back down (.TURNGAP), or long tunneled benches
+# before the line may come back down (.TURNGAP_TOP), or long tunneled benches
 # between the chained climb events of one big ascent (.SAMEGAP). So the last
 # event's size (.evrun -- its column count, which at 45 degrees is its
 # height) buys the NEXT event a proportional discount: .need shrinks by
@@ -94,33 +99,34 @@ execute if score .GAPMATCH cfg_terrain matches 1.. if score .gmag ir < .gth ir r
 execute unless score .want ir matches 0 run scoreboard players operation .need ir -= .gapcut ir
 execute unless score .need ir matches 0.. run scoreboard players set .need ir 0
 
-# --- The stretch shift (descents only; the "logical second pass") ---
+# --- The descent shift (the "logical second pass") ---
 # A gap-blocked descent may jump the gap ENTIRELY when the native shift
 # scan has already verified, over the terrain ahead, everything the wait
 # was for: the whole planned 45-degree descent path stays clear of ground
-# (so the floor guard cannot cut it into pieces -- the shifted descent is
-# the SAME single event to the SAME landing level), and the landing is a
-# real STRETCH -- .GAPSTRETCH columns of ground sitting at the landing
-# level -- so the calm the gap exists to guarantee simply happens at the
-# bottom instead of up on a clifftop bridge. .sver is the scan's verified
+# (beyond .PLOW_GRACE_DOWN levels of cut-through, so the floor guard cannot
+# cut it into pieces -- the shifted descent is the SAME single event to the
+# SAME landing level), and the landing is a real BOTTOM -- .SHIFT_REQ_BOTTOM
+# columns of ground sitting at the landing level -- so the calm the gap
+# exists to guarantee simply happens at the bottom instead of up on a
+# clifftop bridge. .sver is the scan's verified
 # horizon in blocks (0 = not verified / not applicable / feature off;
 # never written by an old native side = the comparison fails, the correct
 # fail-closed); the shift fires when it covers the descent (|.diff|, via
-# the .want sign trick) plus the landing stretch. And like the credit, the
+# the .want sign trick) plus the landing bottom. And like the credit, the
 # shift must be WORTH IT: the descent must be at least .GAPMATCH percent
 # of the gap it is jumping (.need, after the credit -- .gmag still holds
 # |.diff| here for a descent), or a verified but tiny dip could jump a
 # big gap and busy up gently rolling terrain -- the exact bobbing the
-# gaps exist to stop. Climbs have no shift: their just-in-time start is
-# the climb schedule's job (.due), and a gap-late climb is what the
-# credit above is for.
+# gaps exist to stop. Climbs have no scan of their own: their late-shift
+# is the schedule's .PLOW_GRACE_UP (decide), and a gap-late climb is what
+# the credit above is for.
 scoreboard players operation .swant ir = .diff ir
 scoreboard players operation .swant ir *= .want ir
-scoreboard players operation .swant ir += .GAPSTRETCH cfg_ride
+scoreboard players operation .swant ir += .SHIFT_REQ_BOTTOM cfg_ride
 scoreboard players operation .sbig ir = .need ir
 scoreboard players operation .sbig ir *= .GAPMATCH cfg_terrain
 scoreboard players operation .sbig ir /= .C100 ir
-execute unless score .want ir matches 0.. if score .GAPSTRETCH cfg_ride matches 1.. if score .sver ir >= .swant ir if score .gmag ir >= .sbig ir run scoreboard players set .need ir 0
+execute unless score .want ir matches 0.. if score .SHIFT_REQ_BOTTOM cfg_ride matches 1.. if score .sver ir >= .swant ir if score .gmag ir >= .sbig ir run scoreboard players set .need ir 0
 
 # Enough distance -> start the event; otherwise hold (tunnel/bridge) and keep
 # counting. The .slope guard skips the increment when start_event just fired

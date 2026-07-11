@@ -64,8 +64,9 @@ export default defineSuite('long ride endurance', ({ test }) => {
       const i = Math.floor(frac * (len - 1));
       const x = base + i;
       const y = await mc.trackY(i);
+      const prevY = i > 0 ? await mc.trackY(i - 1) : y;
       await mc.loadRegion(x - 1, -2, x + 1, 2, { settleMs: 900 });
-      const col = await checkColumn(mc, x, y, 0);
+      const col = await checkColumn(mc, x, y, 0, prevY);
       if (col.rail !== 'match' || col.support !== 'match' || col.light !== 'match') {
         bad.push(`x=${x} y=${y}: rail=${col.rail} support=${col.support} light=${col.light}`);
       }
