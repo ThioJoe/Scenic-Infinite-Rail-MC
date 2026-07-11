@@ -227,7 +227,7 @@ scoreboard players set .GAPRATIO cfg_terrain 50
 # at the summit does not. 67 demands two thirds, 100 demands a follow-up at
 # least as large as the event that earned the credit. 0 = no size
 # requirement (any wanted change may use the discount).
-scoreboard players set .GAPMATCH cfg_terrain 50
+scoreboard players set .GAPMATCH cfg_terrain 75
 
 # The stretch shift: a DESCENT that is only waiting for a spacing gap may
 # jump the gap entirely when a "logical second pass" over the terrain ahead
@@ -244,7 +244,7 @@ scoreboard players set .GAPMATCH cfg_terrain 50
 # never shift (they wait out their gap as before); keep .TERRAIN_GENAHEAD
 # comfortably above the reach. Lives in cfg_ride only because cfg_terrain
 # is full (a scoreboard sidebar shows at most 15 rows).
-scoreboard players set .GAPSTRETCH cfg_ride 50
+scoreboard players set .GAPSTRETCH cfg_ride 30
 
 
 # --- Track clearing / vegetation sparing ------------------------------------
@@ -281,7 +281,7 @@ scoreboard players set .SLOPECLEAR cfg_terrain 6
 # earlier-reacting line that averages away small features; shorter = a more
 # reactive line that hugs local terrain. (The sample count is derived:
 # .SAMPLE_WINDOW / .SAMPLE_BLOCK_INTERVAL readings -- 12 at the defaults.)
-scoreboard players set .SAMPLE_WINDOW cfg_terrain 48
+scoreboard players set .SAMPLE_WINDOW cfg_terrain 64
 
 # The spacing (blocks) between terrain readings inside the window. Smaller =
 # denser sampling (more probes per column -- costlier); larger = cheaper but
@@ -328,7 +328,7 @@ scoreboard players set .DOWNCLAMP cfg_terrain 30
 # and tunnels right under the summit. Bigger = hills are crested over more
 # often; smaller = ridgetops get punched through as before. 0 = climbs stop
 # exactly at the target, never overshooting.
-scoreboard players set .UPGRACE cfg_terrain 10
+scoreboard players set .UPGRACE cfg_terrain 20
 
 # The climb schedule's slack, in blocks: how much sooner than STRICTLY
 # NECESSARY a climb may begin. The scan projects every surface ahead onto a
@@ -364,7 +364,7 @@ scoreboard players set .DOWNLOOK_AHEAD cfg_terrain 250
 # higher values stop descents sooner / keep the line flying higher over
 # terrain it crosses. Keep it BELOW .HOVER, or descents end just short of
 # their target even over flat ground and the line rides permanently high.
-scoreboard players set .DOWNGRACE cfg_terrain 1
+scoreboard players set .DOWNGRACE cfg_terrain 0
 
 
 # --- Performance / world generation ----------------------------------------
@@ -506,28 +506,3 @@ scoreboard players set .CARTSOUND cfg_ride 1
 # experiment/feature turned on.
 scoreboard players set .DEBUGMODE ir 0
 
-
-# --- Legacy cleanup (renamed / retired settings) -----------------------------
-# These scores were renamed or retired; old worlds still carry them in the
-# save (and they would linger forever on the Debug menu's sidebar views).
-# Resetting a score that was never set is a harmless no-op, so this block
-# costs nothing on fresh worlds. The renames (old -> new):
-#   .TUNNEL -> .TUNNELCLEAR          .DEADBAND -> .MIN_CHANGE
-#   .MAXSPEED -> .DEFAULTSPEED       .DOWNLOOK -> .DOWNLOOK_AHEAD
-#   .AHEAD -> .PACE_CART_BEHIND      .GENAHEAD -> .TERRAIN_GENAHEAD
-#   .MAXTICK -> .BUILD_PER_TICK      .CAMAHEAD -> .RIDER_BEHIND (now measured
-#                                     from the build head: old 64 ahead of the
-#                                     cart == new 160 behind the head)
-# Retired outright:
-#   .UPLOOK  -- the climb-side scan now always uses the full .SAMPLE_WINDOW
-#   .UPCLAMP -- terrain above the line always registers at full height
-scoreboard players reset .TUNNEL cfg_terrain
-scoreboard players reset .DEADBAND cfg_terrain
-scoreboard players reset .UPCLAMP cfg_terrain
-scoreboard players reset .UPLOOK cfg_terrain
-scoreboard players reset .DOWNLOOK cfg_terrain
-scoreboard players reset .CAMAHEAD cfg_camera
-scoreboard players reset .MAXSPEED cfg_ride
-scoreboard players reset .AHEAD cfg_ride
-scoreboard players reset .GENAHEAD cfg_ride
-scoreboard players reset .MAXTICK cfg_ride
