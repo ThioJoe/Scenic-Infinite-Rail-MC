@@ -271,11 +271,11 @@ const HIST_PERSIST = 1024;
 const CONFIG_DEFAULTS = {
   HOVER: 2, TUNNELCLEAR: 6, CAMHEIGHT: 0, CAMBLEND: 6, CAMSMOOTH: 6, CAMLIFT: 20,
   RIDER_BEHIND: 160, CAMMODE: 0, CARTYOFF: 12, AUTOSTART: 1,
-  DEFAULTSPEED: 8, OCEANSPEED: 32, OCEANCHUNKS: 6, LANDCHUNKS: 3, MIN_CHANGE: 2,
-  SAMEGAP: 50, TURNGAP_TOP: 50, TURNGAP_BOTTOM: 50, GAPRATIO: 50, GAPMATCH: 75,
+  DEFAULTSPEED: 8, OCEANSPEED: 32, OCEANCHUNKS: 6, LANDCHUNKS: 3, MIN_CHANGE: 4,
+  SAMEGAP: 75, TURNGAP_TOP: 60, TURNGAP_BOTTOM: 100, GAPRATIO: 50, GAPMATCH: 75,
   SLOPECLEAR: 6, DOWNCLAMP: 30,
   UPGRACE: 20, DOWNLOOK_AHEAD: 250, PLOW_GRACE_UP: 0, PLOW_GRACE_DOWN: 0,
-  SHIFT_REQ_BOTTOM: 30, SAMPLE_WINDOW: 64, SAMPLE_BLOCK_INTERVAL: 4,
+  SHIFT_REQ_BOTTOM: 30, SAMPLE_WINDOW: 75, SAMPLE_BLOCK_INTERVAL: 1,
   PACE_CART_BEHIND: 224, TERRAIN_GENAHEAD: 192, BUILD_PER_TICK: 15, DEBUGMODE: 0,
   SKYY: 120, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 32, SEAPICKLE: 4,
   CARTSOUND: 1,
@@ -1226,6 +1226,85 @@ function clearSoft(x, y, z) {
   } catch { /* border chunk: the loop heals it on a later pass-through */ }
 }
 
+// --- Surface restoration --------------------------------------------------
+// The bore's SIDE stacks are the only place a carve can leave ugly exposed
+// dirt (the center's floor is always the support block). Before a side
+// stack is cleared, noteSurface remembers what its original surface was:
+// the topmost block below the bottommost air cell of the span about to be
+// carved (the walk stops at the FIRST air, so an overhead canopy never
+// hides the true ground), classified into a small class -- grass, podzol,
+// mycelium, moss, snow. A span with no air at all (a full tunnel face)
+// classifies its TOP cell instead: a tunnel grazing just under a meadow
+// still counts as grass, deep rock classifies 0 = leave alone. After the
+// clear, fixSurface walks down to the newly exposed top block and paints
+// it back: exposed DIRT becomes the remembered material, and snow cover
+// additionally lays a fresh snow layer on whatever the new top is.
+// The Java twin is surf_note/surf_class/surf_fix -- keep the class lists
+// in step. NOTE the inverted snow ids: Bedrock's snow_layer/snow are
+// Java's snow/snow_block.
+const SURFACE_CLASSES = {
+  'minecraft:grass_block': 1,
+  'minecraft:podzol': 2,
+  'minecraft:mycelium': 3,
+  'minecraft:moss_block': 4,
+  'minecraft:snow_layer': 5, // the thin layer (Java: minecraft:snow)
+  'minecraft:snow': 5,       // the full block (Java: minecraft:snow_block)
+};
+// What fixSurface paints exposed dirt into, by class (class 5's snowy
+// ground turns to grass like the grass a snow layer usually sits on).
+const SURFACE_PAINT = ['', 'minecraft:grass_block', 'minecraft:podzol',
+  'minecraft:mycelium', 'minecraft:moss_block', 'minecraft:grass_block'];
+
+function noteSurface(x, z, yBase, h) {
+  try {
+    let airAt = -1;
+    for (let dy = 0; dy <= h; dy++) {
+      const b = dim.getBlock({ x, y: yBase + dy, z });
+      if (!b) return 0;                     // border chunk: skip quietly
+      if (b.isAir === true) { airAt = dy; break; }
+    }
+    // Air at the very bottom: the ground below the span is already exposed
+    // today -- clearing uncovers nothing new here.
+    if (airAt === 0) return 0;
+    // First air above the bottom: the surface is just below it. No air at
+    // all: the span's top cell stands in.
+    let sy = airAt > 0 ? yBase + airAt - 1 : yBase + h;
+    // A plant standing on the surface isn't the surface: step down through
+    // up to 3 kept-vegetation cells before giving up.
+    for (let skip = 0; skip <= 3; skip++) {
+      const b = dim.getBlock({ x, y: sy - skip, z });
+      if (!b) return 0;
+      const id = b.typeId ?? '';
+      const cls = SURFACE_CLASSES[id];
+      if (cls) return cls;
+      if (!isVegetation(id)) return 0;
+    }
+    return 0;
+  } catch { return 0; }
+}
+
+function fixSurface(x, z, yBase, cls) {
+  if (!cls) return;
+  try {
+    // Walk down past air and spared plants to the newly exposed top block.
+    // Bounded to 8 below the rail: deeper means the clear exposed nothing
+    // here (the stack hung over a hole -- the ground down there was never
+    // covered).
+    for (let dy = 0; dy >= -8; dy--) {
+      const b = dim.getBlock({ x, y: yBase + dy, z });
+      if (!b) return;
+      const id = b.typeId ?? '';
+      if (b.isAir === true || isVegetation(id)) continue;
+      if (id === 'minecraft:dirt') dim.setBlockType({ x, y: yBase + dy, z }, SURFACE_PAINT[cls]);
+      if (cls === 5) {
+        const above = dim.getBlock({ x, y: yBase + dy + 1, z });
+        if (above && above.isAir === true) dim.setBlockType({ x, y: yBase + dy + 1, z }, 'minecraft:snow_layer');
+      }
+      return;
+    }
+  } catch { /* border chunk: cosmetic only, skip */ }
+}
+
 // The carve is VEGETATION-SPARING, mirroring Java's carve/carve_layer cell
 // rules exactly (the shared brain decides WHICH columns may spare -- veg):
 //   - center, rail cell + 1 above: ALWAYS cleared (cart + rider pass here)
@@ -1238,6 +1317,10 @@ function clearSoft(x, y, z) {
 function placeColumn(x, y, dir, veg) {
   const z = S.centerZ;
   const carveH = dir === 0 ? cfg('TUNNELCLEAR') : cfg('TUNNELCLEAR') + 1; // .TUNNELUP
+  // Surface restoration, step 1: remember what each side stack's original
+  // surface was, before anything is cleared (see noteSurface above).
+  const surfL = noteSurface(x, z - 1, y, carveH);
+  const surfR = noteSurface(x, z + 1, y, carveH);
   dim.fillBlocks(
     new BlockVolume({ x, y, z }, { x, y: y + 1, z }),
     AIR, { ignoreChunkBoundErrors: true },
@@ -1253,6 +1336,10 @@ function placeColumn(x, y, dir, veg) {
     clearSoft(x, y + dy, z + 1);
     if (veg && dy >= 2) clearSoft(x, y + dy, z);
   }
+  // Surface restoration, step 2: the clear is done -- paint each side
+  // stack's newly exposed ground back into its remembered surface material.
+  fixSurface(x, z - 1, y, surfL);
+  fixSurface(x, z + 1, y, surfR);
   dim.setBlockPermutation({ x, y: y - 1, z }, SUPPORT);
   dim.setBlockPermutation({ x, y, z }, dir === 0 ? RAIL_FLAT : dir === 1 ? RAIL_UP : RAIL_DOWN);
   // The track light, at the Track light mode's level (0 = none -- the carve

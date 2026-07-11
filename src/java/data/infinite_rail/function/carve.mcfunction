@@ -18,6 +18,20 @@
 #     the shared decide computes .veg), vegetation-sparing otherwise.
 #   - Left and right of the track: ALWAYS vegetation-sparing, at every
 #     height (trees right beside the line survive even on slopes).
+#
+# The bore also RESTORES the surface it cuts through (surf_note/surf_fix):
+# whatever ground the clear newly exposes beside the rails is painted back
+# into the surface material it was buried under -- a cutting through a
+# meadow stays grass-lined, a snowy hillside stays white, plain rock is
+# left alone. Only the two SIDE stacks need it: the center's floor is
+# always the support block.
+
+# Surface restoration, step 1: remember what each side stack's original
+# surface was, before anything is cleared.
+execute positioned ~ ~ ~-1 run function infinite_rail:surf_note
+scoreboard players operation .sfl ir = .sfc ir
+execute positioned ~ ~ ~1 run function infinite_rail:surf_note
+scoreboard players operation .sfr ir = .sfc ir
 
 # The critical envelope: rail cell + 1 above, center only.
 fill ~ ~ ~ ~ ~1 ~ minecraft:air
@@ -29,3 +43,10 @@ execute if score .veg ir matches 0 run function infinite_rail:carve_center with 
 # Everything else is per-cell: walk the bore bottom-to-top (see carve_layer).
 scoreboard players set .cy ir 0
 function infinite_rail:carve_layer
+
+# Surface restoration, step 2: the clear is done -- paint each side stack's
+# newly exposed ground back into its remembered surface material.
+scoreboard players operation .sfc ir = .sfl ir
+execute if score .sfl ir matches 1.. positioned ~ ~ ~-1 run function infinite_rail:surf_fix
+scoreboard players operation .sfc ir = .sfr ir
+execute if score .sfr ir matches 1.. positioned ~ ~ ~1 run function infinite_rail:surf_fix

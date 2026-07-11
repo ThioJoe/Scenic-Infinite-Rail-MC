@@ -99,6 +99,7 @@ toggles) are all covered directly.
 | `30-modes` | every toggle & tri-state score, density presets, time modes moving the real clock, sky mode steering an actual ride to exactly `.SKYY` and back down |
 | `40-ride` | begin/launch phases under frozen ticks, runway goal, track-history consistency, 45° contiguity, physical rail/support/light spot checks, disguise displays, pace-cart motion, rig distance & height, keeper gluing, `.gap` bounds, `.hdmiss` |
 | `45-vegwall` | vegetation & structures are invisible to the slope logic: dense log + planks walls built across the path must not make the line climb (the probe's not-terrain dig-down, end to end) |
+| `46-surface` | surface restoration after carving: controlled mounds + `place_flat` straight into them — grass-topped ground regrows grass beside the rails, snow cover comes back as grass + a snow layer, a buried span falls back to its top cell, deep rock and already-open ground stay untouched |
 | `50-longride` | 2 400 ticks of sprinting: sustained building, cart progress, contiguity + physical checks along the whole line, rig still on-profile, no errors |
 | `60-lifecycle` | `/reload` mid-ride (state survives, config refreshes, build continues), `stop` teardown (entities gone, forceloads cleared, **track remains**), stopped-stays-stopped, second ride restarts cleanly |
 
@@ -242,6 +243,6 @@ slash path), `setScore`, `scoreInRange`, `scriptErrorsSince(mark)`.
 
 ## Runtime budget
 
-Full Java run: ~4.5–5.5 min (8 suites × ~14 s boot + the sprints). Bedrock: ~1 min.
+Full Java run: ~6–8 min (10 suites × ~15 s boot + the sprints). Bedrock: ~1.5 min.
 Suites boot fresh servers sequentially on fixed ports (25565/25575 Java, 19132 Bedrock),
 so don't run two harness invocations in parallel on one machine.
