@@ -382,7 +382,7 @@ scoreboard players set .DOWNLOOK_AHEAD cfg_terrain 250
 # through bumps up to this tall on its way down, so one shallow lip on an
 # otherwise-clear drop no longer blocks the whole early descent. 0 = only
 # ever touch down on the surface, never into it.
-scoreboard players set .PLOW_GRACE_DOWN cfg_terrain 0
+scoreboard players set .PLOW_GRACE_DOWN cfg_terrain 1
 
 # CLIMBS (shift them LATER): how many blocks of crest clearance the climb
 # schedule may give up to start later. The schedule normally releases a
@@ -392,7 +392,7 @@ scoreboard players set .PLOW_GRACE_DOWN cfg_terrain 0
 # hover clearance first, then (past .HOVER levels) genuinely cutting into
 # the leading face, which the carve bores through. 0 = always crest with
 # full hover clearance, never cut.
-scoreboard players set .PLOW_GRACE_UP cfg_terrain 0
+scoreboard players set .PLOW_GRACE_UP cfg_terrain 1
 
 
 # --- Performance / world generation ----------------------------------------
