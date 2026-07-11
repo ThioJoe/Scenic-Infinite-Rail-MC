@@ -873,7 +873,6 @@ function showTips(player) {
       '§lRecommended settings§r',
       '',
       '§7- On mouse & keyboard: hide the HUD with §fF1',
-      '§7- On console: hide the HUD with the §fToggle HUD§7 hotbar item, and enable §f"Hide Hand"§7 in the video settings',
       '§7- FOV: §f100+',
       '§7- Simulation distance: §fas low as possible',
       '§7- Render distance: §f16-24 chunks§7, or more if your hardware keeps up',
@@ -883,6 +882,12 @@ function showTips(player) {
       '§7- Disable §f"Enable Game Pause"§7 (also stops the screen dimming while AFK)',
       '§7- Disable §f"Show Pause Menu on Focus Lost"',
       '§7- Disable §f"Lower Framerate when Controller is Disconnected"§7 (if applicable)',
+      '',
+      '§lConsole Tips§r',
+      '',
+      '§7- Hide the HUD with the §fToggle HUD§7 hotbar item, and enable §f"Hide Hand"§7 in the video settings',
+      '§7- Use a §fwired controller§7 to avoid the "controller disconnected" warning',
+      '§7- To run a custom pack on console: host it on a §fRealm§7 (a trial Realm works), then §fdownload the world as a local copy§7 to play it offline with the pack intact',
     ].join('\n'))
     .button('Close');
   form.show(player).catch((e) => reportError('tips page', e));
