@@ -21,13 +21,17 @@ src/
                         bridges at its root -- scripts/ -- including the
                         carve's vegetation list, vegetation.js -- entities/,
                         blocks/, items/ -- the non-placeable Speed -/Reset/+
-                        hotbar items)
+                        and Toggle HUD hotbar items)
   bedrock/rp/           the Bedrock resource pack: the invisible client
                         definitions of the camera-seat and chunk-scout
                         entities, plus the texture/sound/name wiring for the
-                        custom track-support block and the Speed items'
-                        icons (all reuse vanilla textures -- no image files
-                        are shipped)
+                        custom track-support block and the pinned items'
+                        icons (the Speed trio reuses vanilla textures; the
+                        two shipped images are the Toggle HUD pair's icons,
+                        textures/items/ir_hide_hud.png -- crossed-out eye,
+                        shown while the HUD is visible -- and ir_blank.png,
+                        the fully transparent variant that keeps the held
+                        item invisible while it's hidden -- CONTEXT.md §11e)
 tools/
   build.mjs             assembles + validates + zips both packs (zero deps)
   simulate.mjs          interprets the emitted shared functions and asserts

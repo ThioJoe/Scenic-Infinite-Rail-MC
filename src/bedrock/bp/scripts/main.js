@@ -160,7 +160,10 @@ const DBG = '§3[SR Debug]§r ';
 //   1  "Visual Settings"  opens the native visual form (rain, time, torches)
 //   2  "Toggle HUD"   hides the HUD except the item-name popup / restores it
 //                     (runs infinite_rail/hud_toggle -- Bedrock-only, Java
-//                     riders have F1; invisible in hand, see toggleHud)
+//                     riders have F1; an item PAIR: crossed-out-eye icon
+//                     while the HUD shows, swapped for the fully transparent
+//                     variant while hidden, so nothing is held during the
+//                     clean view -- see toggleHud)
 //   3  "Speed -"      one notch slower down the speed grid (runs infinite_rail/speed_dec)
 //   4  "Speed Reset"  back to the default ride speed (runs infinite_rail/speed_reset) -- dead center of the bar
 //   5  "Speed +"      one notch faster up the speed grid (runs infinite_rail/speed_inc)
@@ -206,21 +209,40 @@ const SPEED_RESET_NAME = '§eSpeed Reset';
 // vanilla item, used only if this engine somehow can't resolve the custom
 // id (mismatched/outdated pack pair) -- and still matched by the use
 // handlers so a stale save's old items keep working until the keeper
-// swaps them. "Toggle HUD" is the pack's own too (bp/items/toggle_hud.json;
-// eye-of-ender icon), for a second reason on top of non-placeability: the
-// RP binds the EMPTY geometry to it as an attachable, so the held item
-// renders as nothing -- /hud can't hide the hand or what it holds, and an
-// invisible held item is what keeps the hidden-HUD view clean. It has NO
-// vanilla fallback ON PURPOSE: any stand-in renders in hand, the exact
-// thing this item exists not to do, and a stand-in also HIDES the real
-// problem (a pack install missing bp/items/ -- the shadow-tree symlink
-// bug -- shipped as a mystery amethyst instead of a diagnosis). If the id
-// doesn't resolve, the slot stays EMPTY and customItemOk warns in chat
-// naming the id.
+// swaps them. "Toggle HUD" is the pack's own too -- a PAIR of plain
+// non-placeable custom items sharing one hotbar slot, picked by HUD state:
+// toggle_hud_shown (bp/items/toggle_hud_shown.json, the visible ir_hide_hud
+// crossed-out-eye icon) is pinned while the HUD is VISIBLE, and toggle_hud
+// (bp/items/toggle_hud.json, the FULLY TRANSPARENT ir_blank.png icon --
+// a flat item with zero opaque pixels renders as NOTHING in hand) swaps in
+// while the HUD is HIDDEN, so the parked-on-this-slot clean view holds
+// nothing visible exactly when the clean view is on. The swap is the
+// keeper's normal mismatch re-pin (pinnedItemType answers by hudHiddenNow),
+// so it fires ONCE per HUD toggle -- a deliberate click, wheel at rest --
+// and steady state stays write-silent: nothing per-scroll or per-equip for
+// the mouse wheel to race. That ordering matters -- the invisible-in-hand
+// job was first done by an RP attachable binding empty geometry, and an
+// attachable is re-instantiated on EVERY equip, i.e. every hotbar scroll
+// onto/off its slot; that per-equip churn ate scroll notches (re-boning the
+// geometry didn't help -- the attachable mechanism itself was the problem).
+// RULE OF THUMB from the two scroll-eating bugs this hotbar has had: a
+// pinned item must be a plain NON-PLACEABLE custom item with NO attachable,
+// and hotbar writes must correlate with CLICKS, never with scrolling --
+// anything the client re-evaluates around a hotbar slot (placement
+// prediction, attachable re-instantiation, mid-scroll resyncs) races the
+// mouse wheel. The pair has NO vanilla fallback ON PURPOSE: a stand-in
+// HIDES the real problem (a pack install missing bp/items/ -- the
+// shadow-tree symlink bug -- shipped as a mystery amethyst instead of a
+// diagnosis). If one variant's id doesn't resolve (a half-updated
+// registry), pinnedItemType falls back to the OTHER variant; if neither
+// resolves, the slot stays EMPTY and customItemOk warns in chat naming the
+// id.
 const PINNED = [
   { slot: 0, type: 'minecraft:chest_minecart', name: RIDE_NAME, lore: ['§7Use to open the', '§7ride settings menu'] },
   { slot: 1, type: 'minecraft:soul_campfire', name: VISUAL_NAME, lore: ['§7Use to open the', '§7visual settings menu'] },
-  { slot: 2, type: 'infinite_rail:toggle_hud', name: HUD_NAME, lore: ['§7Hide or show the HUD'] },
+  // altType = the HUD-hidden variant (blank icon, held as nothing); `type` is
+  // the HUD-visible one. pinnedItemType picks per tick via hudHiddenNow().
+  { slot: 2, type: 'infinite_rail:toggle_hud_shown', altType: 'infinite_rail:toggle_hud', name: HUD_NAME, lore: ['§7Hide or show the HUD'] },
   { slot: 3, type: 'infinite_rail:speed_down', fallback: 'minecraft:rail', name: SPEED_DOWN_NAME, lore: ['§7Ride speed down'] },
   { slot: 4, type: 'infinite_rail:speed_reset', fallback: 'minecraft:minecart', name: SPEED_RESET_NAME, lore: ['§7Reset the ride speed', '§7to the default'] },
   { slot: 5, type: 'infinite_rail:speed_up', fallback: 'minecraft:golden_rail', name: SPEED_UP_NAME, lore: ['§7Ride speed up'] },
@@ -256,7 +278,7 @@ function customItemOk(id) {
   try { void new ItemStack(id, 1); ok = true; } catch { ok = false; }
   itemProbe.set(id, { ok, at: tickN });
   try {
-    setScore('itemsok', PINNED.every((d) => !d.type.startsWith(`${NS}:`) || itemProbe.get(d.type)?.ok) ? 1 : 0);
+    setScore('itemsok', PINNED.every((d) => [d.type, d.altType].every((t) => !t || !t.startsWith(`${NS}:`) || itemProbe.get(t)?.ok)) ? 1 : 0);
   } catch { /* scoreboard not ready this early */ }
   if (!ok && !itemWarned) {
     itemWarned = true;
@@ -264,7 +286,30 @@ function customItemOk(id) {
   }
   return ok;
 }
+// Is the HUD currently hidden by the Toggle HUD item? Drives which of the
+// slot-2 pair the keeper pins. The .HUDHIDDEN score is authoritative where
+// the API can read it; on cmd-bridge worlds (split scoreboards -- the read
+// lies) the script's own S.hudHidden mirror, flipped by toggleHud and
+// persisted with the ride state, answers instead (a chat-run hud_toggle
+// desyncs the mirror there -- cosmetic only, the next item click realigns).
+function hudHiddenNow() {
+  if (bridgeMode === 'api') return getScore('HUDHIDDEN', 0) === 1;
+  return !!S.hudHidden;
+}
+
 function pinnedItemType(def) {
+  if (def.altType) {
+    // The Toggle HUD pair: `type` while the HUD is visible, `altType` (the
+    // blank held-as-nothing variant) while it is hidden. A half-updated
+    // registry that resolves only one variant degrades to that variant
+    // (still non-placeable, still matched by the use handlers) instead of
+    // throwing the keeper into a re-pin loop.
+    const primary = hudHiddenNow() ? def.altType : def.type;
+    const other = primary === def.type ? def.altType : def.type;
+    if (customItemOk(primary)) return primary;
+    if (customItemOk(other)) return other;
+    return def.type; // neither resolves: makePinnedItem throws, slot stays empty + warning
+  }
   if (!def.fallback) return def.type;
   return customItemOk(def.type) ? def.type : def.fallback;
 }
@@ -428,6 +473,7 @@ const S = {
   scoutMissing: 0, // consecutive ticks the scout has been missing (respawn grace)
   camActive: false, // whether the optional Camera API mode is currently applied
   teleportFallback: false, // set if applyImpulse is unavailable on the seat
+  hudHidden: false, // script-side mirror of .HUDHIDDEN (hudHiddenNow's cmd-bridge answer; picks the slot-2 item variant)
 };
 
 let dim = null;   // the overworld
@@ -889,7 +935,7 @@ function showTips(player) {
       '',
       '§lConsole Tips§r',
       '',
-      '§7- Hide the HUD with the §fToggle HUD§7 hotbar item, and enable §f"Hide Hand"§7 in the video settings',
+      '§7- Hide the HUD with the §fToggle HUD§7 hotbar item - while hidden, staying on its slot also keeps your hand empty; enable §f"Hide Hand"§7 in the video settings to hide the arm too',
       '§7- Use a §fwired controller§7 to avoid the "controller disconnected" warning',
       '§7- To run a custom pack on console: host it on a §fRealm§7 (a trial Realm works), then §fdownload the world as a local copy§7 to play it offline with the pack intact',
     ].join('\n'))
@@ -903,11 +949,23 @@ function showTips(player) {
 // through the hud_toggle function file: hiding runs `hud @a hide all` then
 // `hud @a reset item_text` -- everything gone EXCEPT the temporary
 // item-name popup, so scrolling the hotbar still names the pinned items --
-// and the next use runs `hud @a reset all`. The held item itself renders
-// as NOTHING (the RP binds the empty geometry to infinite_rail:toggle_hud
-// as an attachable -- /hud never touches the hand or what it holds), so the
-// hidden-HUD view is completely clean. A HUD hidden some other way (F1 is
-// client-side; /hud can't see it) just costs one harmless "restore" click.
+// and the next use runs `hud @a reset all`. /hud never touches the hand or
+// what it holds -- the held-item problem is solved by the ITEM PAIR (see
+// the PINNED note): while the HUD is visible the slot pins toggle_hud_shown
+// (the crossed-out-eye icon), and the toggle's score flip makes the keeper
+// swap in toggle_hud -- the fully transparent variant that is held as
+// NOTHING -- so hiding the HUD also empties the hand of a rider parked on
+// this slot, and showing it brings the icon back. One keeper write per
+// toggle, correlated with the click and never with scrolling (the Tips
+// still mention "Hide Hand" for hiding the bare arm as well). The
+// invisible-held-item job was done by an RP attachable with empty geometry
+// before, but the attachable re-instantiated on every equip (every scroll
+// onto/off this slot) and that per-equip churn raced the mouse wheel and
+// ATE SCROLL NOTCHES -- the same symptom the placeable Speed items once
+// caused via cancelled-placement hotbar resyncs, from a different
+// mechanism. Plain custom items give the client nothing to re-evaluate per
+// scroll. A HUD hidden some other way (F1 is client-side; /hud can't see
+// it) just costs one harmless "restore" click.
 function toggleHud() {
   const before = getScore('HUDHIDDEN', 0);
   runCmd(`function ${NS}/hud_toggle`);
@@ -927,6 +985,12 @@ function toggleHud() {
       say('§7HUD restored.');
     }
   }
+  // Mirror the new state script-side: hudHiddenNow() reads the score where
+  // the API can (api bridge), and falls back to this flag on cmd-bridge
+  // worlds where the read lies. The keeper's next tick swaps the slot-2
+  // item variant to match (icon visible <-> held-as-nothing blank).
+  S.hudHidden = bridgeMode === 'api' ? getScore('HUDHIDDEN', 0) === 1 : !S.hudHidden;
+  saveState();
 }
 
 // The native debug menu, opened by using the Debug book: the .DEBUGMODE
@@ -1085,6 +1149,7 @@ function saveState() {
     paceX: S.paceX, paceSpeed: S.paceSpeed, targetSpeed: S.targetSpeed,
     fast: S.fast, oceanRun: S.oceanRun, landRun: S.landRun,
     lastChunk: S.lastChunk, s2: S.s2, riderName: S.riderName, riderId: S.riderId,
+    hudHidden: S.hudHidden,
   }));
 }
 
@@ -1103,6 +1168,7 @@ function loadState() {
     S.lastChunk = d.lastChunk | 0; S.s2 = +d.s2 || 0;
     S.riderName = typeof d.riderName === 'string' ? d.riderName : '';
     S.riderId = typeof d.riderId === 'string' ? d.riderId : '';
+    S.hudHidden = !!d.hudHidden;
     syncFast(); // the shared speed_step reads .fast from the scoreboard
   } catch { /* corrupt state: fall through to a fresh start */ }
 }
@@ -2517,7 +2583,7 @@ function stop(silent) {
       const inv = rider.getComponent('minecraft:inventory')?.container;
       for (const def of PINNED) {
         const cur = inv?.getItem(def.slot);
-        if (cur && (cur.typeId === def.type || cur.typeId === def.fallback) && cur.nameTag === def.name) {
+        if (cur && (cur.typeId === def.type || cur.typeId === def.altType || cur.typeId === def.fallback) && cur.nameTag === def.name) {
           inv.setItem(def.slot, undefined);
         }
       }
@@ -2535,6 +2601,7 @@ function stop(silent) {
   // through a command so cmd-bridge worlds reset too.
   runCmd('hud @a reset all');
   runCmd(`scoreboard players set ${P}HUDHIDDEN ir 0`);
+  S.hudHidden = false;
   // Remove EVERY rig piece wearing our tags (there should be one of each, but
   // stale sessions may have left extras behind). Each type is collected under
   // its own guard so one unregistered type (e.g. an outdated BP without the
@@ -2682,7 +2749,9 @@ function init() {
   // score without starting a ride). Probes every pack-own id, fallback or
   // not; a failure here re-probes every ~30 s.
   for (const def of PINNED) {
-    if (def.type.startsWith(`${NS}:`)) customItemOk(def.type);
+    for (const t of [def.type, def.altType]) {
+      if (t && t.startsWith(`${NS}:`)) customItemOk(t);
+    }
   }
 
   AIR = BlockPermutation.resolve('minecraft:air');
@@ -2814,7 +2883,7 @@ let lastPinnedUseAt = -1e9;
 function handlePinnedUse(player, item) {
   if (!inited || !S.started) return;
   if (!item || player?.typeId !== 'minecraft:player' || player.name !== S.riderName) return;
-  const def = PINNED.find((d) => (d.type === item.typeId || d.fallback === item.typeId) && d.name === item.nameTag);
+  const def = PINNED.find((d) => (d.type === item.typeId || d.altType === item.typeId || d.fallback === item.typeId) && d.name === item.nameTag);
   if (!def) return;
   // One physical click can arrive TWICE -- itemUse fires on the click's tick
   // and the cancelled interact path re-delivers via system.run a tick later
@@ -2859,7 +2928,7 @@ try {
       const item = ev.itemStack; // optional: empty-hand interactions carry none
       const player = ev.player;
       if (!item || player?.name !== S.riderName) return;
-      if (!PINNED.some((d) => (d.type === item.typeId || d.fallback === item.typeId) && d.name === item.nameTag)) return;
+      if (!PINNED.some((d) => (d.type === item.typeId || d.altType === item.typeId || d.fallback === item.typeId) && d.name === item.nameTag)) return;
       // Never place a menu item's block/cart (or a stale save's old vanilla
       // speed item), and never let a pinned-item click interact with a
       // passing lever/door/chest; run the real action outside the

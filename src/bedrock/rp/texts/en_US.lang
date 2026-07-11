@@ -3,3 +3,4 @@ item.infinite_rail:speed_down.name=Speed -
 item.infinite_rail:speed_reset.name=Speed Reset
 item.infinite_rail:speed_up.name=Speed +
 item.infinite_rail:toggle_hud.name=Toggle HUD
+item.infinite_rail:toggle_hud_shown.name=Toggle HUD

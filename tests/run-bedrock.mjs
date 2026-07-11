@@ -128,7 +128,7 @@ const tests = [
     if (wrong.length) throw new Error(`config values not applied: ${wrong.join('; ')}`);
   }),
 
-  report('the pack\'s own custom items registered (.itemsok: speed trio + Toggle HUD)', async (s) => {
+  report('the pack\'s own custom items registered (.itemsok: speed trio + the Toggle HUD pair)', async (s) => {
     // init() probes every bp/items/*.json id with new ItemStack and mirrors
     // the combined answer to .itemsok; a failed probe re-tries every ~30 s,
     // so poll past one retry before declaring the item registry broken.

@@ -12,7 +12,10 @@
       "textures": "textures/blocks/rail_golden"
     },
     "ir_toggle_hud": {
-      "textures": "textures/items/ender_eye"
+      "textures": "textures/items/ir_blank"
+    },
+    "ir_hide_hud": {
+      "textures": "textures/items/ir_hide_hud"
     }
   }
 }
