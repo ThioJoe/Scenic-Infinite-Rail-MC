@@ -100,6 +100,7 @@ New-DirSymlink -LinkPath "$outDir\$javaDir\data\infinite_rail\tags" -TargetPath 
 New-DirSymlink -LinkPath "$outDir\$javaDir\data\infinite_rail\predicate" -TargetPath "src\java\data\infinite_rail\predicate"
 
 New-FileSymlink -LinkPath "$outDir\$javaDir\pack.mcmeta" -TargetPath "src\java\pack.mcmeta"
+New-FileSymlink -LinkPath "$outDir\$javaDir\pack.png" -TargetPath "src\java\pack.png"
 
 # Link native Java functions
 $javaNative = Get-ChildItem -Path "src\java\data\infinite_rail\function" -File

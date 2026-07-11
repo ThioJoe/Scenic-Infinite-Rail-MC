@@ -31,6 +31,7 @@ The **shipped** Java pack (what `tools/build.mjs` assembles into `dist/java/Scen
 ```
 Scenic_Infinite_Rail_Mode/
   pack.mcmeta                                   # pack metadata + version compat + overlays
+  pack.png                                      # pack icon (shown on the Data Packs screen)
   data/
     minecraft/tags/function/
       load.json                                 # vanilla hook: run on load/reload

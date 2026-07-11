@@ -13,18 +13,21 @@ src/
                         adjustable ride speed's state machine) and
                         debug_state (the live-state sidebar mirror)
   java/                 the Java data pack, minus the shared files
-                        (pack.mcmeta, data/, overlay_snake/ -- including the
-                        ir_* call bridges in data/minecraft/function/ and the
-                        carve's vegetation list, tags/block/keep.json)
+                        (pack.mcmeta, pack.png -- the pack icon -- data/,
+                        overlay_snake/ -- including the ir_* call bridges in
+                        data/minecraft/function/ and the carve's vegetation
+                        list, tags/block/keep.json)
   bedrock/bp/           the Bedrock behavior pack, minus the shared files
-                        (manifest.json, functions/ -- including the ir_* call
-                        bridges at its root -- scripts/ -- including the
-                        carve's vegetation list, vegetation.js -- entities/,
-                        blocks/, items/ -- the non-placeable Speed -/Reset/+
-                        and Toggle HUD hotbar items)
-  bedrock/rp/           the Bedrock resource pack: the invisible client
-                        definitions of the camera-seat and chunk-scout
-                        entities, plus the texture/sound/name wiring for the
+                        (manifest.json, pack_icon.png -- the pack icon --
+                        functions/ -- including the ir_* call bridges at its
+                        root -- scripts/ -- including the carve's vegetation
+                        list, vegetation.js -- entities/, blocks/, items/ --
+                        the non-placeable Speed -/Reset/+ and Toggle HUD
+                        hotbar items)
+  bedrock/rp/           the Bedrock resource pack (pack_icon.png -- the pack
+                        icon): the invisible client definitions of the
+                        camera-seat and chunk-scout entities, plus the
+                        texture/sound/name wiring for the
                         custom track-support block and the pinned items'
                         icons (the Speed trio reuses vanilla textures; the
                         two shipped images are the Toggle HUD pair's icons,

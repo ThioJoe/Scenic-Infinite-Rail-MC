@@ -252,6 +252,14 @@ if (!existsSync(join(BEDROCK_OUT, 'scripts', 'vegetation.js'))) fail('Bedrock BP
 if (!existsSync(join(BEDROCK_OUT, 'scripts', 'not_terrain.js'))) fail('Bedrock BP has no scripts/not_terrain.js (the surface probe\'s dig-down list)');
 if (!existsSync(join(BEDROCK_RP_OUT, 'manifest.json'))) fail('Bedrock RP has no manifest.json');
 
+// The pack icons ship right next to the metadata that names them: pack.png by
+// pack.mcmeta on Java, pack_icon.png by each manifest.json on Bedrock. The
+// recursive cpSync above places them automatically -- guard them here so a
+// deleted/renamed source icon fails the build instead of shipping iconless.
+if (!existsSync(join(JAVA_OUT, 'pack.png'))) fail('Java pack has no pack.png (the pack icon)');
+if (!existsSync(join(BEDROCK_OUT, 'pack_icon.png'))) fail('Bedrock BP has no pack_icon.png (the pack icon)');
+if (!existsSync(join(BEDROCK_RP_OUT, 'pack_icon.png'))) fail('Bedrock RP has no pack_icon.png (the pack icon)');
+
 // ---------------------------------------------------------------------------
 // 4. Zip writer (store + deflate, fixed timestamps for reproducible output).
 // ---------------------------------------------------------------------------
