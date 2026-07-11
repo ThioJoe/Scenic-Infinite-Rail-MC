@@ -8,5 +8,5 @@ dist_links/
 # Other / Misc
 prompt.txt
 Make_Symlinks-Signed.ps1
-
+*.bak*
 
