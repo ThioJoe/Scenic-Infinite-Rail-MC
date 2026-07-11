@@ -3,5 +3,7 @@
 #   /function infinite_rail:speed_reset
 # The message it prints shows the resulting number with "(default)".
 scoreboard players set .spdir ir 0
+# A reset is an absolute set, not a grid walk: keep speed_step off the grid.
+scoreboard players set .spstep ir 0
 function infinite_rail:speed_step
 function infinite_rail:speed_apply

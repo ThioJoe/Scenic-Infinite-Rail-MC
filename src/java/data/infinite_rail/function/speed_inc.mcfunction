@@ -5,5 +5,7 @@
 # speed_apply pushes the result into the minecart max-speed gamerule and
 # reports the new value.
 scoreboard players operation .spdir ir = .SPEEDSTEP ir
+# A single-notch click: walk the selectable-speed grid (fine below 8) -- see speed_step.
+scoreboard players set .spstep ir 1
 function infinite_rail:speed_step
 function infinite_rail:speed_apply

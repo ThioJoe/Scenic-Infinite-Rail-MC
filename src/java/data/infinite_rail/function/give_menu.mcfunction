@@ -4,9 +4,9 @@
 # accumulates; stop takes them back):
 #   hotbar.0  "Ride Settings"    book: sky mode, cart sound, hide cart, mobs aggro   (chest-minecart icon)
 #   hotbar.1  "Visual Settings"  book: rain, time, torches, track light (page 2)     (soul-campfire icon)
-#   hotbar.3  "Speed -"      .SPEEDSTEP blocks/s slower       (rail icon)
-#   hotbar.4  "Speed Reset"  back to the default ride speed   (minecart icon)
-#   hotbar.5  "Speed +"      .SPEEDSTEP blocks/s faster       (powered-rail icon)
+#   hotbar.3  "Speed -"      one notch slower down the speed grid   (rail icon)
+#   hotbar.4  "Speed Reset"  back to the default ride speed         (minecart icon)
+#   hotbar.5  "Speed +"      one notch faster up the speed grid     (powered-rail icon)
 #   hotbar.7  "Tips"      book: recommended game/video settings (plain book, no links)
 #   hotbar.8  "Debug"     book: chat diagnostics + sidebar views                      (smithing-table icon)
 # Layout: the settings books sit on the far left, the Debug book on the far
@@ -27,8 +27,10 @@
 # THE SPEED ITEMS are carrot_on_a_sticks -- the one item whose "used"
 # statistic increments on any right-click (the ir_click objective; see
 # speed_click) -- re-skinned via the minecraft:item_model component (a rail /
-# a powered rail) and told apart by custom_data. One click = .SPEEDSTEP
-# blocks/s (a fixed cross-edition constant from the shared consts.mcfunction).
+# a powered rail) and told apart by custom_data. One click walks the ride one
+# notch along the selectable grid (1, 2, 3, 4, 5, 6, 8, 12, 16, ...: by 1 below
+# 8, by .SPEEDSTEP -- a fixed cross-edition constant from the shared
+# consts.mcfunction -- from 8 up; the shared speed_step owns the grid).
 # The books wear item_model disguises the same way (the item stays a
 # written_book, so it still opens on use -- item_model is purely visual),
 # plus enchantment_glint_override=false: a written_book renders with the

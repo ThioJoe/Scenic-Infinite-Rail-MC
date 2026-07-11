@@ -3,5 +3,7 @@
 # speed_click) or by hand:  /function infinite_rail:speed_dec
 scoreboard players set .spdir ir 0
 scoreboard players operation .spdir ir -= .SPEEDSTEP ir
+# A single-notch click: walk the selectable-speed grid (fine below 8) -- see speed_step.
+scoreboard players set .spstep ir 1
 function infinite_rail:speed_step
 function infinite_rail:speed_apply

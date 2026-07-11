@@ -161,9 +161,9 @@ const DBG = '§3[SR Debug]§r ';
 //   2  "Toggle HUD"   hides the HUD except the item-name popup / restores it
 //                     (runs infinite_rail/hud_toggle -- Bedrock-only, Java
 //                     riders have F1; invisible in hand, see toggleHud)
-//   3  "Speed -"      .SPEEDSTEP blocks/s slower    (runs infinite_rail/speed_dec)
+//   3  "Speed -"      one notch slower down the speed grid (runs infinite_rail/speed_dec)
 //   4  "Speed Reset"  back to the default ride speed (runs infinite_rail/speed_reset) -- dead center of the bar
-//   5  "Speed +"      .SPEEDSTEP blocks/s faster    (runs infinite_rail/speed_inc)
+//   5  "Speed +"      one notch faster up the speed grid (runs infinite_rail/speed_inc)
 //   7  "Tips"      opens the recommended-settings page
 //   8  "Debug"     opens the native debug form (chat output, sidebar views)
 // The MENU items are placeable vanilla blocks/carts chosen for their icons
@@ -688,8 +688,12 @@ function torchDensity() {
 // Route a speed change through the shared speed_step state machine (clamp
 // 1..64 + default detection) by feeding it a delta, then let speed_msg
 // report -- the same path as the +/- items and Java, so the feedback and
-// the clamping can never drift apart.
+// the clamping can never drift apart. .spstep 0 keeps this OFF the
+// selectable-speed grid: the settings slider is an absolute setter (delta =
+// target - current), so its result must land on the exact value the user
+// picked, not get snapped onto the 1..6/8/12/... grid the +/- items walk.
 function adjustSpeed(delta) {
+  runCmd(`scoreboard players set ${P}spstep ir 0`);
   runCmd(`scoreboard players set ${P}spdir ir ${delta | 0}`);
   runCmd(`function ${NS}/speed_step`);
   runCmd(`function ${NS}/speed_msg`);

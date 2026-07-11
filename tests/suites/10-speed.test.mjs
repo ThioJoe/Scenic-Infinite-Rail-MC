@@ -1,6 +1,7 @@
 // The adjustable ride-speed state machine (shared speed_step + the Java
-// entry points): stepping, the floor, the grid-rejoin quirk, reset, and
-// whether speed_apply really lands in the minecart max-speed gamerule.
+// entry points): stepping, the floor, the selectable-speed grid (fine by 1
+// below 8, coarse by .SPEEDSTEP from 8 up), reset, and whether speed_apply
+// really lands in the minecart max-speed gamerule.
 
 import { defineSuite, eq, ok, skip } from '../lib/harness.mjs';
 
@@ -30,20 +31,30 @@ export default defineSuite('ride speed state machine', ({ test }) => {
     eq(await mc.score('.spdflt', 'ir'), 1, 'reported as default again');
   });
 
-  test('speed floors at 1 and never goes below', async ({ mc }) => {
-    // From the default 8: dec -> 4, dec -> 0 -> floored to 1, dec -> stays 1.
+  test('Speed - walks the sub-8 grid down to the floor of 1', async ({ mc }) => {
+    // From the default 8, one notch at a time down the selectable grid:
+    // 8 -> 6 (bridge into the fine zone) -> 5 -> 4 -> 3 -> 2 -> 1, then it
+    // stays at 1 no matter how many more times you click.
     await mc.fn('speed_dec');
-    eq(await mc.score('.speed', 'ir'), 4, '8 - 4');
-    await mc.fn('speed_dec');
-    eq(await mc.score('.speed', 'ir'), 1, '4 - 4 clamps to the floor of 1');
+    eq(await mc.score('.speed', 'ir'), 6, '8 - one notch = 6 (grid bridges 8<->6)');
+    for (const want of [5, 4, 3, 2, 1]) {
+      await mc.fn('speed_dec');
+      eq(await mc.score('.speed', 'ir'), want, `down one to ${want}`);
+    }
     await mc.fn('speed_dec');
     eq(await mc.score('.speed', 'ir'), 1, 'clicking - at the floor stays at 1');
   });
 
-  test('Speed + from the floor rejoins the 4-grid at 4 (not 5)', async ({ mc }) => {
+  test('Speed + walks the sub-8 grid up: 1,2,3,4,5,6,8 (no 7), then +.SPEEDSTEP', async ({ mc }) => {
     eq(await mc.score('.speed', 'ir'), 1, 'precondition: at the floor');
+    for (const want of [2, 3, 4, 5, 6]) {
+      await mc.fn('speed_inc');
+      eq(await mc.score('.speed', 'ir'), want, `up one to ${want}`);
+    }
     await mc.fn('speed_inc');
-    eq(await mc.score('.speed', 'ir'), 4, 'floor + one step lands ON the grid');
+    eq(await mc.score('.speed', 'ir'), 8, '6 -> 8 (grid skips 7 into the coarse zone)');
+    await mc.fn('speed_inc');
+    eq(await mc.score('.speed', 'ir'), 12, '8 -> 12 (+.SPEEDSTEP from 8 up)');
   });
 
   test('reset returns to the config default', async ({ mc, expected }) => {

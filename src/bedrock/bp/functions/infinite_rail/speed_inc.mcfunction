@@ -5,5 +5,7 @@
 # the APPLY is native -- the script reads .speed as the virtual pace target
 # every tick -- so only the message remains (speed_msg).
 scoreboard players operation .spdir ir = .SPEEDSTEP ir
+# A single-notch click: walk the selectable-speed grid (fine below 8) -- see speed_step.
+scoreboard players set .spstep ir 1
 function infinite_rail/speed_step
 function infinite_rail/speed_msg

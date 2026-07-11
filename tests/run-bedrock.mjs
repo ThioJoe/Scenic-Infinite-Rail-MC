@@ -172,16 +172,25 @@ const tests = [
     await s.setScore('.TORCHMODE', 'ir', 2);
   }),
 
-  report('shared speed_step: step / floor / grid-rejoin / reset on Bedrock', async (s) => {
-    const base = expected.find((e) => e.holder === '.DEFAULTSPEED')?.value ?? 8;
+  report('shared speed_step: grid walk / floor / reset on Bedrock', async (s) => {
+    const base = expected.find((e) => e.holder === '.DEFAULTSPEED')?.value ?? 8; // 8: on the coarse grid
+    // Coarse zone (8 up) steps by .SPEEDSTEP (4).
     await s.fn('speed_inc');
     if (!(await s.scoreInRange('.speed', 'ir', base + 4))) throw new Error(`inc: .speed != ${base + 4}`);
     await s.fn('speed_dec');
+    if (!(await s.scoreInRange('.speed', 'ir', base))) throw new Error(`dec: .speed != ${base}`);
+    // From 8 the fine grid takes over: 8 -> 6 -> 5 -> 4 -> 3 -> 2 -> 1, floor.
+    for (const want of [6, 5, 4, 3, 2, 1]) {
+      await s.fn('speed_dec');
+      if (!(await s.scoreInRange('.speed', 'ir', want))) throw new Error(`dec down the grid: .speed != ${want}`);
+    }
     await s.fn('speed_dec');
-    await s.fn('speed_dec');
-    if (!(await s.scoreInRange('.speed', 'ir', 1))) throw new Error('.speed did not clamp to the floor of 1');
-    await s.fn('speed_inc');
-    if (!(await s.scoreInRange('.speed', 'ir', 4))) throw new Error('floor + step must rejoin the grid at 4');
+    if (!(await s.scoreInRange('.speed', 'ir', 1))) throw new Error('.speed did not stay at the floor of 1');
+    // Speed + from the floor walks 1 -> 2 -> ... -> 6 -> 8 (skips 7).
+    for (const want of [2, 3, 4, 5, 6, 8]) {
+      await s.fn('speed_inc');
+      if (!(await s.scoreInRange('.speed', 'ir', want))) throw new Error(`inc up the grid: .speed != ${want}`);
+    }
     await s.fn('speed_reset');
     if (!(await s.scoreInRange('.speed', 'ir', base))) throw new Error(`reset: .speed != ${base}`);
   }),
