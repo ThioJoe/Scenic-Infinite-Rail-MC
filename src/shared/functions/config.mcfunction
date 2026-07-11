@@ -187,7 +187,7 @@ scoreboard players set .LANDCHUNKS cfg_ride 3
 
 # Minimum height difference (in blocks) before a new climb/descent is started.
 # Also acts as hysteresis, so small terrain noise never nudges the rail.
-scoreboard players set .MIN_CHANGE cfg_terrain 2
+scoreboard players set .MIN_CHANGE cfg_terrain 4
 
 # Minimum flat blocks between two changes in the SAME direction.
 # Higher = fewer, longer swoops. Terrain that rises faster than this allows
@@ -195,7 +195,7 @@ scoreboard players set .MIN_CHANGE cfg_terrain 2
 # the effective gap is shortened by the big-event gap credit -- .GAPRATIO /
 # .GAPMATCH below -- so a long gap here calms typical terrain without
 # stretching out big mountain work.)
-scoreboard players set .SAMEGAP cfg_terrain 50
+scoreboard players set .SAMEGAP cfg_terrain 75
 
 # Minimum flat blocks required before the rail may REVERSE direction --
 # split by WHICH reversal, because the two read differently on a ride:
@@ -207,12 +207,12 @@ scoreboard players set .SAMEGAP cfg_terrain 50
 
 # ...at the TOP: flat blocks required after a CLIMB before the rail may
 # descend again. Lower = comes back down off peaks sooner.
-scoreboard players set .TURNGAP_TOP cfg_terrain 50
+scoreboard players set .TURNGAP_TOP cfg_terrain 60
 
 # ...at the BOTTOM: flat blocks required after a DESCENT before the rail
 # may climb again. Higher = never dips into a hollow just to climb right
 # back out; small dips get bridged across instead.
-scoreboard players set .TURNGAP_BOTTOM cfg_terrain 50
+scoreboard players set .TURNGAP_BOTTOM cfg_terrain 100
 
 # --- The big-event gap credit --------------------------------------------
 # Long gaps make calm, stately track on ordinary terrain -- but after a LARGE
@@ -296,7 +296,7 @@ scoreboard players set .SLOPECLEAR cfg_terrain 6
 # earlier-reacting line that averages away small features; shorter = a more
 # reactive line that hugs local terrain. (The sample count is derived:
 # .SAMPLE_WINDOW / .SAMPLE_BLOCK_INTERVAL readings -- 12 at the defaults.)
-scoreboard players set .SAMPLE_WINDOW cfg_terrain 64
+scoreboard players set .SAMPLE_WINDOW cfg_terrain 75
 
 # The spacing (blocks) between terrain readings inside the window. Smaller =
 # denser sampling (more probes per column -- costlier); larger = cheaper but
@@ -304,7 +304,7 @@ scoreboard players set .SAMPLE_WINDOW cfg_terrain 64
 # count per column is .SAMPLE_WINDOW / this. (Lives in the plain `ir`
 # objective with .DEBUGMODE/.AUTOSTART -- an advanced knob not worth one of
 # cfg_terrain's 15 sidebar rows.)
-scoreboard players set .SAMPLE_BLOCK_INTERVAL ir 4
+scoreboard players set .SAMPLE_BLOCK_INTERVAL ir 1
 
 # Terrain lower than the current line by more than this reads as only this
 # many blocks lower. This is why a narrow 60-deep ravine is crossed as a
