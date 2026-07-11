@@ -1,9 +1,5 @@
 # CONTEXT.md — How the Scenic Infinite Rail Mode pack works
 
-A complete technical reference for the project: the architecture, the shared state, every file, and the algorithms. Written for a developer (or an AI) who needs to understand or modify the pack. For the repository layout and build workflow see `BUILDING.md`. After changing the algorithm or any file this document describes, verify with the integration tests — see `tests/README.md` for how to run them, what they cover, and how to add new ones for whatever you just changed.
-
-Sections 1–10 document the **Java Edition** data pack (the original and richest implementation); **section 11** documents the **Bedrock Edition** port and how the two editions share one codebase.
-
 ---
 
 ## 1. What it is
