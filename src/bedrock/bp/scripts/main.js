@@ -152,10 +152,15 @@ const DBG = '§3[SR Debug]§r ';
 // clears everything else every tick) and matched by type + name in the
 // use handlers, so a random picked-up item could never trigger them.
 // Mirrors Java's give_menu slot for slot -- settings menus far left, Debug
-// far right, the speed trio (-, Reset, +) in between with empty slots as
-// separators (Reset dead center at slot 4):
+// far right, the speed trio (-, Reset, +) in between (Reset dead center at
+// slot 4) -- plus one Bedrock-only extra Java has no use for: the Toggle
+// HUD item at slot 2 (a Java ride is always on a PC, where F1 hides the
+// HUD; /hud is Bedrock's command):
 //   0  "Ride Settings"    opens the native ride form (speed, sky, sound, hide cart, mobs aggro)
 //   1  "Visual Settings"  opens the native visual form (rain, time, torches)
+//   2  "Toggle HUD"   hides the HUD except the item-name popup / restores it
+//                     (runs infinite_rail/hud_toggle -- Bedrock-only, Java
+//                     riders have F1; invisible in hand, see toggleHud)
 //   3  "Speed -"      .SPEEDSTEP blocks/s slower    (runs infinite_rail/speed_dec)
 //   4  "Speed Reset"  back to the default ride speed (runs infinite_rail/speed_reset) -- dead center of the bar
 //   5  "Speed +"      .SPEEDSTEP blocks/s faster    (runs infinite_rail/speed_inc)
@@ -180,6 +185,7 @@ const DBG = '§3[SR Debug]§r ';
 // one heals itself within a tick anyway.
 const RIDE_NAME = '§6Ride Settings';
 const VISUAL_NAME = '§bVisual Settings';
+const HUD_NAME = '§dToggle HUD';
 const TIPS_NAME = '§eTips';
 const DEBUG_NAME = '§3Debug';
 const SPEED_UP_NAME = '§aSpeed +';
@@ -200,10 +206,21 @@ const SPEED_RESET_NAME = '§eSpeed Reset';
 // vanilla item, used only if this engine somehow can't resolve the custom
 // id (mismatched/outdated pack pair) -- and still matched by the use
 // handlers so a stale save's old items keep working until the keeper
-// swaps them.
+// swaps them. "Toggle HUD" is the pack's own too (bp/items/toggle_hud.json;
+// eye-of-ender icon), for a second reason on top of non-placeability: the
+// RP binds the EMPTY geometry to it as an attachable, so the held item
+// renders as nothing -- /hud can't hide the hand or what it holds, and an
+// invisible held item is what keeps the hidden-HUD view clean. It has NO
+// vanilla fallback ON PURPOSE: any stand-in renders in hand, the exact
+// thing this item exists not to do, and a stand-in also HIDES the real
+// problem (a pack install missing bp/items/ -- the shadow-tree symlink
+// bug -- shipped as a mystery amethyst instead of a diagnosis). If the id
+// doesn't resolve, the slot stays EMPTY and customItemOk warns in chat
+// naming the id.
 const PINNED = [
   { slot: 0, type: 'minecraft:chest_minecart', name: RIDE_NAME, lore: ['§7Use to open the', '§7ride settings menu'] },
   { slot: 1, type: 'minecraft:soul_campfire', name: VISUAL_NAME, lore: ['§7Use to open the', '§7visual settings menu'] },
+  { slot: 2, type: 'infinite_rail:toggle_hud', name: HUD_NAME, lore: ['§7Hide or show the HUD'] },
   { slot: 3, type: 'infinite_rail:speed_down', fallback: 'minecraft:rail', name: SPEED_DOWN_NAME, lore: ['§7Ride speed down'] },
   { slot: 4, type: 'infinite_rail:speed_reset', fallback: 'minecraft:minecart', name: SPEED_RESET_NAME, lore: ['§7Reset the ride speed', '§7to the default'] },
   { slot: 5, type: 'infinite_rail:speed_up', fallback: 'minecraft:golden_rail', name: SPEED_UP_NAME, lore: ['§7Ride speed up'] },
@@ -212,17 +229,44 @@ const PINNED = [
 ];
 
 // Which id a def actually pins: the custom item normally, the vanilla
-// fallback if the custom ids don't resolve on this engine (probed once per
-// session -- the answer can't change mid-run, and probing per tick would
-// throw in the keeper's hot loop). The keeper compares against the SAME
-// answer, so a fallback world never enters a replace-every-tick war.
-let customItemsOk = null;
+// fallback if THAT custom id doesn't resolve on this engine. Probed PER ID
+// -- one missing id must not drag the working ones down to their placeable
+// vanilla stand-ins (that would resurrect the eaten-scroll bug for the
+// speed trio the moment anything newer is missing), and the ids can
+// genuinely differ in age: /reload refreshes functions and scripts but NOT
+// item definitions, so a world updated without a full quit-and-rejoin has
+// the NEW script asking for an item its registry has never heard of.
+// A successful probe is cached for the session; a FAILED one is re-probed
+// every ~30 s (a slow registry at world load heals mid-session; a stale
+// one heals on rejoin). The keeper compares against the same cached
+// answer, so a fallback world never enters a replace-every-tick war. The
+// combined answer (over every pack-own id, fallback or not -- the Toggle
+// HUD item deliberately has none, see PINNED) is mirrored to the .itemsok
+// score (the test suite asserts it) and the first failure warns in chat,
+// loudly and specifically -- silent degradation hid a broken install for
+// months: a dev shadow tree that never linked bp/items/ ran every ride on
+// the lookalike speed fallbacks, undetectable until the Toggle HUD item's
+// then-fallback surfaced as a mystery amethyst.
+const itemProbe = new Map(); // custom id -> { ok, at (tick of last probe) }
+let itemWarned = false;
+function customItemOk(id) {
+  const c = itemProbe.get(id);
+  if (c && (c.ok || tickN - c.at < 600)) return c.ok;
+  let ok = false;
+  try { void new ItemStack(id, 1); ok = true; } catch { ok = false; }
+  itemProbe.set(id, { ok, at: tickN });
+  try {
+    setScore('itemsok', PINNED.every((d) => !d.type.startsWith(`${NS}:`) || itemProbe.get(d.type)?.ok) ? 1 : 0);
+  } catch { /* scoreboard not ready this early */ }
+  if (!ok && !itemWarned) {
+    itemWarned = true;
+    say(`§eThe pack's own hotbar item §f${id}§e didn't resolve -- its behavior-pack definition (bp/items/) is not in this world's item registry, so its hotbar slot stays empty (or a vanilla stand-in is pinned where one exists). Make sure the FULL, current behavior pack is installed -- a dev symlink tree must link the items folder -- then quit and rejoin the world (/reload alone does not refresh item definitions).`);
+  }
+  return ok;
+}
 function pinnedItemType(def) {
   if (!def.fallback) return def.type;
-  if (customItemsOk === null) {
-    try { void new ItemStack(def.type, 1); customItemsOk = true; } catch { customItemsOk = false; }
-  }
-  return customItemsOk ? def.type : def.fallback;
+  return customItemOk(def.type) ? def.type : def.fallback;
 }
 
 function makePinnedItem(def) {
@@ -828,7 +872,8 @@ function showTips(player) {
     .body([
       '§lRecommended settings§r',
       '',
-      '§7- Hide the HUD (F1 on a keyboard)',
+      '§7- On mouse & keyboard: hide the HUD with §fF1',
+      '§7- On console: hide the HUD with the §fToggle HUD§7 hotbar item, and enable §f"Hide Hand"§7 in the video settings',
       '§7- FOV: §f100+',
       '§7- Simulation distance: §fas low as possible',
       '§7- Render distance: §f16-24 chunks§7, or more if your hardware keeps up',
@@ -841,6 +886,38 @@ function showTips(player) {
     ].join('\n'))
     .button('Close');
   form.show(player).catch((e) => reportError('tips page', e));
+}
+
+// The Toggle HUD item (slot 2 -- Bedrock-only: a Java ride is always on a
+// PC, where F1 hides the HUD natively; /hud is Bedrock's command, and it's
+// what console/touch riders get instead of F1). One use flips .HUDHIDDEN
+// through the hud_toggle function file: hiding runs `hud @a hide all` then
+// `hud @a reset item_text` -- everything gone EXCEPT the temporary
+// item-name popup, so scrolling the hotbar still names the pinned items --
+// and the next use runs `hud @a reset all`. The held item itself renders
+// as NOTHING (the RP binds the empty geometry to infinite_rail:toggle_hud
+// as an attachable -- /hud never touches the hand or what it holds), so the
+// hidden-HUD view is completely clean. A HUD hidden some other way (F1 is
+// client-side; /hud can't see it) just costs one harmless "restore" click.
+function toggleHud() {
+  const before = getScore('HUDHIDDEN', 0);
+  runCmd(`function ${NS}/hud_toggle`);
+  // Stale-function-registry belt + suspenders (the hud_* files are NEW --
+  // the same failure the settings forms guard against): if the score didn't
+  // flip, run the commands directly (API mode only -- on cmd-bridge worlds
+  // the read lies, and there the function route is the working one anyway).
+  if (bridgeMode === 'api' && getScore('HUDHIDDEN', 0) === before) {
+    if (before === 0) {
+      runCmd('hud @a hide all');
+      runCmd('hud @a reset item_text');
+      setScore('HUDHIDDEN', 1);
+      say('§7HUD hidden - use the Toggle HUD item again to bring it back.');
+    } else {
+      runCmd('hud @a reset all');
+      setScore('HUDHIDDEN', 0);
+      say('§7HUD restored.');
+    }
+  }
 }
 
 // The native debug menu, opened by using the Debug book: the .DEBUGMODE
@@ -2442,6 +2519,13 @@ function stop(silent) {
   // and forget it, so the next ride emits a fresh one wherever it starts.
   runCmd('stopsound @a ir.cart_roll');
   resetSound();
+  // Give the HUD back: the Toggle HUD item leaves with the rest of the
+  // hotbar, and a hidden HUD with no item to restore it strands the player.
+  // The reset is harmless when nothing was hidden (a client-side F1 hide is
+  // a different mechanism, untouched either way); the score write goes
+  // through a command so cmd-bridge worlds reset too.
+  runCmd('hud @a reset all');
+  runCmd(`scoreboard players set ${P}HUDHIDDEN ir 0`);
   // Remove EVERY rig piece wearing our tags (there should be one of each, but
   // stale sessions may have left extras behind). Each type is collected under
   // its own guard so one unregistered type (e.g. an outdated BP without the
@@ -2582,6 +2666,16 @@ function init() {
     runCmd(`scoreboard objectives add ${id} dummy "${label}"`);
   }
 
+  // Warm the custom-item probes and publish .itemsok (the keeper would get
+  // there on its own once a ride runs, but probing here means the loud
+  // didn't-resolve warning lands at load -- next to the config/self-test
+  // diagnostics -- instead of mid-ride, and the test suite can assert the
+  // score without starting a ride). Probes every pack-own id, fallback or
+  // not; a failure here re-probes every ~30 s.
+  for (const def of PINNED) {
+    if (def.type.startsWith(`${NS}:`)) customItemOk(def.type);
+  }
+
   AIR = BlockPermutation.resolve('minecraft:air');
   RAIL_FLAT = BlockPermutation.resolve('minecraft:golden_rail', { rail_direction: 1, rail_data_bit: true });
   RAIL_UP = BlockPermutation.resolve('minecraft:golden_rail', { rail_direction: 2, rail_data_bit: true });
@@ -2719,13 +2813,16 @@ function handlePinnedUse(player, item) {
   // action. For the SPEED items that tiny window is the WHOLE debounce:
   // distinct clicks (and a held button's refires) land as fast as the client
   // sends them, matching Java's stat-counted items (click or hold at any
-  // rate, every one counts). Only the menu items keep the longer window, so
-  // a double-delivered click can't pop a form open twice.
+  // rate, every one counts). The menu items keep a longer window, so a
+  // double-delivered click can't pop a form open twice. Toggle HUD gets the
+  // longest: no form opens to swallow a held button's refires, and a rapid
+  // re-fire on a TOGGLE strobes the whole HUD on and off.
   const isSpeedItem = def.name === SPEED_UP_NAME || def.name === SPEED_DOWN_NAME || def.name === SPEED_RESET_NAME;
-  if (tickN - lastPinnedUseAt < (isSpeedItem ? 2 : 4)) return;
+  if (tickN - lastPinnedUseAt < (isSpeedItem ? 2 : def.name === HUD_NAME ? 10 : 4)) return;
   lastPinnedUseAt = tickN;
   if (def.name === RIDE_NAME) showRideMenu(player);
   else if (def.name === VISUAL_NAME) showVisualMenu(player);
+  else if (def.name === HUD_NAME) toggleHud();
   else if (def.name === TIPS_NAME) showTips(player);
   else if (def.name === DEBUG_NAME) showDebugMenu(player);
   else if (def.name === SPEED_UP_NAME) runCmd(`function ${NS}/speed_inc`);

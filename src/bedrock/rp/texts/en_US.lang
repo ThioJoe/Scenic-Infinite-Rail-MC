@@ -2,3 +2,4 @@ tile.infinite_rail:support.name=Track Support
 item.infinite_rail:speed_down.name=Speed -
 item.infinite_rail:speed_reset.name=Speed Reset
 item.infinite_rail:speed_up.name=Speed +
+item.infinite_rail:toggle_hud.name=Toggle HUD

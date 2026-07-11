@@ -3,13 +3,16 @@
   "texture_name": "atlas.items",
   "texture_data": {
     "ir_speed_down": {
-      "textures": "textures/items/rail_normal"
+      "textures": "textures/blocks/rail_normal"
     },
     "ir_speed_reset": {
       "textures": "textures/items/minecart_normal"
     },
     "ir_speed_up": {
-      "textures": "textures/items/rail_golden"
+      "textures": "textures/blocks/rail_golden"
+    },
+    "ir_toggle_hud": {
+      "textures": "textures/items/ender_eye"
     }
   }
 }

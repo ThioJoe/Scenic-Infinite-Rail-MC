@@ -128,6 +128,18 @@ const tests = [
     if (wrong.length) throw new Error(`config values not applied: ${wrong.join('; ')}`);
   }),
 
+  report('the pack\'s own custom items registered (.itemsok: speed trio + Toggle HUD)', async (s) => {
+    // init() probes every bp/items/*.json id with new ItemStack and mirrors
+    // the combined answer to .itemsok; a failed probe re-tries every ~30 s,
+    // so poll past one retry before declaring the item registry broken.
+    const t0 = Date.now();
+    while (Date.now() - t0 < 45000) {
+      if (await s.scoreInRange('.itemsok', 'ir', 1)) return;
+      await sleep(2000);
+    }
+    throw new Error('.itemsok never reached 1: a bp/items/*.json id did not register on BDS (check the content log)');
+  }),
+
   report('modes_init seeded the defaults (torch auto, mobs aggro, speeds, track light)', async (s) => {
     const checks = [];
     if (!(await s.scoreInRange('.TORCHMODE', 'ir', 2))) checks.push('.TORCHMODE != 2 (auto)');
@@ -222,6 +234,17 @@ const tests = [
     if (!(await s.scoreInRange('.LIGHTMODE', 'ir', 11))) throw new Error('track light on != 11');
   }),
 
+  report('hud toggle: .HUDHIDDEN flips both ways (and the /hud lines parse)', async (s) => {
+    // A function file containing a command BDS can't parse is dropped from
+    // the registry wholesale, so the score flip doubles as a parse check on
+    // the hud_hide/hud_show files' /hud lines (headless, the hud commands
+    // themselves just match no targets -- the rest of the file still runs).
+    await s.fn('hud_toggle');
+    if (!(await s.scoreInRange('.HUDHIDDEN', 'ir', 1))) throw new Error('first toggle: .HUDHIDDEN != 1 (hud_hide missing or unparsed?)');
+    await s.fn('hud_toggle');
+    if (!(await s.scoreInRange('.HUDHIDDEN', 'ir', 0))) throw new Error('second toggle: .HUDHIDDEN != 0 (hud_show missing or unparsed?)');
+  }),
+
   // --- The surrogate ride: the whole build pipeline, headlessly ------------
   // Java-suite parity (tests/lib/ride.mjs): the ride is started AS a tagged
   // armor stand -- begin() accepts any entity; the player-only comforts
@@ -295,6 +318,12 @@ const tests = [
     const light = await s.cmd(`testforblock ${START_X} ${atY + 3} ${START_Z} light_block_11`);
     if (!/Successfully found/i.test(light)) throw new Error(`no track light above the rail at Y ${atY + 3}: ${light}`);
   }),
+
+  // (No command-level item probe on purpose: the pack's own items carry
+  // menu_category "none", which hides them from the COMMAND item enum --
+  // /replaceitem answers "Syntax error: Unexpected ..." for a perfectly
+  // registered id, measured on BDS 1.26.33. The .itemsok test above probes
+  // new ItemStack(), the exact path the inventory keeper pins with.)
 
   report('no script errors during the headless ride', async (s) => {
     const errs = scriptOnly(s.scriptErrorsSince(rideMark));

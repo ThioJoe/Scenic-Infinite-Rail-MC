@@ -57,10 +57,24 @@ New-DirSymlink -LinkPath "$outDir\$rpDir" -TargetPath "src\bedrock\rp"
 
 Write-Host "Setting up Behavior Pack ($bpDir) shadow tree..."
 New-Item -ItemType Directory -Force -Path "$outDir\$bpDir\functions\infinite_rail" | Out-Null
-New-DirSymlink -LinkPath "$outDir\$bpDir\blocks" -TargetPath "src\bedrock\bp\blocks"
-New-DirSymlink -LinkPath "$outDir\$bpDir\entities" -TargetPath "src\bedrock\bp\entities"
-New-DirSymlink -LinkPath "$outDir\$bpDir\scripts" -TargetPath "src\bedrock\bp\scripts"
-New-FileSymlink -LinkPath "$outDir\$bpDir\manifest.json" -TargetPath "src\bedrock\bp\manifest.json"
+
+# Link every top-level BP directory except functions\ (which must MERGE the
+# native files with src\shared\functions, so it is assembled file-by-file
+# below). Dynamic on purpose: the old hardcoded list (blocks, entities,
+# scripts) silently dropped any folder added later -- items\ (the pack's
+# own hotbar items) was never linked, so every dev world running this
+# shadow tree had NO custom item definitions: the speed trio quietly
+# degraded to its vanilla lookalike fallbacks (invisible -- same icons)
+# and the Toggle HUD item pinned as a visible amethyst stand-in.
+$bpDirs = Get-ChildItem -Path "src\bedrock\bp" -Directory | Where-Object { $_.Name -ne "functions" }
+foreach ($dir in $bpDirs) {
+    New-DirSymlink -LinkPath "$outDir\$bpDir\$($dir.Name)" -TargetPath "src\bedrock\bp\$($dir.Name)"
+}
+# Top-level BP files (manifest.json today), linked dynamically like the dirs.
+$bpRootFiles = Get-ChildItem -Path "src\bedrock\bp" -File
+foreach ($file in $bpRootFiles) {
+    New-FileSymlink -LinkPath "$outDir\$bpDir\$($file.Name)" -TargetPath "src\bedrock\bp\$($file.Name)"
+}
 
 # Link native BP functions (including the new ir_* trampolines in the root functions folder)
 $bpRootFns = Get-ChildItem -Path "src\bedrock\bp\functions" -File
