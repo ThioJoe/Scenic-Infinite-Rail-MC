@@ -374,7 +374,8 @@ const S = {
   lastChunk: 0,    // .lastChunk -- last chunk index the ocean check processed
   s2: 0,           // .s2 -- the reactive descent chaser (blocks; double)
   lastBad: 0,      // how many of the last column's 12 samples were fallbacks
-  riderName: '',   // the one player this ride belongs to
+  riderName: '',   // the one player this ride belongs to ('' when riderId is set)
+  riderId: '',     // entity id of a NON-PLAYER rider (a surrogate -- see begin)
   startTimer: 0,   // auto-start countdown (ticks with a player present)
   cartId: '',      // entity id of the ride cart (rediscovered by tag if stale)
   seatId: '',      // entity id of the camera seat (rediscovered by tag if stale)
@@ -875,9 +876,20 @@ function tickStateSidebar() {
   } catch { /* dbg objective unavailable (split scoreboards) */ }
 }
 
+// The ride's rider: normally the one player the ride belongs to, matched by
+// NAME (the most stable identity across rejoins). But begin() accepts ANY
+// entity -- parity with Java, where `execute as <some armor stand> run
+// function infinite_rail:begin` starts a full headless ride (that's how both
+// editions' test suites ride) -- and a non-player rider is matched by entity
+// id instead (undefined while its chunk is unloaded, exactly like an offline
+// player, so the same freeze rule covers both).
 function findRider() {
-  if (!S.riderName) return undefined;
-  return world.getAllPlayers().find((p) => p.name === S.riderName);
+  if (S.riderName) return world.getAllPlayers().find((p) => p.name === S.riderName);
+  if (!S.riderId) return undefined;
+  try {
+    const e = world.getEntity(S.riderId);
+    return e?.isValid ? e : undefined;
+  } catch { return undefined; }
 }
 
 // Find the one live entity wearing our tag, REMOVING any duplicates: rejoin
@@ -969,7 +981,7 @@ function saveState() {
     trackY: S.trackY.slice(histStart),
     paceX: S.paceX, paceSpeed: S.paceSpeed, targetSpeed: S.targetSpeed,
     fast: S.fast, oceanRun: S.oceanRun, landRun: S.landRun,
-    lastChunk: S.lastChunk, s2: S.s2, riderName: S.riderName,
+    lastChunk: S.lastChunk, s2: S.s2, riderName: S.riderName, riderId: S.riderId,
   }));
 }
 
@@ -987,6 +999,7 @@ function loadState() {
     S.oceanRun = d.oceanRun | 0; S.landRun = d.landRun | 0;
     S.lastChunk = d.lastChunk | 0; S.s2 = +d.s2 || 0;
     S.riderName = typeof d.riderName === 'string' ? d.riderName : '';
+    S.riderId = typeof d.riderId === 'string' ? d.riderId : '';
     syncFast(); // the shared speed_step reads .fast from the scoreboard
   } catch { /* corrupt state: fall through to a fresh start */ }
 }
@@ -1937,6 +1950,7 @@ function tickSound() {
     if (soundOn) { runCmd('stopsound @a ir.cart_roll'); soundOn = false; }
     return;
   }
+  if (!S.riderName) return; // a surrogate ride has no client to hear anything
   const rider = findRider();
   if (!rider) return;
   let x;
@@ -2086,12 +2100,18 @@ function ridingMode(gm) {
 // operation. Falls back to addRider if the command is unavailable.
 function mountRider() {
   ops.mount += 1;
-  const r = runCmd(`ride "${S.riderName}" start_riding @e[type=${SEAT_TYPE},tag=${TAG_SEAT},c=1] teleport_rider`);
-  if ((r?.successCount ?? 0) > 0) return true;
+  // /ride only addresses PLAYERS by name; a non-player rider goes straight
+  // to the API path below.
+  if (S.riderName) {
+    const r = runCmd(`ride "${S.riderName}" start_riding @e[type=${SEAT_TYPE},tag=${TAG_SEAT},c=1] teleport_rider`);
+    if ((r?.successCount ?? 0) > 0) return true;
+  }
   try {
     const seat = findSeat();
     const rider = findRider();
     if (seat && rider) {
+      // A non-player rider gets the command's teleport_rider behavior by hand.
+      if (!S.riderName) { try { rider.teleport(seat.location); } catch { /* chunk edge */ } }
       seat.getComponent('minecraft:rideable')?.addRider(rider);
       return true;
     }
@@ -2107,14 +2127,18 @@ function keepers(seat) {
   const distToSeat = (loc) =>
     Math.abs(loc.x - sp.x) + Math.abs(loc.y - sp.y) + Math.abs(loc.z - sp.z);
 
-  // Purity sweep: the seat carries exactly this ride's player (matched by
-  // NAME -- the most stable identity across handles). Best-effort -- if the
-  // rider list under-reports, nothing breaks; this is never used as a
-  // mount-state check.
+  // Purity sweep: the seat carries exactly this ride's rider (a player
+  // matched by NAME -- the most stable identity across handles -- or a
+  // surrogate entity by id). Best-effort -- if the rider list
+  // under-reports, nothing breaks; this is never used as a mount-state
+  // check.
   try {
     for (const r of seatRideable.getRiders()) {
       let spare = false;
-      try { spare = r.typeId === 'minecraft:player' && r.name === S.riderName; } catch { /* stale */ }
+      try {
+        spare = (r.typeId === 'minecraft:player' && r.name === S.riderName)
+          || (!!S.riderId && r.id === S.riderId);
+      } catch { /* stale */ }
       if (spare) continue;
       try {
         seatRideable.ejectRider(r);
@@ -2126,14 +2150,16 @@ function keepers(seat) {
 
   const rider = findRider();
   if (!rider) return;
+  const riderIsPlayer = rider.typeId === 'minecraft:player';
 
   // Rider keeper (sneak-dismounts, rejoins): positional rule -- the seated
   // offset is 0.35, so anything under the threshold is "aboard". Only
   // survival/adventure players are recaptured -- switching to creative is
   // the sanctioned way to leave the ride and wander off. /ride's
   // teleport_rider brings a far-away rider (respawned at the rolled
-  // spawnpoint) back to the rig as part of the mount.
-  if (ridingMode(rider.getGameMode())) {
+  // spawnpoint) back to the rig as part of the mount. (A surrogate rider
+  // has no game mode and is always recaptured.)
+  if (!riderIsPlayer || ridingMode(rider.getGameMode())) {
     let riderFar = true;
     let d = -1;
     try { d = distToSeat(rider.location); riderFar = d > 2.5; } catch { /* treat as far */ }
@@ -2150,6 +2176,10 @@ function keepers(seat) {
   } else {
     riderAstray = 0;
   }
+
+  // Everything below is player-only comfort (a surrogate rider has no
+  // inventory, no client to see an arm, and no mobs care about it).
+  if (!riderIsPlayer) return;
 
   // Keep the rider's inventory empty -- except the pinned hotbar items
   // (the Ride/Visual Settings, Tips and Debug menu items, Speed +/-) --
@@ -2200,10 +2230,10 @@ function keepers(seat) {
 // terrain asynchronously (Java's forceload behaves the same; its begin just
 // tolerates air reads) -- so this seeds the state, then a short poller waits
 // for the starting chunks before laying track and seating the rider.
-function begin(player) {
+function begin(rider) {
   // The algorithm reads Overworld surface heightmaps; refuse elsewhere (the
   // Java pack documents the same Overworld-only limitation).
-  if (player.dimension.id !== 'minecraft:overworld') {
+  if (rider.dimension.id !== 'minecraft:overworld') {
     say('§cThe ride can only start in the Overworld.');
     return;
   }
@@ -2211,11 +2241,18 @@ function begin(player) {
   const gen = ++lifecycleGen;
 
   S.autodone = true;
-  S.riderName = player.name;
+  // The ride belongs to whoever begin ran for. A PLAYER is tracked by name;
+  // any other entity -- e.g. the test suite's surrogate armor stand, the
+  // same trick Java's suite uses -- by entity id (see findRider). The
+  // player-only comforts (the /ride mount, gamemode, effects, hotbar items,
+  // the riding sound) all no-op for a non-player.
+  const isPlayer = rider.typeId === 'minecraft:player';
+  S.riderName = isPlayer ? rider.name : '';
+  S.riderId = isPlayer ? '' : rider.id;
   runCmd(`function ${NS}/setup_world`);
 
-  const startX = Math.floor(player.location.x);
-  S.centerZ = Math.floor(player.location.z);
+  const startX = Math.floor(rider.location.x);
+  S.centerZ = Math.floor(rider.location.z);
   S.headX = startX;
   S.nextLoad = startX + 16;
   surfMemo.clear();
@@ -2273,15 +2310,15 @@ function abortLaunch(reason) {
 }
 
 function beginPhase2(startX) {
-  const player = findRider();
-  if (!player) { abortLaunch('the starting player left.'); return; }
+  const rider = findRider();
+  if (!rider) { abortLaunch('the starting rider left.'); return; }
 
   // Initial rail elevation = terrain surface here + hover altitude.
   const surf = surfaceY(startX, S.centerZ);
   if (surf === undefined) {
     say('§eWarning: the terrain probe returned nothing at the start position. If the track never follows the landscape, report this with your Minecraft version.');
   }
-  S.railY = (surf ?? Math.floor(player.location.y)) + cfg('HOVER');
+  S.railY = (surf ?? Math.floor(rider.location.y)) + cfg('HOVER');
   S.avg = S.railY - cfg('HOVER');
 
   // Initialize the shared brain's event-model state, exactly as begin does on
@@ -2350,11 +2387,13 @@ function beginPhase2(startX) {
   // inventory keeper leaves nothing to place or swing, and the ride glides
   // past faster than anything could be punched out. (Java keeps adventure --
   // its spawning doesn't care about game mode.)
-  try {
-    player.runCommand('gamemode survival @s');
-    player.runCommand('effect @s resistance infinite 255 true');
-    player.runCommand('effect @s saturation infinite 0 true');
-  } catch { /* effects are belt-and-suspenders on top of the damage gamerules */ }
+  if (rider.typeId === 'minecraft:player') {
+    try {
+      rider.runCommand('gamemode survival @s');
+      rider.runCommand('effect @s resistance infinite 255 true');
+      rider.runCommand('effect @s saturation infinite 0 true');
+    } catch { /* effects are belt-and-suspenders on top of the damage gamerules */ }
+  }
 
   S.started = true;
   saveState();
@@ -2618,12 +2657,13 @@ system.afterEvents.scriptEventReceive.subscribe((ev) => {
   try {
     if (!ensureInit()) { say('§cThe pack is not initialized yet -- see any error above.'); return; }
     if (ev.id === `${NS}:start`) {
-      // Start at the triggering player if there is one (parity with Java's
-      // "execute as @p"), else at the nearest player to spawn.
-      const player = ev.sourceEntity?.typeId === 'minecraft:player'
-        ? ev.sourceEntity
-        : world.getAllPlayers()[0];
-      if (player) begin(player);
+      // Start at the triggering entity if there is one (parity with Java's
+      // "execute as @p" -- and, like Java's begin, ANY entity may own the
+      // ride: the headless test suite starts one as a tagged armor stand
+      // via `execute as ... run scriptevent`), else at the nearest player
+      // to spawn.
+      const rider = ev.sourceEntity ?? world.getAllPlayers()[0];
+      if (rider) begin(rider);
       else say('§cNo player online to start the ride at.');
     } else if (ev.id === `${NS}:stop`) {
       stop(false);
@@ -2778,7 +2818,8 @@ function tick() {
         // the rig position -- their presence loads the chunk, and the next
         // ticks respawn the rig and re-seat them.
         const rider = findRider();
-        if (rider && ridingMode(rider.getGameMode())
+        if (rider && rider.typeId === 'minecraft:player'
+          && ridingMode(rider.getGameMode())
           && !rider.getComponent('minecraft:riding')) {
           try {
             rider.teleport({ x: rigX, y: sy + 2, z: S.centerZ + 0.5 });

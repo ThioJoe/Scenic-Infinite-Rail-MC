@@ -100,6 +100,18 @@ for (const f of ['config.mcfunction', 'consts.mcfunction']) {
 const results = [];
 const report = (name, fn) => ({ name, fn });
 const NIGHT_START = 12542; const NIGHT_END = 23459;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// The surrogate ride's anchor (see the ride tests at the end of the list):
+// a command tickingarea bootstraps the start chunks -- measured on this BDS,
+// tickingareas DO load and generate their chunks with zero players online --
+// and everything after that is the pack's own chunk scout.
+const START_X = 8; const START_Z = 8;
+// Only genuine script errors count while the ride runs: the console probes
+// themselves (testfor misses, testforblock mismatches) print ERROR lines.
+const scriptOnly = (lines) => lines.filter((l) => /\[Scripting\]/i.test(l));
+let rideMark = 0;
+let groundY = null; // the surrogate's resting level = the start column's surface
 
 const tests = [
   report('BDS boots with the pack, no script/content-log errors', async (s) => {
@@ -204,6 +216,94 @@ const tests = [
     if (!(await s.scoreInRange('.LIGHTMODE', 'ir', 0))) throw new Error('track light off != 0');
     await s.fn('mode_light_on');
     if (!(await s.scoreInRange('.LIGHTMODE', 'ir', 11))) throw new Error('track light on != 11');
+  }),
+
+  // --- The surrogate ride: the whole build pipeline, headlessly ------------
+  // Java-suite parity (tests/lib/ride.mjs): the ride is started AS a tagged
+  // armor stand -- begin() accepts any entity; the player-only comforts
+  // no-op -- so placeColumn (carve + surface restoration + support + rail +
+  // light), the chunk scout, the virtual pace and the camera rig all run on
+  // the real BDS engine with no client attached.
+
+  report('surrogate ride: an armor stand starts a real ride (no player online)', async (s) => {
+    await s.cmd(`tickingarea add circle ${START_X} 100 ${START_Z} 4 sirm_test_start`);
+    await sleep(8000); // let the start chunks generate
+    await s.cmd(`summon armor_stand ${START_X}.5 150 ${START_Z}.5`);
+    await s.cmd('tag @e[type=armor_stand] add ir_test_rider');
+    const found = await s.cmd('testfor @e[type=armor_stand,tag=ir_test_rider]');
+    if (!/Found/i.test(found)) throw new Error(`surrogate did not spawn: ${found}`);
+    // Let it land and note the surface level: the start column's rail goes
+    // in at surface + .HOVER, which is where the physical probe below looks.
+    await sleep(4000);
+    const q = await s.cmd('querytarget @e[type=armor_stand,tag=ir_test_rider]');
+    const ym = q.match(/"y"\s*:\s*(-?\d+(?:\.\d+)?)/);
+    if (ym) groundY = Math.round(parseFloat(ym[1]));
+    // The Live-state sidebar mirrors .headX/.started into dbg every tick
+    // once the ride runs -- the console's window into the script state.
+    await s.fn('sidebar_state');
+    rideMark = s.mark();
+    await s.cmd('execute as @e[type=armor_stand,tag=ir_test_rider] at @s run scriptevent infinite_rail:start go');
+    // begin() polls its start chunks (up to ~50 s) before phase 2 launches.
+    const t0 = Date.now();
+    while (Date.now() - t0 < 90000) {
+      if (await s.scoreInRange('.started', 'dbg', 1)) return;
+      await sleep(1000);
+    }
+    throw new Error('ride never reached .started=1 (begin aborted? check the log)');
+  }),
+
+  report('the headless ride keeps building: head advances at pace', async (s) => {
+    // The launch pre-build alone reaches ~START_X + camAhead + 32; per-tick
+    // building then holds the head .PACE_CART_BEHIND ahead of the rolling
+    // pace. Watch the dbg mirror of .headX grow well past the pre-build.
+    const t0 = Date.now();
+    let h1 = null;
+    while (Date.now() - t0 < 60000) {
+      h1 = await s.scoreValue('.headX', 'dbg', -1000, 10000);
+      if (h1 !== null && h1 >= START_X + 150) break;
+      await sleep(2000);
+    }
+    if (h1 === null || h1 < START_X + 150) throw new Error(`head stuck at ${h1} (wanted >= ${START_X + 150})`);
+    await sleep(20000); // the pace rolls 8 blocks/s -> expect ~160 more
+    const h2 = await s.scoreValue('.headX', 'dbg', -1000, 20000);
+    if (h2 === null || h2 < h1 + 50) throw new Error(`head no longer advancing: ${h1} -> ${h2} in 20 s`);
+  }),
+
+  report('the built line is real: rail, support and light stand in the world', async (s) => {
+    // Probe the START column: it was placed by the same placeColumn as
+    // every other column, its chunk is pinned by the test's own tickingarea
+    // (the ride and its scout have long moved east), and its rail sits at
+    // surface + .HOVER. The head's CURRENT railY is useless here -- the
+    // line may have climbed mountains since -- so the scan window keys off
+    // groundY, the surrogate's resting level. Mind that the stand SINKS:
+    // on this seed the start is a lake, the stand rests on the lake FLOOR
+    // while the rail rides the water SURFACE + .HOVER (liquid surfaces are
+    // terrain to the probe), so the window reaches well above groundY.
+    if (groundY === null) throw new Error('no groundY from the start test (querytarget failed?)');
+    let atY = null;
+    for (let y = groundY + 30; y >= groundY - 6; y--) {
+      const r = await s.cmd(`testforblock ${START_X} ${y} ${START_Z} golden_rail`, { quietMs: 200 });
+      if (/Successfully found/i.test(r)) { atY = y; break; }
+    }
+    if (atY === null) throw new Error(`no golden_rail at the start column within Y ${groundY - 6}..${groundY + 30}`);
+    const sup = await s.cmd(`testforblock ${START_X} ${atY - 1} ${START_Z} infinite_rail:support`);
+    if (!/Successfully found/i.test(sup)) throw new Error(`no support block under the rail at Y ${atY - 1}: ${sup}`);
+    const light = await s.cmd(`testforblock ${START_X} ${atY + 3} ${START_Z} light_block_11`);
+    if (!/Successfully found/i.test(light)) throw new Error(`no track light above the rail at Y ${atY + 3}: ${light}`);
+  }),
+
+  report('no script errors during the headless ride', async (s) => {
+    const errs = scriptOnly(s.scriptErrorsSince(rideMark));
+    if (errs.length) throw new Error(`script errors while riding:\n  ${errs.slice(0, 8).join('\n  ')}`);
+  }),
+
+  report('stop tears the surrogate ride down (scout gone, ride ends)', async (s) => {
+    await s.fn('stop');
+    await sleep(1500);
+    const r = await s.cmd('testfor @e[type=infinite_rail:scout]');
+    if (!/No targets/i.test(r)) throw new Error(`scout still present after stop: ${r}`);
+    await s.cmd('kill @e[type=armor_stand,tag=ir_test_rider]');
+    await s.cmd('tickingarea remove sirm_test_start');
   }),
 ];
 

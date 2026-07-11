@@ -158,6 +158,20 @@ export class BedrockServer {
     return /is in range/i.test(r);
   }
 
+  /**
+   * Exact score value via range bisection over `scoreboard players test`
+   * (~log2(range) console round-trips). null when unset / out of range.
+   */
+  async scoreValue(holder, objective, lo = -100000, hi = 100000) {
+    if (!(await this.scoreInRange(holder, objective, lo, hi))) return null;
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (await this.scoreInRange(holder, objective, lo, mid)) hi = mid;
+      else lo = mid + 1;
+    }
+    return lo;
+  }
+
   async fn(name) {
     return this.cmd(`function infinite_rail/${name}`);
   }

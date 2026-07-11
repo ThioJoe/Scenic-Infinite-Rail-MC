@@ -12,7 +12,7 @@ node tests/run.mjs --pack ScenicInfiniteRailMode-Java-vX.zip   # Java: test a CI
 node tests/run.mjs --pack dist/java/Scenic_Infinite_Rail_Mode  # Java: test a pack folder
 node tests/run.mjs --filter torch                    # only matching suites/tests
 node tests/run.mjs --list                            # show every test, run nothing
-node tests/run-bedrock.mjs                           # Bedrock: build BP/RP from src/ (~1 min)
+node tests/run-bedrock.mjs                           # Bedrock: build BP/RP from src/ (~3 min)
 node tests/run-bedrock.mjs --pack Scenic....mcaddon  # Bedrock: test a CI artifact (.mcaddon or the zip wrapping it)
 ```
 
@@ -195,11 +195,25 @@ It asserts: clean content log / no script errors, the script's `init()` applied
 identically on the Bedrock command engine** — the exact `torch_auto` night window, the
 full `speed_step` state machine, the mode toggles. Bedrock has no
 `scoreboard players get`, so assertions go through `scoreboard players test`
-(`server.scoreInRange(holder, obj, min, max)`).
+(`server.scoreInRange(holder, obj, min, max)`; `server.scoreValue(...)` bisects that
+into an exact value when one is needed).
+
+The suite then runs a **real headless ride** — the Bedrock twin of the Java suites'
+surrogate rider (`tests/lib/ride.mjs`): a command tickingarea bootstraps the start
+chunks (measured on BDS: tickingareas *do* load and generate their chunks when zero
+players are online), an **armor stand** is summoned and the ride is started as it via
+`execute as ... run scriptevent infinite_rail:start` (`begin()` accepts any entity;
+the player-only comforts — `/ride` by name, gamemode, effects, hotbar, sound — no-op
+for a non-player, and the rider-offline freeze tracks the surrogate by entity id).
+From there the pack's own chunk scout keeps the world loaded, so the tests can watch
+the head advance through the `dbg` mirror (`sidebar_state`), physically verify the
+start column (rail + support + light via `testforblock` — note the stand *sinks*, so
+over a lake it rests on the floor while the rail rides the water surface + `.HOVER`),
+assert no `[Scripting]` errors during the ride, and check `stop` teardown.
 
 To extend it, add an entry to the `tests` array in `run-bedrock.mjs` — helpers on the
 server object: `cmd`, `fn(name)` (runs `function infinite_rail/<name>` — note Bedrock's
-slash path), `setScore`, `scoreInRange`, `scriptErrorsSince(mark)`.
+slash path), `setScore`, `scoreInRange`, `scoreValue`, `scriptErrorsSince(mark)`.
 
 ### Container quirks (handled automatically, documented so nobody re-debugs them)
 
@@ -243,6 +257,7 @@ slash path), `setScore`, `scoreInRange`, `scriptErrorsSince(mark)`.
 
 ## Runtime budget
 
-Full Java run: ~6–8 min (10 suites × ~15 s boot + the sprints). Bedrock: ~1.5 min.
+Full Java run: ~6–8 min (10 suites × ~15 s boot + the sprints). Bedrock: ~3 min
+(the shared-brain checks plus the headless surrogate ride).
 Suites boot fresh servers sequentially on fixed ports (25565/25575 Java, 19132 Bedrock),
 so don't run two harness invocations in parallel on one machine.
