@@ -1,0 +1,137 @@
+<h1 align = 'center'>
+    <img 
+        src="https://github.com/user-attachments/assets/1fc07002-38c4-4bd5-aad2-18846411969e"
+        height = '100' 
+        width = '100' 
+        alt = "Scenic Infinite Rail mode icon"
+    >
+    <br>
+    Scenic Infinite Rail Mode
+    <br>
+    <sub>For Minecraft</sub>
+</h1>
+
+## What is it?
+A vanilla Minecraft data pack that creates an **endless minecart ride through the world**, following the terrain in a smoothed camera seat.
+
+The idea is that you can **leave it running on a TV or monitor** as visual ambiance. 
+
+Basically the Minecraft equivalent of "[Slow TV](https://en.wikipedia.org/wiki/Slow_television)", such as 4-8 hour train ride videos on YouTube or Netflix.
+
+## What it's _not_
+
+### **Not for multiplayer servers or existing worlds:**
+  * This is a standalone "mode", not utility. (It's not for building rail from one place to another.)
+  * It automatically locks the player into a seat as soon as you join the world, and keeps you there.
+  * It also manually controls the cart and player movements, and force loads/unloads chunks in front and behind.
+
+--------
+
+## How to Download
+
+**Both Java and Bedrock Editions supported**
+
+1. Go to the Releases page.
+2. For the latest release, look under Assets, then download and extract either:
+    - For **Java Edition**: `ScenicInfiniteRailMode-Java.zip` 
+    - For **Bedrock Edition**: `ScenicInfiniteRailMode-Bedrock.zip` 
+3. For **installation steps**, see the [How To Install](#how-to-install) section further down.
+
+# Usage
+
+### **Starting the Ride:**
+The ride starts automatically for the first player in a new world. (It was designed and intended for single player worlds)
+
+## Hotbar Control Items
+
+<h3><p align="center">Bedrock:</p></h3>
+<p align="center"><img width="550" alt="Bedrock Hotbar control items" src="https://github.com/user-attachments/assets/b733444a-1e68-4710-a140-253e706e09f7" /></p>
+<h3><p align="center">Java:</p></h3>
+<p align="center"><img width="560" alt="Java Hotbar control items" src="https://github.com/user-attachments/assets/9b0e7e83-06b4-4382-8a12-781ea255e937" /></p>
+
+<p align="center">1: Ride Settings -- 2: Visual Settings -- 3: Toggle HUD* -- 4-6: Speed controls -- 8: Tips -- 9: Debug</p>
+
+<p align="center"><sub>*Toggle HUD is really only necesary on Bedrock Edition for consoles. With a keyboard, F1 can be used instead.</sub></p>
+
+### **Ride Settings**:
+  * **Sky mode** (On/Off): If enabled, the ride goes high up into the sky instead of ground level. **Default = Off**
+  * **Cart Sound** (On/Off): Whether the cart sound is heard or silent. **Default = On**
+  * **Show Cart** (Show/Hide): Whether you can see the cart or not. **Default = Show**
+  * **Mobs Aggro** (On/Off): Mobs make noise and approach the player. **Default = On**
+
+###  **Visual Settings**: 
+  * **Rain** (On/Off): If enabled, it's always raining. If disabled, normal weather cycle. (Default = Off)
+  * **Time** (Night/Day/Default): Optionally force a time of day. If "Default", normal day/night cycle.
+  * **Torches** (Auto/On/Off): Adds torches randomly around the track. If Auto, they only appear at night. (Default = Auto)
+  * **Torch Density** (Low/Medium/High/Max): How many torches to add, if enabled. (Default = Medium)
+
+###  **Speed Control Items:** 
+  * **Speed +**
+  * **Speed -** 
+  * **Speed Reset**
+
+### **Other Items:**
+  * **Toggle HUD** (Bedrock Only): Hides the HUD except for the item-name popup.
+     * Mostly useful for Console version. On PC, you can simply use the F1 key to toggle the HUD.
+  * **Tips:** Provides recommended game and video settings.
+  * **Debug:** Provides access to the debug chat toggle, sidebar views, and command help.
+
+# How to Install
+
+#### Supported Versions
+* **Java Edition:** Minecraft 1.21 - 26.2+.
+* **Bedrock Edition:** Tested on latest, likely other versions too
+
+ ### **Java Edition Installation:**
+ 1. During creation of a Single Player world, click the "More" tab, then the "Data Packs" button.
+ 2. Drag and drop the `Scenic_Infinite_Rail_Mode` folder into the Minecraft window. Select "Yes" if it asks to confirm.
+     - In the "Available" list you should now see the newly added data pack 
+ 3. Important: You must activate the data pack by hovering over its icon on the left, and clicking the "Play button" that appears while hovering.
+     - The "Scenic_Infinite_Rail_Mode" data pack should now show in the "Selected" list.
+ 4. Click "Done".
+     - It may show a warning about experimental features. Click "Proceed".
+ 5. Finish creating the world.
+     - You can name it whatever, and the default settings are fine.
+
+ ### **Bedrock Edition Installation:** 
+  1. Close minecraft if it's already running _(important)_.
+  2. Extract the zip file, and double click the `.mcaddon` file.
+    - It may ask which program to open with. Select "Minecraft" (or "Minecraft For Windows").
+  3. Minecraft should launch, and after a few seconds should say "Successfully imported Scenic Infinite Rail Mode" at the top.
+  4. While creating a new single player world, go to the "Behavior packs" tab, and click "Activate" next to Scenic Infinite Rail Mode
+     - It should automatically also activate the related Resource Pack after activating the Behavior Pack.
+  5. Finish creating the world.
+     - You can name it whatever, and the default settings are fine.
+     - It will give a warning about achievements, just click "Create Anyway"
+
+
+# Advanced / Manual Configuration
+
+* **To force start/stop the ride**, you can use these function commands (cheats / commands must be enabled):
+    * Java: `/function infinite_rail:start` and  `/function infinite_rail:stop`
+    * Bedrock: `/function infinite_rail/start` and  `/function infinite_rail/stop`
+
+* **Advanced Configuration:**
+  * The modes and ride settings can be changed in-game using the various item tools in the hotbar. However, for additional advanced tweaking, you can edit the values in the `config.mcfunction` file.
+     * You'll need to `/reload` if changing values by editing the file.
+  * Alternatively, you can run `/scoreboard` commands for the config settings, and most should update on the fly in game.
+    - You'll notice that in `config.mcfunction`, the lines defining the settings values are simply `scoreboard` commands. You can copy the entire line and paste it after a `/` in chat and it will update it right away.
+      - For example: `scoreboard players set .TUNNELCLEAR cfg_terrain 6`
+    - To make it permanent you'll need to update the value in file 
+    
+
+## Building From Source
+This repository is a monorepo containing shared logic and edition-specific files.
+
+There's also a `Make-Symlinks.ps1` powershell script in the `tools` folder, which will automatically create combined directories in a `dist_links` folder.
+  - For Bedrock you can symlink the `_BP` and `_RP` folders in `development_behavior_packs` and `development_resource_packs` respectively.
+  - For Java, you can drag the `_Java` folder into the Data Packs window to create a new world with the combined java build.
+  - You'll probably have to re-run the `.ps1` script if you make any changes that add a new file.
+
+**Recommended:** The repository has a build script as a GitHub workflow action. You can simply fork the repo and it should make new build artifacts on every commit.
+
+**For building locally:**
+1. Ensure a JavaScript runtime (Node.js) is available.
+2. Execute `node tools/build.mjs` from the repository root to assemble the packs.
+3. The build script aggregates shared functions from `src/shared/functions/` and edition-specific files to generate the distribution folders.
+
