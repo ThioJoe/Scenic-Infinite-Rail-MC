@@ -122,12 +122,27 @@ execute unless score .SKYMODE ir matches 1 if score .railY ir >= .cgate ir run s
 # .UPGRACE above the target -- instead of stopping under it and tunneling
 # the summit. A descent whose next step would dig (.dig) ends here instead,
 # resting just above the ground; the gaps pace when the next may start.
+#
+# MINIMUM EVENT SIZE (.short): .MIN_CHANGE is the minimum size of the
+# CHANGE ITSELF, not just of the intent -- an event that has run fewer than
+# .MIN_CHANGE columns refuses to end and keeps sloping (overshooting its
+# target by up to .MIN_CHANGE - 1 if the moving average pulled the target
+# back mid-event -- that chase is what used to leave 1-block descents on a
+# .MIN_CHANGE of 2: the start required a 2-block difference, but the
+# average could rise a block after the first step and end the event at
+# size 1). The one exception stays: a descending step that would cut into
+# scanned ground (.dig) ends the event whatever its size -- never trench.
+scoreboard players set .short ir 0
+execute if score .evrun ir < .MIN_CHANGE cfg_terrain run scoreboard players set .short ir 1
 execute if score .slope0 ir matches 1 if score .diff ir matches 1.. run scoreboard players set .dir ir 1
 execute if score .slope0 ir matches 1 if score .diff ir matches ..0 if score .push ir matches 1 run scoreboard players set .dir ir 1
-execute if score .slope0 ir matches 1 if score .diff ir matches ..0 if score .push ir matches 0 run function ir_end_event
+execute if score .slope0 ir matches 1 if score .diff ir matches ..0 if score .push ir matches 0 if score .short ir matches 1 run scoreboard players set .dir ir 1
+execute if score .slope0 ir matches 1 if score .diff ir matches ..0 if score .push ir matches 0 if score .short ir matches 0 run function ir_end_event
 execute if score .slope0 ir = .nOne ir if score .diff ir <= .nOne ir if score .dig ir matches 0 run scoreboard players operation .dir ir = .nOne ir
 execute if score .slope0 ir = .nOne ir if score .diff ir <= .nOne ir if score .dig ir matches 1 run function ir_end_event
-execute if score .slope0 ir = .nOne ir if score .diff ir matches 0.. run function ir_end_event
+execute if score .slope0 ir = .nOne ir if score .diff ir matches 0.. if score .dig ir matches 0 if score .short ir matches 1 run scoreboard players operation .dir ir = .nOne ir
+execute if score .slope0 ir = .nOne ir if score .diff ir matches 0.. if score .dig ir matches 0 if score .short ir matches 0 run function ir_end_event
+execute if score .slope0 ir = .nOne ir if score .diff ir matches 0.. if score .dig ir matches 1 run function ir_end_event
 
 # --- If currently flat, decide whether to begin a new event ---
 execute if score .slope0 ir matches 0 run function ir_consider_start

@@ -85,8 +85,16 @@ export default defineSuite('ride speed state machine', ({ test }) => {
     await mc.fn('speed_dec');
     await mc.fn('speed_dec');
     eq(await mc.score('.ocnspd', 'ir'), ocean - 4, 'Speed - goes BELOW the ocean default (the old max() rule is gone)');
+    // A land speed quietly adjusted some time ago must not survive a Reset:
+    // the reset is TOTAL (all three cruises), so one mid-ocean Reset also
+    // guarantees the default land speed comes back when the sprint ends --
+    // the "ocean speed never reset over land" complaint was a remembered
+    // land-speed adjustment outliving the reset.
+    await mc.setScore('.speed', 'ir', 40);
     await mc.fn('speed_reset');
     eq(await mc.score('.ocnspd', 'ir'), ocean, 'Reset returns the ocean cruise to .OCEANSPEED');
+    eq(await mc.score('.speed', 'ir'), expected.get('.DEFAULTSPEED'), 'Reset ALSO returns the land speed to its default (total reset)');
+    eq(await mc.score('.skyspd', 'ir'), expected.get('.SKYSPEED'), 'Reset ALSO returns the sky cruise to its default (total reset)');
     eq(await mc.score('.spdflt', 'ir'), 1, '.spdflt answers the ocean default');
   });
 

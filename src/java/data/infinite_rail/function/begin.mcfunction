@@ -22,8 +22,15 @@ tag @a remove ir_rider
 # --- World tuning ---
 # setup_world exists in two copies -- a base (camelCase) one and a snake_case
 # one in the overlay_snake overlay -- and pack.mcmeta selects the right copy by
-# version (format 92+ gets the overlay). Just call it once.
-function infinite_rail:setup_world
+# version (format 92+ gets the overlay). Health-checked: the file ends with
+# `return 1`, so success 0 here means it did not run AT ALL (failed to
+# compile on this version -- one bad gamerule name kills the whole file --
+# or the version fell outside the overlay range). That failure is otherwise
+# perfectly silent, and it costs every protection at once: phantoms,
+# creeper/enderman griefing, fire, fall damage...
+scoreboard players set .swok ir 0
+execute store success score .swok ir run function infinite_rail:setup_world
+execute if score .swok ir matches 0 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Warning: the world-tuning gamerules could not be applied (setup_world failed to load on this Minecraft version). Phantoms, mob griefing, fire and damage protection are NOT active. Please report this with your exact game version.","color":"yellow"}]
 
 # Java has no recipe-unlocking gamerule (Bedrock's setup_world uses one), so
 # pre-unlock EVERY recipe instead: with nothing left to unlock, no "recipes

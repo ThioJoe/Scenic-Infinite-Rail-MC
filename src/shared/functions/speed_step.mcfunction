@@ -21,7 +21,14 @@
 #                          negative = slower (speed_inc/speed_dec pass
 #                          +/-.SPEEDSTEP from the shared consts.mcfunction;
 #                          Bedrock's settings slider passes an exact delta),
-#                          0 = reset to the active default.
+#                          0 = reset. A reset is TOTAL: all three cruise
+#                          speeds return to their config defaults, not just
+#                          the active one -- so one Reset press mid-ocean
+#                          also guarantees the ride comes back to the
+#                          default land speed when the sprint ends (a land
+#                          speed quietly adjusted some time ago used to
+#                          survive the reset and read as "the ocean speed
+#                          never reset").
 # Output: .spcur (ir)  --  the NEW active cruise speed (== the just-updated
 #                          .speed, .ocnspd or .skyspd). The native
 #                          apply/report reads this so it never re-branches on
@@ -60,6 +67,12 @@ execute if score .SKYMODE ir matches 1 run scoreboard players operation .spdef i
 # deltas (Bedrock's slider) mean an exact value.
 scoreboard players set .spfloor ir 0
 execute if score .spcur ir matches 1 run scoreboard players set .spfloor ir 1
+# Reset (.spdir 0): ALL the cruise speeds return to their defaults -- the
+# two inactive ones here, the active one through .spcur below (it lands on
+# the same default via .spdef, so the write-back stays uniform).
+execute if score .spdir ir matches 0 run scoreboard players operation .speed ir = .DEFAULTSPEED cfg_ride
+execute if score .spdir ir matches 0 run scoreboard players operation .ocnspd ir = .OCEANSPEED cfg_ride
+execute if score .spdir ir matches 0 run scoreboard players operation .skyspd ir = .SKYSPEED cfg_ride
 execute if score .spdir ir matches 0 run scoreboard players operation .spcur ir = .spdef ir
 scoreboard players operation .spcur ir += .spdir ir
 scoreboard players set .sclamp ir 1

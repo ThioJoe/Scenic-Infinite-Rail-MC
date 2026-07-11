@@ -26,3 +26,9 @@ gamerule freezeDamage false
 gamerule drowningDamage false
 # If something impossible happens, come straight back (spawnpoint follows the ride).
 gamerule doImmediateRespawn true
+# Explicit success for begin/load's store-success health check (.swok): a
+# function without a /return stores success 0 on modern versions, identical
+# to "the file failed to compile" -- and a single bad gamerule name DOES
+# fail this whole file (the do_tile_drops era shipped worlds with NO ride
+# gamerules at all: phantoms circling the night ride was the symptom).
+return 1

@@ -128,4 +128,17 @@ scoreboard players set .todok ir 0
 function infinite_rail:check_clock
 execute if score .todok ir matches 0 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Warning: the day/night check is not working on this Minecraft version, so torch mode's Auto (night-only) setting cannot tell day from night and will not plant torches. Always-on torch mode still works. Please report this with your exact game version.","color":"yellow"}]
 
+# Re-assert the world-tuning gamerules in any world whose ride has already
+# started (.started persists in the save; a fresh world stays untouched
+# until its first ride). This HEALS worlds that began under a pack build
+# whose setup_world failed to compile -- an invalid gamerule name kills the
+# whole file at load, and the do_tile_drops-era overlay had one: those
+# worlds ran with NO ride gamerules (phantoms circling the night ride was
+# the visible symptom), and only a full ride restart would have re-applied
+# them. Same store-success health check as begin (setup_world ends with
+# `return 1`); .swok preset 1 so an un-started world can't warn.
+scoreboard players set .swok ir 1
+execute if score .started ir matches 1.. store success score .swok ir run function infinite_rail:setup_world
+execute if score .swok ir matches 0 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Warning: the world-tuning gamerules could not be applied (setup_world failed to load on this Minecraft version). Phantoms, mob griefing, fire and damage protection are NOT active. Please report this with your exact game version.","color":"yellow"}]
+
 tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Loaded. A fresh world starts the ride automatically; run ","color":"gray"},{"text":"/function infinite_rail:start","color":"aqua"},{"text":" to (re)start it here.","color":"gray"}]

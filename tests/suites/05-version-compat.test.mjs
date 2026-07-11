@@ -29,6 +29,23 @@ export default defineSuite('server version compatibility', ({ test }) => {
     eq(v, 'false', 'mob_griefing should be false after setup_world (creepers/endermen must not wreck the track)');
   });
 
+  test('setup_world health check: compiled, ran, and returned success', async ({ mc }) => {
+    // The file ends with `return 1` so begin/load's store-success (.swok)
+    // can tell "ran" from "failed to compile" -- one invalid gamerule name
+    // kills the whole file silently (the do_tile_drops era shipped worlds
+    // with no ride gamerules at all; phantoms were the visible symptom).
+    await mc.cmd('scoreboard objectives add irtest dummy');
+    await mc.setScore('.r', 'irtest', 0);
+    await mc.cmd('execute store success score .r irtest run function infinite_rail:setup_world');
+    eq(await mc.score('.r', 'irtest'), 1, 'setup_world must compile and end in `return 1` on this version');
+  });
+
+  test('phantom spawning is disabled after setup_world', async ({ mc, note }) => {
+    const v = await gameruleQuery(mc, 'spawn_phantoms') ?? await gameruleQuery(mc, 'doInsomnia');
+    note(`phantom rule = ${v}`);
+    eq(v, 'false', 'the phantom-spawning gamerule (spawn_phantoms / doInsomnia) must be false after setup_world');
+  });
+
   test('command-chain budget gamerule exists and was raised by load', async ({ mc }) => {
     const rule = await mc.storageString('infinite_rail:names', 'chain_length');
     ok(rule, 'chain-budget rule name in storage');

@@ -659,6 +659,10 @@ function adjustSpeed(delta) {
 // commands and Java behave identically, tellraw feedback included. Only
 // actual changes run anything.
 function showRideMenu(player) {
+  // The speed slider is read against the cruise active NOW; remember which
+  // one that is, because the ocean sprint can flip while the form sits on
+  // screen (see the submit handler).
+  const fastAtOpen = S.fast;
   const current = {
     sky: modeOn('SKYMODE'),
     sound: modeOn('SOUNDMODE'),
@@ -730,7 +734,20 @@ function showRideMenu(player) {
     // above -- so an untouched slider never fires, and a move applies to
     // whichever speed is now active (the shared speed_step writes .skyspd in
     // sky mode, .speed otherwise).
-    if (speedWant !== current.speed) adjustSpeed(speedWant - activeSpeed());
+    if (speedWant !== current.speed) {
+      if (!sky && !current.sky && S.fast !== fastAtOpen) {
+        // The ocean sprint flipped while the form was open: the slider the
+        // user saw (and its label) belonged to the OTHER cruise, and a
+        // delta against the new one writes ocean-sized values into the land
+        // speed (the classic "the ride never slowed back down over land").
+        // Honor what they actually saw: set that cruise, absolutely.
+        const v = Math.min(64, Math.max(1, speedWant));
+        runCmd(`scoreboard players set ${P}${fastAtOpen ? 'ocnspd' : 'speed'} ir ${v}`);
+        say(`§7${fastAtOpen ? 'Ocean cruise' : 'Ride'} speed: §f${v}§7 blocks/s`);
+      } else {
+        adjustSpeed(speedWant - activeSpeed());
+      }
+    }
   }).catch((e) => reportError('ride settings menu', e));
 }
 
@@ -2617,6 +2634,12 @@ function init() {
   }
 
   loadState();
+  // Re-assert the world-tuning gamerules in any world whose ride has
+  // already started (Java's load does the same): begin() applies them at
+  // ride start, but a world that started under an older/broken pack build
+  // keeps its rules until something re-applies them -- this heals such
+  // worlds on the next load instead of requiring a full ride restart.
+  if (S.started) runCmd(`function ${NS}/setup_world`);
   if (S.started) say('§7Ride resumed. Run §b/function infinite_rail/stop§7 to end it.');
   else say('§7Loaded. A fresh world starts the ride automatically; run §b/function infinite_rail/start§7 to (re)start it here.');
   inited = true;

@@ -196,8 +196,12 @@ const tests = [
     await s.fn('speed_dec');
     await s.fn('speed_dec');
     if (!(await s.scoreInRange('.ocnspd', 'ir', ocean - 4))) throw new Error('Speed - must go BELOW the ocean default now');
+    // The reset is TOTAL: an adjusted land speed must not survive it (that
+    // leftover was the "never slowed back down over land" complaint).
+    await s.setScore('.speed', 'ir', 40);
     await s.fn('speed_reset');
     if (!(await s.scoreInRange('.ocnspd', 'ir', ocean))) throw new Error(`ocean reset: .ocnspd != ${ocean}`);
+    if (!(await s.scoreInRange('.speed', 'ir', base))) throw new Error(`total reset: the land speed must return to ${base} too`);
     await s.setScore('.fast', 'ir', 0);
   }),
 

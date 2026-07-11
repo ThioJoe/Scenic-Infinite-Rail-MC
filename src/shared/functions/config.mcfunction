@@ -185,8 +185,13 @@ scoreboard players set .LANDCHUNKS cfg_ride 3
 # more frequent elevation changes than the old 50/50 gaps -- the line hugs the
 # scenery closer and the rider never feels a single corner.
 
-# Minimum height difference (in blocks) before a new climb/descent is started.
-# Also acts as hysteresis, so small terrain noise never nudges the rail.
+# Minimum size (in blocks) of any climb/descent -- both to START one (the
+# target must be at least this far away; also the hysteresis that keeps
+# terrain noise from nudging the rail) and to END one: an event that has
+# run fewer than this many columns keeps sloping, overshooting a target the
+# moving average pulled back mid-event, so a value of 2 really means "no
+# change smaller than 2 blocks". (One exception: a descent that would cut
+# into scanned ground ends early whatever its size -- it never trenches.)
 scoreboard players set .MIN_CHANGE cfg_terrain 4
 
 # Minimum flat blocks between two changes in the SAME direction.

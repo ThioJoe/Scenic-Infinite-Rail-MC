@@ -3,7 +3,7 @@
     "description": "Scenic Infinite Rail Mode - endless Slow TV minecart ride",
     "pack_format": 84,
     "min_format": 82,
-    "max_format": 107
+    "max_format": 999
   },
   "features": {
     "enabled": [
@@ -15,7 +15,7 @@
       {
         "directory": "overlay_snake",
         "min_format": 92,
-        "max_format": 107
+        "max_format": 999
       }
     ]
   }
