@@ -192,7 +192,7 @@ scoreboard players set .LANDCHUNKS cfg_ride 3
 # moving average pulled back mid-event, so a value of 2 really means "no
 # change smaller than 2 blocks". (One exception: a descent that would cut
 # into scanned ground ends early whatever its size -- it never trenches.)
-scoreboard players set .MIN_CHANGE cfg_terrain 4
+scoreboard players set .MIN_CHANGE cfg_terrain 2
 
 # Minimum flat blocks between two changes in the SAME direction.
 # Higher = fewer, longer swoops. Terrain that rises faster than this allows
