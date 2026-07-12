@@ -38,7 +38,7 @@ Basically the Minecraft equivalent of "[Slow TV](https://en.wikipedia.org/wiki/S
 **Both Java and Bedrock Editions supported**
 
 1. Go to the Releases page.
-2. For the latest release, look under Assets, then download and extract either:
+2. For the latest release, look under Assets, then download either:
     - For **Java Edition**: `ScenicInfiniteRailMode-Java.zip` 
     - For **Bedrock Edition**: `ScenicInfiniteRailMode-Bedrock.zip` 
 3. For **installation steps**, see the [How To Install](#how-to-install) section further down.
@@ -90,10 +90,10 @@ The ride starts automatically for the first player in a new world. (It was desig
 
  ### **Java Edition Installation:**
  1. During creation of a Single Player world, click the "More" tab, then the "Data Packs" button.
- 2. Drag and drop the `Scenic_Infinite_Rail_Mode` folder into the Minecraft window. Select "Yes" if it asks to confirm.
+ 2. Drag and drop the downloaded `ScenicInfiniteRailMode-Java.zip` file onto the Minecraft window (no need to extract). Select "Yes" if it asks to confirm.
      - In the "Available" list you should now see the newly added data pack 
  3. Important: You must activate the data pack by hovering over its icon on the left, and clicking the "Play button" that appears while hovering.
-     - The "Scenic_Infinite_Rail_Mode" data pack should now show in the "Selected" list.
+     - The "ScenicInfiniteRailMode-Java" data pack should now show in the "Selected" list.
  4. Click "Done".
      - It may show a warning about experimental features. Click "Proceed".
  5. Finish creating the world.
