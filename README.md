@@ -40,7 +40,7 @@ Basically the Minecraft equivalent of "[Slow TV](https://en.wikipedia.org/wiki/S
 1. Go to the Releases page.
 2. For the latest release, look under Assets, then download either:
     - For **Java Edition**: `ScenicInfiniteRailMode-Java.zip` 
-    - For **Bedrock Edition**: `ScenicInfiniteRailMode-Bedrock.zip` 
+    - For **Bedrock Edition**: `ScenicInfiniteRailMode-Bedrock.mcaddon` 
 3. For **installation steps**, see the [How To Install](#how-to-install) section further down.
 
 # Usage
@@ -101,7 +101,7 @@ The ride starts automatically for the first player in a new world. (It was desig
 
  ### **Bedrock Edition Installation:** 
   1. Close minecraft if it's already running _(important)_.
-  2. Extract the zip file, and double click the `.mcaddon` file.
+  2. Double click the `.mcaddon` file.
     - It may ask which program to open with. Select "Minecraft" (or "Minecraft For Windows").
   3. Minecraft should launch, and after a few seconds should say "Successfully imported Scenic Infinite Rail Mode" at the top.
   4. While creating a new single player world, go to the "Behavior packs" tab, and click "Activate" next to Scenic Infinite Rail Mode
