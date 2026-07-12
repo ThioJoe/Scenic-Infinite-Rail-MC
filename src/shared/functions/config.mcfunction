@@ -519,7 +519,7 @@ scoreboard players set .SEAPICKLE cfg_ride 4
 # menu's Sound switch (mode_sound_on / mode_sound_off) owns the live value
 # afterwards, and a chosen setting survives reloads, rejoins and ride
 # restarts like every mode.
-scoreboard players set .CARTSOUND cfg_ride 1
+scoreboard players set .CARTSOUND cfg_ride 0
 
 
 # --- Debugging --------------------------------------------------------------
