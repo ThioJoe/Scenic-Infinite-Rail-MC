@@ -254,6 +254,31 @@ const tests = [
     if (!(await s.scoreInRange('.HUDHIDDEN', 'ir', 0))) throw new Error('second toggle: .HUDHIDDEN != 0 (hud_show missing or unparsed?)');
   }),
 
+  report('setup_world applies its safety gamerules (phantoms/mobgriefing off) -- the whole file must parse', async (s) => {
+    // Same registry rule the hud_toggle test leans on: BDS drops an ENTIRE
+    // function if a single line is unparseable. setup_world carries the ride's
+    // safety gamerules; a stray device-scoped command in it (a `gametips
+    // disable` line once did exactly this -- /gametips has no world form and
+    // is only valid run through a player, so it made the whole file vanish and
+    // took every gamerule with it: phantoms circling the night ride was the
+    // symptom) would silently drop them all. Force the sentinels wrong, run
+    // the file, read them back. The boolean is pulled format-agnostically so a
+    // change in BDS's gamerule-echo wording can't turn this into a false pass.
+    const readBool = async (rule) => {
+      const raw = await s.cmd(`gamerule ${rule}`);
+      const m = raw.match(/\b(true|false)\b/i);
+      return { v: m ? m[1].toLowerCase() : null, raw };
+    };
+    await s.cmd('gamerule doinsomnia true');
+    await s.cmd('gamerule mobgriefing true');
+    const ran = await s.fn('setup_world');
+    if (/unknown function/i.test(ran)) throw new Error(`setup_world is not in the registry -- a line failed to parse and BDS dropped the whole file: ${ran}`);
+    const ins = await readBool('doinsomnia');
+    if (ins.v !== 'false') throw new Error(`doinsomnia = ${ins.v} after setup_world (phantoms NOT disabled -- a dropped file drops every safety gamerule). raw: ${JSON.stringify(ins.raw)}`);
+    const grf = await readBool('mobgriefing');
+    if (grf.v !== 'false') throw new Error(`mobgriefing = ${grf.v} after setup_world (track unprotected). raw: ${JSON.stringify(grf.raw)}`);
+  }),
+
   // --- The surrogate ride: the whole build pipeline, headlessly ------------
   // Java-suite parity (tests/lib/ride.mjs): the ride is started AS a tagged
   // armor stand -- begin() accepts any entity; the player-only comforts

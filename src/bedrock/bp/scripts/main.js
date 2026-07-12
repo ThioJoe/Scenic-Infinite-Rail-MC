@@ -2569,6 +2569,12 @@ function beginPhase2(startX) {
       rider.runCommand('effect @s resistance infinite 255 true');
       rider.runCommand('effect @s saturation infinite 0 true');
     } catch { /* effects are belt-and-suspenders on top of the damage gamerules */ }
+    // No tutorial-hint toasts over the ride. /gametips is device-scoped, so it
+    // only takes with a player executor -- it CANNOT live in setup_world (a
+    // function run via dim.runCommand has none, and its mere presence there
+    // makes Bedrock reject the whole file, dropping every safety gamerule).
+    // Kept in its own try so a future /gametips change can never break seating.
+    try { rider.runCommand('gametips disable'); } catch { /* best-effort; tips are cosmetic */ }
   }
 
   S.started = true;

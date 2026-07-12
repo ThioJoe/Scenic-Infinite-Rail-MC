@@ -27,6 +27,10 @@ gamerule spawnradius 0
 # its begin pre-unlocks all recipes instead.
 gamerule recipesunlock false
 gamerule showrecipemessages false
-# No tutorial-hint toasts over the ride (Bedrock-only command; Java's
-# tutorial hints are a client setting no pack can reach).
-gametips disable
+# Tutorial-hint suppression (`gametips disable`) is NOT run here: /gametips is
+# a device-scoped command with no server/world form, so it is unparseable in a
+# function invoked via dim.runCommand (no player executor) -- and one bad line
+# makes Bedrock reject the WHOLE function at load, silently dropping every
+# gamerule above (phantoms, damage, fire, mobgriefing...). It is instead run
+# once as the seated rider in the script's launch step (rider.runCommand), the
+# only context /gametips accepts.
