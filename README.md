@@ -36,7 +36,7 @@ Basically the Minecraft equivalent of "[Slow TV](https://en.wikipedia.org/wiki/S
 
 --------
 
-## <img src=".github/assets/download-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/download-dark.svg#gh-dark-mode-only" width="22" align="center" /> How to Download
+## <img src=".github/assets/download-light.svg#gh-light-mode-only" width="22" align="center" /><img src=".github/assets/download-dark.svg#gh-dark-mode-only" width="22" align="center" /> How to Download
 
 **Both Java and Bedrock Editions supported**
 
