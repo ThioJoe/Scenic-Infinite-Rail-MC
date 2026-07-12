@@ -24,12 +24,15 @@ Basically the Minecraft equivalent of "[Slow TV](https://en.wikipedia.org/wiki/S
 
 <br>
 
-## What it's _not_
+## What it's _NOT_
 
 ### **Not for multiplayer servers or existing worlds:**
   * This is a standalone "mode", not utility. (It's not for building rail from one place to another)
   * It automatically locks the player into a seat as soon as you join the world, and keeps you there.
   * It also manually controls the cart and player movements, and force loads/unloads chunks in front and behind.
+
+> [!NOTE]
+> **_Not_ an official Minecraft product. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.**
 
 --------
 
