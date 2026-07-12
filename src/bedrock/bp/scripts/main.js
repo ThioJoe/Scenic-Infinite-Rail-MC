@@ -1174,6 +1174,7 @@ function brainGetFlag(name) {
 // survives quitting and rejoining the world mid-journey.
 
 function saveState() {
+  const t0 = Date.now();
   const histStart = Math.max(0, S.trackY.length - HIST_PERSIST);
   world.setDynamicProperty('ir:state', JSON.stringify({
     started: S.started, autodone: S.autodone,
@@ -1185,6 +1186,11 @@ function saveState() {
     lastChunk: S.lastChunk, s2: S.s2, riderName: S.riderName, riderId: S.riderId,
     hudHidden: S.hudHidden, weather: S.weather,
   }));
+  // The debug roll line reports the window's worst write (this is the
+  // pack's one recurring world-database write -- if engine save pressure is
+  // what stutters a long ride, it can show up here first).
+  const dt = Date.now() - t0;
+  if (dt > dbgSaveMax) dbgSaveMax = dt;
 }
 
 function loadState() {
@@ -1731,12 +1737,38 @@ let stallTicks = 0;
 let stallWarned = false;
 let lastBuildErrAt = -1e9; // rate limit: a stuck column would otherwise spam every tick
 
+// Debug-line pipeline-health window, reset on every roll line so each line
+// describes exactly the 16 blocks since the previous one (the lurch hunt:
+// long-session rides degrade in ways the frontier number alone can't
+// separate). The tick pacing pair is the engine-stutter discriminator: the
+// script's own cost (tick) can be small while the ENGINE delivers ticks
+// late (lull) -- a big lull with a healthy frontier and full buffer means
+// the stutter is engine-side (world save/compaction, memory pressure), not
+// this pack's work.
+let dbgWin0 = Date.now();  // window start
+let dbgWinTicks = 0;       // engine ticks seen in the window
+let dbgTickCostSum = 0;    // total ms spent inside tick()
+let dbgTickCostMax = 0;    // worst single tick() ms
+let dbgLullMax = 0;        // longest wall-clock gap BETWEEN consecutive ticks
+let dbgPrevTickAt = 0;     // Date.now() at the previous tick's start
+let dbgSaveMax = 0;        // worst saveState() write ms
+let dbgStarveTicks = 0;    // ticks the builder wanted to build but the chunk ahead wasn't loaded
+
 function buildLoop() {
   let budget = cfg('BUILD_PER_TICK');
   const ahead = cfg('PACE_CART_BEHIND');
   let built = false;
   while (budget > 0 && S.headX - Math.floor(S.paceX) < ahead) {
-    if (!buildReady()) break;
+    if (!buildReady()) {
+      dbgStarveTicks += 1;
+      // A FULLY starved builder stops advancing the head, so the roll line
+      // (printed per 16 blocks of head travel) goes silent exactly when
+      // things are worst -- keep a time-based heartbeat in debug mode.
+      if (stallTicks > 0 && stallTicks % 100 === 0) {
+        dbg(`builder starved ${(stallTicks / 20).toFixed(0)}s at x=${S.headX} (chunk ahead not loaded)`);
+      }
+      break;
+    }
     budget -= 1;
     try {
       advance();
@@ -1855,22 +1887,60 @@ function rollChunks() {
   // Drop surface-probe memo entries the head has passed.
   for (const k of surfMemo.keys()) if (k < x) surfMemo.delete(k);
   if (debugOn()) {
-    // The contiguous loaded frontier past the head, the scout's lead on the
-    // head, and the terrain algorithm's live numbers -- at a glance: is the
-    // scout keeping chunks open ahead (the frontier should track it), and is
-    // the elevation logic getting data (badSamples 12/12 = probe broken).
+    // Two-line health report per 16 blocks of head travel -- everything the
+    // lurch hunt needs at a glance.
+    // Line 1, the ride's geometry: the contiguous loaded frontier past the
+    // head (steady state is ~+64..+80 -- the scout posts ~16 behind the
+    // head, so its 96-block bubble reaches ~head+80; smaller = generation
+    // is lagging), the scout's lead on the head, the track buffer `gap`
+    // (head - pace; .PACE_CART_BEHIND = full), the rider's distance behind
+    // the head, and the pace speed as current/target with the buffer's soft
+    // ceiling `cap` -- cap below target means the BUFFER is what's limiting
+    // the ride (the Speed items can't help), a healthy cap with a low speed
+    // means something else is.
+    // Line 2, pipeline health over the window since the previous line:
+    // effective ticks-per-second and the script's own avg/max tick cost --
+    // paired with `lull`, the longest wall-clock gap BETWEEN engine ticks:
+    // a big lull with a small tick cost = the ENGINE is stuttering (world
+    // save/compaction, memory pressure), not this pack's work. `save` is
+    // the worst single state-save write, `starve` how many ticks the
+    // builder sat blocked on an unloaded chunk ahead, and badSamples/avg/
+    // railY the terrain algorithm's live numbers (badSamples at the full
+    // sample count = probe broken). ops = rig operations (mounts/ejects/
+    // corrective teleports): all zeros while a problem is audible or
+    // visible = the script is NOT doing it.
     let frontier = 0;
     while (frontier < 512 && chunkLoaded(x + frontier + 16, z)) frontier += 16;
     const scout = findScout();
     let scoutAt = null;
     try { if (scout) scoutAt = Math.round(scout.location.x - x); } catch { /* stale handle */ }
     const scoutTxt = scoutAt === null ? '§cMISSING§7' : `§f${scoutAt >= 0 ? '+' : ''}${scoutAt}§7`;
-    // ops = rig operations since the previous roll line (16 blocks of
-    // travel): mounts/ejects/corrective teleports. All zeros while a
-    // problem is audible or visible = the script is NOT doing it.
-    dbg(`x=${x}: loaded §f+${frontier}§7 scout=${scoutTxt} | badSamples=§f${S.lastBad}§7/12 avg=§f${S.avg}§7 railY=§f${S.railY}§7 ops=§fm${ops.mount}/e${ops.eject}/t${ops.tp}§7 drive=${S.teleportFallback ? '§ctp§7' : 'imp'} bridge=${bridgeMode}`);
+    const gap = x - Math.floor(S.paceX);
+    let riderTxt = '§coffline§7';
+    try {
+      const r = findRider();
+      if (r) riderTxt = `§f-${Math.round(x - r.location.x)}§7`;
+    } catch { /* unloaded */ }
+    const spd = (S.paceSpeed * 20).toFixed(1);
+    const tgt = Math.round(S.targetSpeed * 20);
+    const cap = Math.max(0, ((x - camAhead() - 8 - S.paceX) / 40) * 20);
+    const winMs = Math.max(1, Date.now() - dbgWin0);
+    const tps = ((dbgWinTicks * 1000) / winMs).toFixed(1);
+    const costAvg = dbgWinTicks ? (dbgTickCostSum / dbgWinTicks).toFixed(1) : '0';
+    const sampleN = Math.max(1, Math.floor(cfg('SAMPLE_WINDOW') / Math.max(1, cfg('SAMPLE_BLOCK_INTERVAL'))));
+    dbg(`x=${x}: loaded §f+${frontier}§7 scout=${scoutTxt} gap=§f${gap}§7 rider=${riderTxt} spd=§f${spd}§7/${tgt} cap=§f${cap.toFixed(1)}§7\n   tps=§f${tps}§7 tick=§f${costAvg}/${dbgTickCostMax}§7ms lull=§f${dbgLullMax}§7ms save=§f${dbgSaveMax}§7ms starve=§f${dbgStarveTicks}§7/${dbgWinTicks} badSamples=§f${S.lastBad}§7/${sampleN} avg=§f${S.avg}§7 railY=§f${S.railY}§7 ops=§fm${ops.mount}/e${ops.eject}/t${ops.tp}§7 drive=${S.teleportFallback ? '§ctp§7' : 'imp'} bridge=${bridgeMode}`);
     ops.mount = 0; ops.eject = 0; ops.tp = 0;
   }
+  // The health window resets whether or not it was printed, so the first
+  // line after enabling debug mid-ride covers only the last 16 blocks
+  // instead of the whole session.
+  dbgWin0 = Date.now();
+  dbgWinTicks = 0;
+  dbgTickCostSum = 0;
+  dbgTickCostMax = 0;
+  dbgLullMax = 0;
+  dbgSaveMax = 0;
+  dbgStarveTicks = 0;
 }
 
 // --- Ocean speed-up ------------------------------------------------------------
@@ -3044,7 +3114,21 @@ try {
 
 system.runInterval(() => {
   tickN += 1;
+  // Tick-health bookkeeping for the debug roll line (two Date.now() calls
+  // per tick -- negligible). The lull (wall-clock gap between consecutive
+  // ticks) is measured start-to-start so it includes everything the engine
+  // did between our slices; tick cost is this script's own work only.
+  const t0 = Date.now();
+  if (dbgPrevTickAt > 0) {
+    const lull = t0 - dbgPrevTickAt;
+    if (lull > dbgLullMax) dbgLullMax = lull;
+  }
+  dbgPrevTickAt = t0;
   try { tick(); } catch (e) { reportError('tick', e); }
+  const dt = Date.now() - t0;
+  dbgWinTicks += 1;
+  dbgTickCostSum += dt;
+  if (dt > dbgTickCostMax) dbgTickCostMax = dt;
 });
 
 function tick() {
