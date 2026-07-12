@@ -123,21 +123,6 @@ const CART_TYPE = 'infinite_rail:cart';
 // ride cart spawned at -90). geometry.minecart's long axis runs along X at
 // yaw 0 -- aligned with the eastbound track.
 const CART_YAW = 0;
-// The RETIRED chunk scout -- a custom entity whose minecraft:tick_world
-// component made it a mobile ticking area, this pack's chunk loader through
-// v1.4.x. Replaced by the script TICKING-AREA CORRIDOR below
-// (world.tickingAreaManager, @minecraft/server 2.6.0): the manager's areas
-// both LOAD and GENERATE their chunks server-side, with a player online
-// (measured: 49 fresh chunks in ~1 s on a real client, ~2.5 s headless) --
-// the thing command /tickingarea could never do (measured too: a 470-block
-// corridor of command areas contributed zero loaded chunks while a player
-// was online, which is why the scout existed). The entity DEFINITIONS stay
-// in the pack so a save from a scout-era version still resolves its saved
-// scout -- otherwise its self-loading tick_world bubble would sit orphaned
-// over dead terrain forever (the MCPE-99760 class of leak) -- and
-// sweepStaleScouts() removes every one it can see at load and on stop.
-const SCOUT_TYPE = 'infinite_rail:scout';
-const TAG_SCOUT = 'ir_scout';
 // The rolling ticking-area CORRIDOR -- two alternating area names, so each
 // roll can claim the new span BEFORE releasing the old one (the overlap
 // never unloads; a one-name design would drop and reload the whole span).
@@ -1974,16 +1959,6 @@ function clearCorridor() {
   corrLive = null;
 }
 
-// Remove chunk scouts left behind by scout-era versions of this pack. A
-// stale scout's own tick_world bubble keeps its chunk loaded, so a single
-// dimension-wide type query finds it from anywhere -- no scan needed.
-function sweepStaleScouts() {
-  try {
-    for (const e of dim.getEntities({ type: SCOUT_TYPE })) {
-      try { e.remove(); } catch { /* already gone */ }
-    }
-  } catch { /* type unregistered / query raced an unload */ }
-}
 
 function rollChunks() {
   const x = S.headX, y = S.railY, z = S.centerZ;
@@ -2479,12 +2454,11 @@ let riderAstray = 0;
 // merely-still-loading original is never doubled.
 let cartMissing = 0;
 
-// Is this player still "on the ride" for keeper purposes? Rides now run in
-// SURVIVAL (adventure suppresses Bedrock's natural mob spawning), but
-// adventure is still accepted so rides saved by older pack versions resume
-// seamlessly. Switching to creative remains the sanctioned way to leave.
+// Is this player still "on the ride" for keeper purposes? Rides run in
+// SURVIVAL (adventure suppresses Bedrock's natural mob spawning); switching
+// to any other mode is the sanctioned way to leave.
 function ridingMode(gm) {
-  return gm === GameMode.Survival || gm === GameMode.Adventure;
+  return gm === GameMode.Survival;
 }
 
 // Mount the ride's player onto the seat via the /ride COMMAND, not the
@@ -2658,7 +2632,6 @@ function begin(rider) {
   S.nextLoad = startX + 16;
   surfMemo.clear();
 
-  sweepStaleScouts(); // scout-era saves: retire any leftover chunk scout
   // The corridor anchors on the virtual pace -- seed it at the start line
   // (beginPhase2 sets the real value later) so the first corridor spans
   // [start - tail .. start + .TERRAIN_GENAHEAD], generating everything the
@@ -2843,7 +2816,6 @@ function stop(silent) {
   // Remove EVERY rig piece wearing our tags (there should be one of each, but
   // stale sessions may have left extras behind). Each type is collected under
   // its own guard so one unregistered type can't abort the whole sweep.
-  // (The scout sweep covers scout-era saves -- see SCOUT_TYPE.)
   if (dim) {
     const collect = (type, tag) => {
       try { return dim.getEntities({ type, tags: [tag] }); } catch { return []; }
@@ -2851,8 +2823,7 @@ function stop(silent) {
     const pieces = [
       ...collect(SEAT_TYPE, TAG_SEAT),
       ...collect(CART_TYPE, TAG_RIDE),
-      ...collect('minecraft:minecart', TAG_RIDE), // vanilla fallback / pre-1.0.6 rides
-      ...collect(SCOUT_TYPE, TAG_SCOUT),
+      ...collect('minecraft:minecart', TAG_RIDE), // the runtime cart-prop fallback
     ];
     for (const e of pieces) {
       try { e.getComponent('minecraft:rideable')?.ejectRiders(); } catch { /* empty */ }
@@ -3046,12 +3017,8 @@ function init() {
   loadState();
   // Ticking-area hygiene on every load: drop whatever areas a previous
   // session/reload left in this pack's manager (a resumed ride rebuilds its
-  // corridor just below; a stopped world should hold none at all), and
-  // retire any chunk scout a scout-era version of this pack left behind --
-  // a stale scout's own tick_world bubble would keep ticking dead terrain
-  // forever.
+  // corridor just below; a stopped world should hold none at all).
   clearCorridor();
-  sweepStaleScouts();
   // Re-assert the world-tuning gamerules in any world whose ride has
   // already started (Java's load does the same): begin() applies them at
   // ride start, but a world that started under an older/broken pack build

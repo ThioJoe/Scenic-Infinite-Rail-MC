@@ -429,13 +429,13 @@ const tests = [
     if (errs.length) throw new Error(`script errors while riding:\n  ${errs.slice(0, 8).join('\n  ')}`);
   }),
 
-  report('stop tears the surrogate ride down (no legacy scout, ride ends)', async (s) => {
+  report('stop tears the surrogate ride down (rig gone, ride ends)', async (s) => {
     await s.fn('stop');
     await sleep(1500);
-    const r = await s.cmd('testfor @e[type=infinite_rail:scout]');
-    // No scout should EVER exist now (the corridor replaced it); this also
-    // guards the scout-era cleanup path against regressions.
-    if (!/No targets/i.test(r)) throw new Error(`a chunk scout exists after stop: ${r}`);
+    const seat = await s.cmd('testfor @e[type=infinite_rail:seat]');
+    if (!/No targets/i.test(seat)) throw new Error(`a seat exists after stop: ${seat}`);
+    const cart = await s.cmd('testfor @e[type=infinite_rail:cart]');
+    if (!/No targets/i.test(cart)) throw new Error(`a cart prop exists after stop: ${cart}`);
     await s.cmd('kill @e[type=armor_stand,tag=ir_test_rider]');
     await s.cmd('tickingarea remove sirm_test_start');
   }),

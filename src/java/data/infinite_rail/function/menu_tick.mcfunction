@@ -10,11 +10,11 @@
 # number into the real call at function permission level.
 #
 # The number map (give_menu writes these into the books' links):
-#   1/2      rain on/off                 13        speed reset (retired from the
-#   3/10/4   time night/day/default                book -- the Speed Reset hotbar
-#   5/6/30   torches on/off/auto                   item covers it -- but kept
-#   7/8      sky on/off                            wired for stale book copies,
-#   9        modes printout                        like the old 11/12 -/+ links)
+#   1/2      rain on/off
+#   3/10/4   time night/day/default
+#   5/6/30   torches on/off/auto
+#   7/8      sky on/off
+#   9        modes printout
 #   22-25    torch density               14/15     debug chat on/off
 #            low/medium/high/max         16-19     sidebar terrain/camera/
 #   26/27    hide cart on/off                      ride/live-state
@@ -32,7 +32,6 @@ execute as @a[scores={ir_menu=7}] run function infinite_rail:mode_sky_on
 execute as @a[scores={ir_menu=8}] run function infinite_rail:mode_sky_off
 execute as @a[scores={ir_menu=9}] run function infinite_rail:modes
 execute as @a[scores={ir_menu=10}] run function infinite_rail:mode_day_on
-execute as @a[scores={ir_menu=13}] run function infinite_rail:speed_reset
 execute as @a[scores={ir_menu=14}] run function infinite_rail:debug
 execute as @a[scores={ir_menu=15}] run function infinite_rail:debug_off
 execute as @a[scores={ir_menu=16}] run function infinite_rail:sidebar_terrain
