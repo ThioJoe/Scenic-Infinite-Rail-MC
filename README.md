@@ -43,7 +43,7 @@ Basically the Minecraft equivalent of "[Slow TV](https://en.wikipedia.org/wiki/S
     - For **Bedrock Edition**: `ScenicInfiniteRailMode-Bedrock.mcaddon` 
 3. For **installation steps**, see the [How To Install](#how-to-install) section further down.
 
-# Usage
+# How to Use
 
 ### **Starting the Ride:**
 The ride starts automatically for the first player in a new world. (It was designed and intended for single player worlds)
@@ -81,6 +81,27 @@ The ride starts automatically for the first player in a new world. (It was desig
      * Mostly useful for Console version. On PC, you can simply use the F1 key to toggle the HUD.
   * **Tips:** Provides recommended game and video settings.
   * **Debug:** Provides access to the debug chat toggle, sidebar views, and command help.
+
+## Java vs Bedrock Editions
+
+Because of platform differences, the Java and Bedrock versions have visual differences, but the ride logic and settings are mostly identical.
+
+**Differences With the Datapack Itself:**
+- Bedrock version has some custom item icons
+- Bedrock version has a "Toggle HUD" item (see other sections for why)
+- Bedrock version uses Native menus, Java uses clickable text in books
+
+**General Bedrock Advantages:**
+- Currently, the "vibrant visuals" option is only in Bedrock edition (though will [eventually come to Java](https://www.minecraft.net/en-us/article/another-step-towards-vibrant-visuals-for-java-edition))
+- Bedrock is the only option to run on a console, like if you want to put this on your TV
+
+**Major Bedrock Drawbacks:**
+- On console, the only way to use a custom behavior pack on a local world is to host a realm with it, then download it onto the console. See the "[Console Installation](#console-installation-via-realms)" section below.
+- **Major:** Bedrock apparently has a hardcoded "afk" message that dims the screen and cannot be disabled.
+   - After 15 minutes, it says "You've been away for a bit. Press any button to jump back into the game."
+   - With the right settings it won't pause the game or lower framerate, but it still shows the message and dims the screen.
+   - This kind of defeats the purpose of the entire datapack. A workaround would require a controller that can macro repeated inputs, or on PC a similar software.
+
 
 # How to Install
 
