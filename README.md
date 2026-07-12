@@ -43,6 +43,8 @@ Basically the Minecraft equivalent of "[Slow TV](https://en.wikipedia.org/wiki/S
     - For **Bedrock Edition**: `ScenicInfiniteRailMode-Bedrock-*.mcaddon` 
 3. For **installation steps**, see the [How To Install](#how-to-install) section further down.
 
+-----
+
 # <img src=".github/assets/help-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/help-dark.svg#gh-dark-mode-only" width="28" align="center" /> How to Use
 
 ### **Starting the Ride:**
@@ -82,7 +84,9 @@ The ride starts automatically for the first player in a new world. (It was desig
   * **Tips:** Provides recommended game and video settings.
   * **Debug:** Provides access to the debug chat toggle, sidebar views, and command help.
 
-## <img src=".github/assets/balance-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/balance-dark.svg#gh-dark-mode-only" width="28" align="center" /> Java vs Bedrock Editions
+------
+
+# <img src=".github/assets/balance-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/balance-dark.svg#gh-dark-mode-only" width="28" align="center" /> Java vs Bedrock Editions
 
 Because of platform differences, the Java and Bedrock versions have visual differences, but the ride logic and settings are mostly identical.
 
@@ -111,6 +115,7 @@ Because of platform differences, the Java and Bedrock versions have visual diffe
    - On Console, a third-party controller with a mode that can automatically repeat inputs forever. This feature may be called "Turbo Hold", "Auto Burst", "Auto Turbo", or "Auto-Pilot".
      - For example, select the empty item slot and have it repeatedly send Left Trigger, which would do nothing.
 
+---------
 
 # <img src=".github/assets/system_update-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/system_update-dark.svg#gh-dark-mode-only" width="28" align="center" /> How to Install
 
@@ -175,7 +180,11 @@ Note: There are other non-official workarounds you can search for, but they can 
     
 
 ## Building From Source
-This repository is a monorepo containing shared logic and edition-specific files.
+
+<details>
+    <summary>Expand for Details</summary>
+
+#### This repository is a monorepo containing shared logic and edition-specific files.
 
 There's also a `Make-Symlinks.ps1` powershell script in the `tools` folder, which will automatically create combined directories in a `dist_links` folder.
   - For Bedrock you can symlink the `_BP` and `_RP` folders in `development_behavior_packs` and `development_resource_packs` respectively.
@@ -189,3 +198,4 @@ There's also a `Make-Symlinks.ps1` powershell script in the `tools` folder, whic
 2. Execute `node tools/build.mjs` from the repository root to assemble the packs.
 3. The build script aggregates shared functions from `src/shared/functions/` and edition-specific files to generate the distribution folders.
 
+</details>
