@@ -48,7 +48,7 @@ export default defineSuite('boot & initialization', ({ test }) => {
 
   test('modes_init seeds mode defaults (fresh world)', async ({ mc }) => {
     eq(await mc.score('.TORCHMODE', 'ir'), 2, 'torch mode defaults to auto (2)');
-    eq(await mc.score('.AGGROMODE', 'ir'), 1, 'mobs aggro defaults on');
+    eq(await mc.score('.AGGROMODE', 'ir'), await mc.score('.MOBAGGRO', 'cfg_ride'), '.AGGROMODE seeded from .MOBAGGRO');
     eq(await mc.score('.RAINMODE', 'ir'), 0, 'rain mode off');
     eq(await mc.score('.NIGHTMODE', 'ir'), 0, 'time mode default');
     eq(await mc.score('.SKYMODE', 'ir'), 0, 'sky mode off');

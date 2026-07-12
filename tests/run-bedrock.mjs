@@ -143,8 +143,9 @@ const tests = [
   report('modes_init seeded the defaults (torch auto, mobs aggro, speeds, track light)', async (s) => {
     const checks = [];
     if (!(await s.scoreInRange('.TORCHMODE', 'ir', 2))) checks.push('.TORCHMODE != 2 (auto)');
-    if (!(await s.scoreInRange('.AGGROMODE', 'ir', 1))) checks.push('.AGGROMODE != 1');
     if (!(await s.scoreInRange('.LIGHTMODE', 'ir', 11))) checks.push('.LIGHTMODE != 11 (bright)');
+    const aggro = expected.find((e) => e.holder === '.MOBAGGRO')?.value;
+    if (aggro !== undefined && !(await s.scoreInRange('.AGGROMODE', 'ir', aggro))) checks.push(`.AGGROMODE != ${aggro} (.MOBAGGRO)`);
     const maxspeed = expected.find((e) => e.holder === '.DEFAULTSPEED')?.value;
     if (maxspeed !== undefined && !(await s.scoreInRange('.speed', 'ir', maxspeed))) checks.push(`.speed != ${maxspeed}`);
     const skyspeed = expected.find((e) => e.holder === '.SKYSPEED')?.value;

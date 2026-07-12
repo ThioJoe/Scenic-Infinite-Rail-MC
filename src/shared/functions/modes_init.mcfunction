@@ -43,15 +43,19 @@ execute if score .sndinit ir matches 0 run scoreboard players set .sndinit ir 1
 
 # Mobs aggro (.AGGROMODE): 1 = hostile mobs can see the rider and react --
 # creepers sneak up and hiss, skeletons draw their bows -- the vanilla
-# ambience, and the default; 0 = an invisibility effect on the rider makes
-# mobs ignore the ride (on Bedrock invisible players are completely
-# undetectable; the same effect is also what hides the Bedrock first-person
-# arm, the job of the retired .HIDEHAND knob). The effect itself is applied
-# natively per edition (Java mode_aggro_*/launch_done, Bedrock's keeper).
-# A non-zero default, so it seeds with a one-shot flag like .SOUNDMODE.
+# ambience; 0 = an invisibility effect on the rider makes mobs ignore the
+# ride (on Bedrock invisible players are completely undetectable; the same
+# effect is also what hides the Bedrock first-person arm, the job of the
+# retired .HIDEHAND knob). The effect itself is applied natively per edition
+# (Java mode_aggro_*/launch_done, Bedrock's keeper). Like .SOUNDMODE it has a
+# config-side DEFAULT (.MOBAGGRO) instead of a fixed value -- so it can't use
+# plain add-0 seeding either (for a 0/1 toggle "never set" and "off" are the
+# same number): the one-shot companion flag .agginit copies the default in
+# only on the load that first creates the flag, then a menu/command choice
+# owns the score forever after.
 scoreboard players add .AGGROMODE ir 0
 scoreboard players add .agginit ir 0
-execute if score .agginit ir matches 0 run scoreboard players set .AGGROMODE ir 1
+execute if score .agginit ir matches 0 run scoreboard players operation .AGGROMODE ir = .MOBAGGRO cfg_ride
 execute if score .agginit ir matches 0 run scoreboard players set .agginit ir 1
 
 # The adjustable ride speed (.speed -- see the shared speed_step) is state

@@ -521,6 +521,18 @@ scoreboard players set .SEAPICKLE cfg_ride 4
 # restarts like every mode.
 scoreboard players set .CARTSOUND cfg_ride 0
 
+# Mobs aggro: whether hostile mobs notice the rider by default in a fresh
+# world. 1 = mobs see you and react -- creepers sneak up and hiss, skeletons
+# draw their bows -- the vanilla ambience (the rider is untouchable
+# regardless); 0 = an invisibility effect on the rider makes mobs ignore the
+# ride entirely (on Bedrock this also hides the first-person arm, the job of
+# the retired .HIDEHAND knob). This is only the DEFAULT for the .AGGROMODE
+# state score (modes_init copies it once, on the first load, via the .agginit
+# one-shot flag): the Settings menu's Mobs-aggro switch (mode_aggro_on /
+# mode_aggro_off) owns the live value afterwards, and a chosen setting
+# survives reloads, rejoins and ride restarts like every mode.
+scoreboard players set .MOBAGGRO cfg_ride 1
+
 
 # --- Debugging --------------------------------------------------------------
 
