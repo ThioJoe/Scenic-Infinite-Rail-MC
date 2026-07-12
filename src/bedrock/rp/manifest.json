@@ -5,7 +5,7 @@
     "description": "Required resources for Scenic Infinite Rail Mode",
     "uuid": "23d216b2-863c-43db-bdec-c0dc4d586ce3",
     "version": [1, 4, 6],
-    "min_engine_version": [1, 21, 120]
+    "min_engine_version": [1, 26, 10]
   },
   "modules": [
     {

@@ -105,7 +105,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // The surrogate ride's anchor (see the ride tests at the end of the list):
 // a command tickingarea bootstraps the start chunks -- measured on this BDS,
 // tickingareas DO load and generate their chunks with zero players online --
-// and everything after that is the pack's own chunk scout.
+// and everything after that is the pack's own ticking-area corridor
+// (world.tickingAreaManager -- it loads AND generates its chunks, so the
+// ride is self-sufficient headless).
 const START_X = 8; const START_Z = 8;
 // Only genuine script errors count while the ride runs: the console probes
 // themselves (testfor misses, testforblock mismatches) print ERROR lines.
@@ -330,7 +332,7 @@ const tests = [
   // Java-suite parity (tests/lib/ride.mjs): the ride is started AS a tagged
   // armor stand -- begin() accepts any entity; the player-only comforts
   // no-op -- so placeColumn (carve + surface restoration + support + rail +
-  // light), the chunk scout, the virtual pace and the camera rig all run on
+  // light), the ticking-area corridor, the virtual pace and the camera rig all run on
   // the real BDS engine with no client attached.
 
   report('surrogate ride: an armor stand starts a real ride (no player online)', async (s) => {
@@ -396,7 +398,7 @@ const tests = [
   report('the built line is real: rail, support and light stand in the world', async (s) => {
     // Probe the START column: it was placed by the same placeColumn as
     // every other column, its chunk is pinned by the test's own tickingarea
-    // (the ride and its scout have long moved east), and its rail sits at
+    // (the ride and its corridor have long moved east), and its rail sits at
     // surface + .HOVER. The head's CURRENT railY is useless here -- the
     // line may have climbed mountains since -- so the scan window keys off
     // groundY, the surrogate's resting level. Mind that the stand SINKS:
@@ -427,11 +429,13 @@ const tests = [
     if (errs.length) throw new Error(`script errors while riding:\n  ${errs.slice(0, 8).join('\n  ')}`);
   }),
 
-  report('stop tears the surrogate ride down (scout gone, ride ends)', async (s) => {
+  report('stop tears the surrogate ride down (no legacy scout, ride ends)', async (s) => {
     await s.fn('stop');
     await sleep(1500);
     const r = await s.cmd('testfor @e[type=infinite_rail:scout]');
-    if (!/No targets/i.test(r)) throw new Error(`scout still present after stop: ${r}`);
+    // No scout should EVER exist now (the corridor replaced it); this also
+    // guards the scout-era cleanup path against regressions.
+    if (!/No targets/i.test(r)) throw new Error(`a chunk scout exists after stop: ${r}`);
     await s.cmd('kill @e[type=armor_stand,tag=ir_test_rider]');
     await s.cmd('tickingarea remove sirm_test_start');
   }),

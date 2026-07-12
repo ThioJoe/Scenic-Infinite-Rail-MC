@@ -36,13 +36,16 @@
 //      (only way to get real rail pace and         advanced by scripted speed
 //       drive it via the max-speed gamerule)       with smooth acceleration
 //    "execute if biome" + chunk counters       ->  dimension.getBiome()
-//    forceload macro                           ->  an invisible SCOUT entity
-//                                                  (minecraft:tick_world, this
-//                                                  pack's BP+RP) gliding ahead
-//                                                  of the ride as a mobile
-//                                                  ticking area; /tickingarea
-//                                                  can neither generate nor
-//                                                  pre-load new terrain
+//    forceload macro                           ->  a rolling script ticking-
+//                                                  area corridor
+//                                                  (world.tickingAreaManager,
+//                                                  @minecraft/server 2.6.0),
+//                                                  which loads AND generates
+//                                                  its chunks server-side --
+//                                                  unlike /tickingarea, and
+//                                                  unlike the retired
+//                                                  tick_world scout entity
+//                                                  it replaces
 //
 //  The per-column pipeline is IDENTICAL to Java's advance.mcfunction:
 //    1. sampleWindow() -> average surface of the next .SAMPLE_WINDOW blocks
@@ -120,31 +123,41 @@ const CART_TYPE = 'infinite_rail:cart';
 // ride cart spawned at -90). geometry.minecart's long axis runs along X at
 // yaw 0 -- aligned with the eastbound track.
 const CART_YAW = 0;
-// The chunk SCOUT -- a custom entity whose minecraft:tick_world component
-// (radius 6 chunks = a 96-block ticking bubble, never_despawn) makes it a
-// MOBILE TICKING AREA. It glides ahead of the rig, keeping the server-side
-// loaded zone extended over terrain the rider's render distance generates,
-// so the builder can read and place blocks far ahead of the cart. Command
-// ticking areas can NOT do this job: /tickingarea neither generates new
-// terrain nor loads it ahead of the generation frontier -- measured
-// in-game, a 470-block corridor of them contributed zero loaded chunks and
-// the builder crawled along the rider's own simulation bubble instead.
+// The RETIRED chunk scout -- a custom entity whose minecraft:tick_world
+// component made it a mobile ticking area, this pack's chunk loader through
+// v1.4.x. Replaced by the script TICKING-AREA CORRIDOR below
+// (world.tickingAreaManager, @minecraft/server 2.6.0): the manager's areas
+// both LOAD and GENERATE their chunks server-side, with a player online
+// (measured: 49 fresh chunks in ~1 s on a real client, ~2.5 s headless) --
+// the thing command /tickingarea could never do (measured too: a 470-block
+// corridor of command areas contributed zero loaded chunks while a player
+// was online, which is why the scout existed). The entity DEFINITIONS stay
+// in the pack so a save from a scout-era version still resolves its saved
+// scout -- otherwise its self-loading tick_world bubble would sit orphaned
+// over dead terrain forever (the MCPE-99760 class of leak) -- and
+// sweepStaleScouts() removes every one it can see at load and on stop.
 const SCOUT_TYPE = 'infinite_rail:scout';
 const TAG_SCOUT = 'ir_scout';
-const SCOUT_REACH = 96;  // tick_world radius 6 chunks, in blocks
-const SCOUT_STEP = 8;    // max blocks/tick the scout glides
-const SCOUT_Y = 180;     // cruising altitude (irrelevant to chunk ticking)
-// The scout's post can't sit further ahead of the rig than this: its bubble
-// (post - SCOUT_REACH) must always overlap the rider's own simulation bubble
-// (>= 4 chunks = 64 blocks) with a chunk to spare, or a coverage hole opens
-// between the two and the head can never walk across it.
-const SCOUT_LEAD_MAX = 144;
+// The rolling ticking-area CORRIDOR -- two alternating area names, so each
+// roll can claim the new span BEFORE releasing the old one (the overlap
+// never unloads; a one-name design would drop and reload the whole span).
+const CORR_A = 'ir_corr_a';
+const CORR_B = 'ir_corr_b';
+// How far behind the RIG the corridor's tail reaches. The rider's own
+// simulation bubble covers the rig on real worlds; the tail is what keeps
+// headless (surrogate) rides self-sufficient and gives the rig chunks a
+// margin on laggy rejoins.
+const CORR_BEHIND = 24;
+// Per-area chunk cap. world.tickingAreaManager allows 300 ticking chunks
+// per pack, and the A/B handoff briefly holds BOTH corridors -- capping one
+// corridor at 140 keeps the overlap safely inside the budget (the cap only
+// binds at extreme torch widths; corridorOptions() trims the LENGTH to fit,
+// never below the sample window the builder needs).
+const CORR_BUDGET = 140;
 // How far past the head buildReady() requires loaded chunks (the first
 // third of the default 48-block .SAMPLE_WINDOW; the rest may lag and fall
 // back per-sample).
 const BUILD_MARGIN = 17;
-// Ticking-area names from older versions of this pack, removed on cleanup.
-const LEGACY_AREAS = ['ir_area_a', 'ir_area_b', 'ir_t0', 'ir_t1', 'ir_t2', 'ir_t3'];
 const PREFIX = '§6[Scenic Rail]§r ';
 const DBG = '§3[SR Debug]§r ';
 
@@ -471,9 +484,7 @@ const S = {
   startTimer: 0,   // auto-start countdown (ticks with a player present)
   cartId: '',      // entity id of the ride cart (rediscovered by tag if stale)
   seatId: '',      // entity id of the camera seat (rediscovered by tag if stale)
-  scoutId: '',     // entity id of the chunk scout (rediscovered by tag if stale)
   rigMissing: 0,   // consecutive ticks the rig has been missing (respawn grace)
-  scoutMissing: 0, // consecutive ticks the scout has been missing (respawn grace)
   camActive: false, // whether the optional Camera API mode is currently applied
   teleportFallback: false, // set if applyImpulse is unavailable on the seat
   hudHidden: false, // script-side mirror of .HUDHIDDEN (hudHiddenNow's cmd-bridge answer; picks the slot-2 item variant)
@@ -1194,11 +1205,6 @@ function findSeat() {
   return seat;
 }
 
-function findScout() {
-  const scout = findTagged(SCOUT_TYPE, TAG_SCOUT, S.scoutId);
-  if (scout) S.scoutId = scout.id;
-  return scout;
-}
 
 function chunkLoaded(x, z) {
   // getBlock is documented to return undefined for unloaded chunks, which
@@ -1305,7 +1311,7 @@ function loadState() {
 const surfMemo = new Map();
 
 function surfaceY(x, z) {
-  // At the edge of the ticking set (the border ring of the scout's bubble)
+  // At the edge of the ticking set (the corridor's border ring)
   // lookups can SUCCEED and hand back a Block whose property reads then
   // throw LocationInUnloadedChunkError -- "loaded" and "ticking" are
   // different states there. Any throw anywhere in the probe means exactly
@@ -1650,7 +1656,8 @@ function placeColumn(x, y, dir, veg) {
 // fine, and a snow LAYER occupying the target cell is REPLACED by the torch
 // (what placing one by hand on snowy ground does; requiring an air cell
 // left whole snowfields torchless). The 48 cap matches Java's (its widened
-// forceload corridor's ceiling); here the scout bubble covers +-96 anyway.
+// forceload corridor's ceiling) -- and the ticking-area corridor widens to
+// the same clamped .TORCHRANGE while torch mode is on (corridorOptions).
 function maybeTorch(x) {
   if (Math.random() * 100 >= torchDensity()) return;
   const side = Math.random() < 0.5 ? -1 : 1;
@@ -1856,13 +1863,14 @@ function buildLoop() {
   // simply full (an idle builder at full gap isn't starving).
   if (built || S.headX - Math.floor(S.paceX) >= ahead) starveRun = 0;
   // If the builder is starved for terrain while the track buffer is running
-  // low, say so once -- the likeliest causes are a missing scout (outdated
-  // packs) or a low render distance capping how far terrain generates.
+  // low, say so once. The corridor generates terrain server-side, so this
+  // now only fires when generation itself can't keep up with the ride (or
+  // the corridor failed -- the debug roll line's tam counters show which).
   if (!built && S.headX - Math.floor(S.paceX) < ahead - 64) {
     stallTicks += 1;
     if (stallTicks === 200 && !stallWarned) {
       stallWarned = true;
-      say('§eTerrain ahead is generating slowly; the ride will ease off until it catches up. Make sure render distance is at least ~20 chunks. Run §b/function infinite_rail/debug§e for chunk-loading status.');
+      say('§eTerrain ahead is generating slowly; the ride will ease off until it catches up. Run §b/function infinite_rail/debug§e for chunk-loading status.');
     }
   } else {
     stallTicks = 0;
@@ -1873,84 +1881,108 @@ function buildLoop() {
 // roll_chunks/forceload: keep terrain open ahead of the head and roll the
 // world spawn + respawn points forward with the ride.
 //
-// Bedrock reality (measured in-game, and the reason two earlier /tickingarea
-// corridor designs never worked): NOTHING server-side generates or pre-loads
-// terrain except a player. /tickingarea keeps already-active chunks ticking
-// but contributes zero new ones, so a track builder gated on loaded chunks
-// crawls along the leading edge of the rider's own simulation bubble --
-// building in bursts right in front of the cart.
+// The corridor is the Bedrock twin of Java's forceload macro, on
+// world.tickingAreaManager (@minecraft/server 2.6.0): a narrow ticking area
+// from just behind the rig out past the build head, re-anchored every 16
+// blocks of head travel (the same cadence as Java's roll). Manager areas
+// both LOAD and GENERATE their chunks server-side with a player online --
+// measured with a real client: a 49-chunk area over never-generated terrain
+// resolved fully ticking in ~1 s -- which is what command /tickingarea
+// could never do (measured: zero contributed chunks while a player is
+// online; that limitation is why the retired chunk-scout entity existed,
+// and why terrain generation used to be capped by the RIDER'S render
+// distance -- it no longer is).
 //
-// What DOES work is the vanilla minecraft:tick_world entity component (the
-// ender dragon's chunk loader): an entity carrying it is a mobile ticking
-// area, radius up to 6 chunks, active regardless of player distance. The
-// SCOUT is this pack's invisible carrier. It glides up to scoutTargetX()
-// ahead of the ride, stepping only onto ground whose chunk is already open
-// (its own bubble requests the next chunks; the rider's render distance
-// generates them), so between the rider's bubble and the scout's the whole
-// corridor from the rig to ~.PACE_CART_BEHIND blocks ahead of the pace stays readable.
+// Each roll claims the NEW span first and releases the old one only after
+// the create resolves (the A/B name pair), so the overlap never unloads.
+// The corridor is deliberately narrow -- ±1 chunk normally, the clamped
+// .TORCHRANGE while torch mode may throw torches wider (clock-blind, like
+// Java's forceload_here) -- so the pack's ticking/generation footprint is a
+// ~3-chunk-wide band instead of the scout bubble's 13x13 disc: less mob
+// simulation, less disk, less save-write churn.
 
-// The scout's post: far enough ahead that its bubble covers the ENTIRE
-// sample window of a head at full gap (head at paceX + .PACE_CART_BEHIND,
-// sampling to +.SAMPLE_WINDOW, +8 slack) -- covering only the buildReady margin, as an
-// earlier version did, left the far samples poking past the bubble into
-// border chunks every column at full gap. Never behind the rig, and never
-// so far ahead that the bubble detaches from the rider's own (see
-// SCOUT_LEAD_MAX); past that ceiling the far samples degrade gracefully.
-function scoutTargetX() {
-  const lead = cfg('PACE_CART_BEHIND') - camAhead() + cfg('SAMPLE_WINDOW') + 8 - SCOUT_REACH;
-  return S.paceX + camAhead() + Math.min(SCOUT_LEAD_MAX, Math.max(16, lead));
+let corrLive = null;       // the currently-live corridor's area name (null = none)
+let corrBusy = false;      // a createTickingArea is still in flight
+let corrLoadedAt = 0;      // tickN when the last create resolved (debug)
+function tamgr() {
+  try { return world.tickingAreaManager; } catch { return undefined; }
 }
 
-// Per-tick scout keeper + mover, same self-healing pattern as the rig: a
-// missing scout (killed, or its chunk not restored yet after a rejoin) gets
-// a grace period, then is respawned at the rig -- the one place the rider
-// guarantees is loaded -- and walks itself back east to its post.
-function tickScout() {
-  let scout = findScout();
-  if (!scout) {
-    S.scoutMissing += 1;
-    if (S.scoutMissing > 40) {
-      const rigX = S.paceX + camAhead();
-      if (chunkLoaded(rigX, S.centerZ)) {
-        try {
-          scout = dim.spawnEntity(SCOUT_TYPE, { x: rigX, y: SCOUT_Y, z: S.centerZ + 0.5 });
-          scout.addTag(TAG_SCOUT);
-          S.scoutId = scout.id;
-          S.scoutMissing = 0;
-        } catch { /* scout type unavailable (outdated BP): ride on without it */ }
-      }
-    }
-    if (!scout) return;
-  } else {
-    S.scoutMissing = 0;
-  }
-
-  let x;
-  try { x = scout.location.x; } catch { return; } // handle went stale this tick
-  let step = scoutTargetX() - x;
-  if (step > SCOUT_STEP) step = SCOUT_STEP;
-  else if (step < -SCOUT_STEP) step = -SCOUT_STEP;
-  const nx = x + step;
-  if (!chunkLoaded(Math.floor(nx), S.centerZ)) {
-    // The next chunk isn't generated yet: hold this frontier -- the bubble
-    // is already asking for it. (Backward onto unloaded ground can only
-    // mean the scout is stranded way off post, e.g. after a resume: snap
-    // it home to the rig instead.)
-    if (step < 0) {
-      const rigX = S.paceX + camAhead();
-      if (chunkLoaded(rigX, S.centerZ)) {
-        try { scout.teleport({ x: rigX, y: SCOUT_Y, z: S.centerZ + 0.5 }); } catch { /* retry */ }
-      }
-    }
-    return;
-  }
-  try { scout.teleport({ x: nx, y: SCOUT_Y, z: S.centerZ + 0.5 }); } catch { /* retry next tick */ }
+function corridorOptions() {
+  // Width: Java's forceload parity -- ±8 blocks (±1 chunk) normally, the
+  // clamped .TORCHRANGE while torch mode is on or auto.
+  let w = 8;
+  if (torchMode() >= 1) w = Math.min(48, Math.max(8, cfg('TORCHRANGE')));
+  const rigX = Math.floor(S.paceX + camAhead());
+  const fromX = rigX - CORR_BEHIND;
+  // Ahead: Java's .TERRAIN_GENAHEAD semantics (generate well past the
+  // head), floored at what the builder actually needs (the sample window +
+  // margin) and trimmed to the per-area chunk budget at extreme widths.
+  const colsZ = Math.floor((S.centerZ + w) / 16) - Math.floor((S.centerZ - w) / 16) + 1;
+  const maxColsX = Math.max(6, Math.floor(CORR_BUDGET / colsZ));
+  const ahead = Math.max(cfg('SAMPLE_WINDOW') + 24, Math.min(cfg('TERRAIN_GENAHEAD'), 512));
+  const toX = Math.min(Math.max(S.headX, rigX) + ahead, fromX + maxColsX * 16 - 1);
+  return {
+    dimension: dim,
+    from: { x: fromX, y: 0, z: S.centerZ - w },
+    to: { x: toX, y: 0, z: S.centerZ + w },
+  };
 }
 
-// Ticking areas created by older versions of this pack would otherwise sit in
-// the world save forever; sweep them whenever a ride starts or stops.
-function clearLegacyAreas() {
-  for (const name of LEGACY_AREAS) runCmd(`tickingarea remove ${name}`);
+// Re-anchor the corridor on the ride's current span. Fire-and-forget async:
+// the create resolves when every chunk is loaded AND TICKING (generation
+// included), which can take a second or two over fresh terrain -- rolls
+// that arrive while one is in flight are simply skipped (the in-flight span
+// already reaches .TERRAIN_GENAHEAD past the head, so the corridor
+// tolerates lagging a roll or two at extreme speeds).
+async function rollCorridor() {
+  const mgr = tamgr();
+  if (!mgr || corrBusy || !dim) return;
+  corrBusy = true;
+  const next = corrLive === CORR_A ? CORR_B : CORR_A;
+  try {
+    const opts = corridorOptions();
+    if (!mgr.hasCapacity(opts) && corrLive) {
+      // Not enough budget for the overlap (extreme torch widths): release
+      // the old corridor first and accept the one-roll reload seam.
+      try { mgr.removeTickingArea(corrLive); } catch { /* already gone */ }
+      corrLive = null;
+    }
+    await mgr.createTickingArea(next, opts);
+    corrLoadedAt = tickN;
+    if (corrLive && corrLive !== next) {
+      try { mgr.removeTickingArea(corrLive); } catch { /* already gone */ }
+    }
+    corrLive = next;
+  } catch (e) {
+    // Keep whatever corridor is live; the next roll retries. A half-created
+    // area under the new name would block that retry -- clear it.
+    try { mgr.removeTickingArea(next); } catch { /* never created */ }
+    if (tickN - lastBuildErrAt > 100) {
+      lastBuildErrAt = tickN;
+      dbg(`corridor update failed: ${e}`);
+    }
+  } finally {
+    corrBusy = false;
+  }
+}
+
+// Remove every ticking area this pack owns (the manager cannot even see
+// other packs' or command areas). begin/stop/init cleanup.
+function clearCorridor() {
+  try { tamgr()?.removeAllTickingAreas(); } catch { /* manager unavailable */ }
+  corrLive = null;
+}
+
+// Remove chunk scouts left behind by scout-era versions of this pack. A
+// stale scout's own tick_world bubble keeps its chunk loaded, so a single
+// dimension-wide type query finds it from anywhere -- no scan needed.
+function sweepStaleScouts() {
+  try {
+    for (const e of dim.getEntities({ type: SCOUT_TYPE })) {
+      try { e.remove(); } catch { /* already gone */ }
+    }
+  } catch { /* type unregistered / query raced an unload */ }
 }
 
 function rollChunks() {
@@ -1958,20 +1990,26 @@ function rollChunks() {
   runCmd(`setworldspawn ${x} ${y + 1} ${z}`);
   runCmd(`spawnpoint @a ${x} ${y + 1} ${z}`);
   S.nextLoad += 16;
+  // Re-anchor the ticking-area corridor on the new span (Java's forceload
+  // cadence). Fire-and-forget: rollCorridor skips itself while a previous
+  // create is still resolving.
+  void rollCorridor();
   // Drop surface-probe memo entries the head has passed.
   for (const k of surfMemo.keys()) if (k < x) surfMemo.delete(k);
   if (debugOn()) {
     // Two-line health report per 16 blocks of head travel -- everything the
     // lurch hunt needs at a glance.
     // Line 1, the ride's geometry: the contiguous loaded frontier past the
-    // head (steady state is ~+64..+80 -- the scout posts ~16 behind the
-    // head, so its 96-block bubble reaches ~head+80; smaller = generation
-    // is lagging), the scout's lead on the head, the track buffer `gap`
-    // (head - pace; .PACE_CART_BEHIND = full), the rider's distance behind
-    // the head, and the pace speed as current/target with the buffer's soft
-    // ceiling `cap` -- cap below target means the BUFFER is what's limiting
-    // the ride (the Speed items can't help), a healthy cap with a low speed
-    // means something else is.
+    // head (steady state tracks the corridor's reach past the head --
+    // ~+.TERRAIN_GENAHEAD at the defaults; consistently smaller =
+    // generation is lagging the ride), the corridor's ticking-chunk count
+    // against the manager budget (`tam`, with a `~` while a create is
+    // still in flight and `!` if there is NO live corridor), the track
+    // buffer `gap` (head - pace; .PACE_CART_BEHIND = full), the rider's
+    // distance behind the head, and the pace speed as current/target with
+    // the buffer's soft ceiling `cap` -- cap below target means the BUFFER
+    // is what's limiting the ride (the Speed items can't help), a healthy
+    // cap with a low speed means something else is.
     // Line 2, pipeline health over the window since the previous line:
     // effective ticks-per-second and the script's own avg/max tick cost --
     // paired with `lull`, the longest wall-clock gap BETWEEN engine ticks:
@@ -1985,10 +2023,11 @@ function rollChunks() {
     // visible = the script is NOT doing it.
     let frontier = 0;
     while (frontier < 512 && chunkLoaded(x + frontier + 16, z)) frontier += 16;
-    const scout = findScout();
-    let scoutAt = null;
-    try { if (scout) scoutAt = Math.round(scout.location.x - x); } catch { /* stale handle */ }
-    const scoutTxt = scoutAt === null ? '§cMISSING§7' : `§f${scoutAt >= 0 ? '+' : ''}${scoutAt}§7`;
+    let tamTxt = '§c?§7';
+    try {
+      const mgr = tamgr();
+      if (mgr) tamTxt = `§f${mgr.chunkCount}/${mgr.maxChunkCount}${corrBusy ? '~' : ''}${corrLive ? '' : '§c!§7'}§7`;
+    } catch { /* manager unavailable */ }
     const gap = x - Math.floor(S.paceX);
     let riderTxt = '§coffline§7';
     try {
@@ -2002,7 +2041,7 @@ function rollChunks() {
     const tps = ((dbgWinTicks * 1000) / winMs).toFixed(1);
     const costAvg = dbgWinTicks ? (dbgTickCostSum / dbgWinTicks).toFixed(1) : '0';
     const sampleN = Math.max(1, Math.floor(cfg('SAMPLE_WINDOW') / Math.max(1, cfg('SAMPLE_BLOCK_INTERVAL'))));
-    dbg(`x=${x}: loaded §f+${frontier}§7 scout=${scoutTxt} gap=§f${gap}§7 rider=${riderTxt} spd=§f${spd}§7/${tgt} cap=§f${cap.toFixed(1)}§7\n   tps=§f${tps}§7 tick=§f${costAvg}/${dbgTickCostMax}§7ms lull=§f${dbgLullMax}§7ms save=§f${dbgSaveMax}§7ms starve=§f${dbgStarveTicks}§7/${dbgWinTicks} badSamples=§f${S.lastBad}§7/${sampleN} avg=§f${S.avg}§7 railY=§f${S.railY}§7 ops=§fm${ops.mount}/e${ops.eject}/t${ops.tp}§7 drive=${S.teleportFallback ? '§ctp§7' : 'imp'} bridge=${bridgeMode}`);
+    dbg(`x=${x}: loaded §f+${frontier}§7 tam=${tamTxt} gap=§f${gap}§7 rider=${riderTxt} spd=§f${spd}§7/${tgt} cap=§f${cap.toFixed(1)}§7\n   tps=§f${tps}§7 tick=§f${costAvg}/${dbgTickCostMax}§7ms lull=§f${dbgLullMax}§7ms save=§f${dbgSaveMax}§7ms starve=§f${dbgStarveTicks}§7/${dbgWinTicks} badSamples=§f${S.lastBad}§7/${sampleN} avg=§f${S.avg}§7 railY=§f${S.railY}§7 ops=§fm${ops.mount}/e${ops.eject}/t${ops.tp}§7 drive=${S.teleportFallback ? '§ctp§7' : 'imp'} bridge=${bridgeMode}`);
     ops.mount = 0; ops.eject = 0; ops.tp = 0;
   }
   // The health window resets whether or not it was printed, so the first
@@ -2619,16 +2658,17 @@ function begin(rider) {
   S.nextLoad = startX + 16;
   surfMemo.clear();
 
-  clearLegacyAreas();
-  // The scout starts at the player (a guaranteed-loaded chunk) and walks
-  // itself east from there; its ticking bubble immediately covers the start
-  // corridor -- including the rig position the launch poller waits on.
-  try {
-    const sc = dim.spawnEntity(SCOUT_TYPE, { x: startX + 0.5, y: SCOUT_Y, z: S.centerZ + 0.5 });
-    sc.addTag(TAG_SCOUT);
-    S.scoutId = sc.id;
-  } catch (e) {
-    say(`§eCould not summon the chunk scout (${e}). The ride still works, but the track will build much less far ahead -- make sure BOTH Scenic Rail packs are installed and up to date.`);
+  sweepStaleScouts(); // scout-era saves: retire any leftover chunk scout
+  // The corridor anchors on the virtual pace -- seed it at the start line
+  // (beginPhase2 sets the real value later) so the first corridor spans
+  // [start - tail .. start + .TERRAIN_GENAHEAD], generating everything the
+  // launch poller below waits on. clearCorridor first: begin() must never
+  // inherit a previous ride's span.
+  clearCorridor();
+  S.paceX = startX + 0.5;
+  void rollCorridor();
+  if (!tamgr()) {
+    say('§eThis engine has no world.tickingAreaManager (script ticking areas). The ride cannot prepare terrain ahead -- it needs Bedrock 1.26.10+ with the FULL current behavior pack.');
   }
 
   S.paceSpeed = 0;
@@ -2659,15 +2699,14 @@ function begin(rider) {
   }, 5);
 }
 
-// A launch that cannot finish must clean up after itself: remove the scout
-// it summoned and persist the state it already mutated (autodone stays
-// latched, started stays false), so nothing is leaked and a fresh start
-// command works. Java's begin() is synchronous and cannot abort half-way.
+// A launch that cannot finish must clean up after itself: release the
+// corridor it created and persist the state it already mutated (autodone
+// stays latched, started stays false), so nothing is leaked and a fresh
+// start command works. Java's begin() is synchronous and cannot abort
+// half-way.
 function abortLaunch(reason) {
   say(`§cRide start aborted: ${reason}`);
-  const scout = findScout();
-  if (scout) { try { scout.remove(); } catch { /* already gone */ } }
-  S.scoutId = '';
+  clearCorridor();
   saveState();
 }
 
@@ -2803,8 +2842,8 @@ function stop(silent) {
   S.hudHidden = false;
   // Remove EVERY rig piece wearing our tags (there should be one of each, but
   // stale sessions may have left extras behind). Each type is collected under
-  // its own guard so one unregistered type (e.g. an outdated BP without the
-  // scout) can't abort the whole sweep.
+  // its own guard so one unregistered type can't abort the whole sweep.
+  // (The scout sweep covers scout-era saves -- see SCOUT_TYPE.)
   if (dim) {
     const collect = (type, tag) => {
       try { return dim.getEntities({ type, tags: [tag] }); } catch { return []; }
@@ -2819,11 +2858,10 @@ function stop(silent) {
       try { e.getComponent('minecraft:rideable')?.ejectRiders(); } catch { /* empty */ }
       try { e.remove(); } catch { /* already gone */ }
     }
-    clearLegacyAreas();
   }
+  clearCorridor();
   S.cartId = '';
   S.seatId = '';
-  S.scoutId = '';
   saveState(); // .autodone stays set: a stopped world never auto-restarts
   if (!silent) say('§7Ride stopped.');
 }
@@ -2998,19 +3036,31 @@ function init() {
   // The distance knobs' ordering invariant (all measured from the build
   // head; Java's load warns the same way): a rig at or behind the pace
   // position glides over unsmoothed track and the ocean check samples the
-  // wrong chunk. (.SAMPLE_WINDOW vs .TERRAIN_GENAHEAD is Java's forceload
-  // concern -- here the scout's post already scales with the window.)
+  // wrong chunk. (.SAMPLE_WINDOW vs .TERRAIN_GENAHEAD matters here too now
+  // -- corridorOptions floors the corridor's reach at the sample window, so
+  // the invariant only affects how far PAST the window terrain is prepared.)
   if (camAhead() <= 0) {
     say('§eConfig warning: .RIDER_BEHIND must stay BELOW .PACE_CART_BEHIND (the camera rig has to ride ahead of the hidden pace position). The ride will misbehave until one of them is adjusted.');
   }
 
   loadState();
+  // Ticking-area hygiene on every load: drop whatever areas a previous
+  // session/reload left in this pack's manager (a resumed ride rebuilds its
+  // corridor just below; a stopped world should hold none at all), and
+  // retire any chunk scout a scout-era version of this pack left behind --
+  // a stale scout's own tick_world bubble would keep ticking dead terrain
+  // forever.
+  clearCorridor();
+  sweepStaleScouts();
   // Re-assert the world-tuning gamerules in any world whose ride has
   // already started (Java's load does the same): begin() applies them at
   // ride start, but a world that started under an older/broken pack build
   // keeps its rules until something re-applies them -- this heals such
   // worlds on the next load instead of requiring a full ride restart.
   if (S.started) runCmd(`function ${NS}/setup_world`);
+  // A resumed ride needs its corridor back before the builder can move (and
+  // before the rider's chunk can load on a headless resume).
+  if (S.started) void rollCorridor();
   if (S.started) say('§7Ride resumed. Run §b/function infinite_rail/stop§7 to end it.');
   else say('§7Loaded. A fresh world starts the ride automatically; run §b/function infinite_rail/start§7 to (re)start it here.');
   inited = true;
@@ -3249,7 +3299,10 @@ function tick() {
   // Per-tick driver, mirroring main.mcfunction's order:
   tickPace();                       // 1.  pace cart X (virtual)
   oceanCheck();                     // 1a. ocean speed-up
-  tickScout();                      // 1b. keep terrain open ahead of the head
+  // 1b. corridor self-heal: rollChunks re-anchors it per 16 blocks of head
+  // travel, but a corridor lost to an error (or a resume raced by chunk
+  // loading) must come back even while the head is pinned.
+  if (!corrLive && !corrBusy && tickN % 100 === 0) void rollCorridor();
   let seat = findSeat();
   let cart = findCart();
   // A lost cart prop (killed by something) heals CART-ONLY, at the rig,

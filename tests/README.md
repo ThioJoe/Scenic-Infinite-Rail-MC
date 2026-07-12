@@ -205,7 +205,8 @@ players are online), an **armor stand** is summoned and the ride is started as i
 `execute as ... run scriptevent infinite_rail:start` (`begin()` accepts any entity;
 the player-only comforts — `/ride` by name, gamemode, effects, hotbar, sound — no-op
 for a non-player, and the rider-offline freeze tracks the surrogate by entity id).
-From there the pack's own chunk scout keeps the world loaded, so the tests can watch
+From there the pack's own ticking-area corridor (which loads and generates its chunks
+server-side) keeps the world ready, so the tests can watch
 the head advance through the `dbg` mirror (`sidebar_state`), physically verify the
 start column (rail + support + light via `testforblock` — note the stand *sinks*, so
 over a lake it rests on the floor while the rail rides the water surface + `.HOVER`),
