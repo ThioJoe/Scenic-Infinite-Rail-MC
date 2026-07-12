@@ -116,11 +116,11 @@ The ride starts automatically for the first player in a new world. (It was desig
  1. On a device where you can download files (PC/Mobile), sign up for the **Realms trial**.
  2. Create a new world. Go to the "Behavior Packs" tab and activate "Scenic Infinite Rail Mode".
  3. Click **"Create on Realms"** and select an available Realms slot.
- 4. *Note:* Sometimes Realms fail to activate the pack on the first try. To ensure it is working:
+ 4. *Note:* Sometimes Realms fail to activate the pack on the first try, or textures might not load even if the resource pack is activated. To ensure it is working:
     - Back out to the main menu. Go to **Play** > **Realms** > **Realms Hub** > **"World" tab**.
     - Select your new world and click **"Edit world"**.
-    - Go to **Behavior packs** *again* and activate it. Select "Add the pack anyway".
-    - Click **Play** and save changes if asked. Once you load in, the mod should be active.
+    - Go to **Behavior packs** *again* and activate it if not already. Select "Add the pack anyway".
+    - Click **Play** and save changes if asked. Once you load in, the mod should be active. If the textures weren't loaded, leaving and rejoining should fix that too.
  5. Now, log into Minecraft on your **console** and go to the Realms hub.
  6. Click the 3 dots next to your Realm and select **"Download world"**. You now have a local copy and no longer need the active Realm.
  7. **Tip:** Make a duplicate copy of this local world as a backup right at the start. Because the game saves your position when you leave and rejoin, a backup lets you easily start fresh from the beginning later.
