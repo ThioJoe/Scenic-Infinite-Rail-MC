@@ -927,6 +927,8 @@ function showTips(player) {
       '§7- Simulation distance: §fLowest option',
       '§7- Render distance: §f16-24 chunks,§7',
 	  'or more if your hardware keeps up',
+      '§7- Max Framerate: §fmatch your monitor\'s refresh rate§7',
+	  '(no benefit to going higher, just extra GPU heat)',
       '',
       '§lSettings > General§r',
       '',
