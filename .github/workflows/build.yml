@@ -42,19 +42,26 @@ jobs:
 
       # Artifact names carry the run number so successive test builds are
       # easy to tell apart (the number increments on failed runs too).
+      # The upload steps below run with if: !cancelled() so a simulation
+      # failure still leaves a downloadable build for testing -- the job
+      # still reports failure overall, but the artifacts aren't withheld.
 
-      # Downloading this artifact yields a zip that extracts to the
-      # ready-to-use Scenic_Infinite_Rail_Mode/ datapack FOLDER.
+      # Downloading this artifact yields a zip with pack.mcmeta and the rest
+      # of the datapack contents at the zip ROOT (not nested inside a
+      # Scenic_Infinite_Rail_Mode/ folder), ready to drop into a world's
+      # datapacks folder as-is.
       - name: Upload Java datapack (folder)
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: ScenicInfiniteRailMode-Java-${{ github.run_number }}
-          path: dist/java/
+          path: dist/java/Scenic_Infinite_Rail_Mode/
           if-no-files-found: error
 
       # Downloading this artifact yields a zip containing the .mcaddon file
       # (BP + RP); extract once and double-click the .mcaddon to import.
       - name: Upload Bedrock pack (.mcaddon)
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: ScenicInfiniteRailMode-Bedrock-${{ github.run_number }}
@@ -65,6 +72,7 @@ jobs:
       # Scenic_Infinite_Rail_Mode_BP / Scenic_Infinite_Rail_Mode_RP into
       # com.mojang's development_behavior_packs / development_resource_packs.
       - name: Upload Bedrock packs (folders, for development)
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: ScenicInfiniteRailMode-Bedrock-Folder-${{ github.run_number }}
