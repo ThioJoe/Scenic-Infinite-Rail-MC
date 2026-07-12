@@ -10,6 +10,7 @@ $bpDir   = "Scenic_Infinite_Rail_Mode_BP"
 $javaDir = "Scenic_Infinite_Rail_Mode_Java"
 
 # --- Helper Functions ---
+$script:hasErrors = $false
 
 # Creates a file symlink using absolute paths
 function New-FileSymlink {
@@ -22,6 +23,11 @@ function New-FileSymlink {
     $targetFull = Join-Path $repoRoot $TargetPath
     
     cmd /c mklink "$linkFull" "$targetFull" | Out-Null
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "mklink failed to create file symlink:`n$linkFull -> $targetFull"
+        $script:hasErrors = $true
+    }
 }
 
 # Creates a directory symlink using absolute paths (Requires Admin or Developer Mode)
@@ -38,6 +44,11 @@ function New-DirSymlink {
         cmd /c mklink /j "$linkFull" "$targetFull" | Out-Null
     } else {
         cmd /c mklink /d "$linkFull" "$targetFull" | Out-Null
+    }
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "mklink failed to create directory symlink:`n$linkFull -> $targetFull"
+        $script:hasErrors = $true
     }
 }
 
@@ -115,6 +126,9 @@ foreach ($file in $sharedFiles) {
     New-FileSymlink -LinkPath "$outDir\$javaDir\data\infinite_rail\function\$($file.Name)" -TargetPath "src\shared\functions\$($file.Name)"
 }
 
-Write-Host "`nShadow tree created successfully!"
-
-Read-Host "`nPress Enter to exit"
+if ($script:hasErrors) {
+    Write-Host "`nShadow tree creation finished with errors." -ForegroundColor Red
+    Read-Host "`nPress Enter to exit"
+} else {
+    Write-Host "`nShadow tree created successfully!"
+}
