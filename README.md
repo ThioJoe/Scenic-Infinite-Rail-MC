@@ -27,13 +27,13 @@ Basically the Minecraft equivalent of "[Slow TV](https://en.wikipedia.org/wiki/S
 ## What it's _not_
 
 ### **Not for multiplayer servers or existing worlds:**
-  * This is a standalone "mode", not utility. (It's not for building rail from one place to another.)
+  * This is a standalone "mode", not utility. (It's not for building rail from one place to another)
   * It automatically locks the player into a seat as soon as you join the world, and keeps you there.
   * It also manually controls the cart and player movements, and force loads/unloads chunks in front and behind.
 
 --------
 
-## How to Download
+## <img src=".github/assets/download-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/download-dark.svg#gh-dark-mode-only" width="22" align="center" /> How to Download
 
 **Both Java and Bedrock Editions supported**
 
@@ -43,7 +43,7 @@ Basically the Minecraft equivalent of "[Slow TV](https://en.wikipedia.org/wiki/S
     - For **Bedrock Edition**: `ScenicInfiniteRailMode-Bedrock.mcaddon` 
 3. For **installation steps**, see the [How To Install](#how-to-install) section further down.
 
-# How to Use
+# <img src=".github/assets/help-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/help-dark.svg#gh-dark-mode-only" width="28" align="center" /> How to Use
 
 ### **Starting the Ride:**
 The ride starts automatically for the first player in a new world. (It was designed and intended for single player worlds)
@@ -82,7 +82,7 @@ The ride starts automatically for the first player in a new world. (It was desig
   * **Tips:** Provides recommended game and video settings.
   * **Debug:** Provides access to the debug chat toggle, sidebar views, and command help.
 
-## Java vs Bedrock Editions
+## <img src=".github/assets/balance-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/balance-dark.svg#gh-dark-mode-only" width="28" align="center" /> Java vs Bedrock Editions
 
 Because of platform differences, the Java and Bedrock versions have visual differences, but the ride logic and settings are mostly identical.
 
@@ -99,26 +99,26 @@ Because of platform differences, the Java and Bedrock versions have visual diffe
 
 **❌ Problem:** On console, you can't load custom behavior packs.
 
-**Workarounds:**
+**ℹ️ Workaround:** Download the world through a realm.
   - The only way to use a custom behavior pack on a console for a local world is to host a realm with it, then download it onto the console.
   - See the "[Console Installation](#console-installation-via-realms)" section below.
 
   
 **❌ Problem:** Bedrock apparently has a hardcoded "AFK" message that dims the screen and cannot be disabled. After 15 minutes, it says "You've been away for a bit..."
 
-**Workarounds:**
+**ℹ️ Workaround:** Some kind of automated input.
    - On PC, use software that automatically sends inputs so you don't go AFK.
    - On Console, a third-party controller with a mode that can automatically repeat inputs forever. This feature may be called "Turbo Hold", "Auto Burst", "Auto Turbo", or "Auto-Pilot".
      - For example, select the empty item slot and have it repeatedly send Left Trigger, which would do nothing.
 
 
-# How to Install
+# <img src=".github/assets/system_update-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/system_update-dark.svg#gh-dark-mode-only" width="28" align="center" /> How to Install
 
-#### Supported Versions
-* **Java Edition:** Minecraft 1.21 - 26.2+.
-* **Bedrock Edition:** Tested on latest, likely other versions too
+#### Supported Versions:
+- **Java Edition:** Minecraft 1.21 - 26.2+.
+- **Bedrock Edition:** Tested on latest, likely other versions too
 
- ### **Java Edition Installation:**
+ ## **Java Edition Installation:**
  1. During creation of a Single Player world, click the "More" tab, then the "Data Packs" button.
  2. Drag and drop the downloaded `ScenicInfiniteRailMode-Java.zip` file onto the Minecraft window (no need to extract). Select "Yes" if it asks to confirm.
      - In the "Available" list you should now see the newly added data pack 
@@ -129,7 +129,7 @@ Because of platform differences, the Java and Bedrock versions have visual diffe
  5. Finish creating the world.
      - You can name it whatever, and the default settings are fine.
 
- ### **Bedrock Edition Installation:** 
+ ## **Bedrock Edition Installation:** 
   1. Close minecraft if it's already running _(important)_.
   2. Double click the `.mcaddon` file.
     - It may ask which program to open with. Select "Minecraft" (or "Minecraft For Windows").
@@ -140,7 +140,7 @@ Because of platform differences, the Java and Bedrock versions have visual diffe
      - You can name it whatever, and the default settings are fine.
      - It will give a warning about achievements, just click "Create Anyway"
 
-### **Console Installation (via Realms):**
+## **Console Installation (via Realms):**
 **Consoles cannot directly load custom behavior packs**. To play on a console, you must create a Realm with the pack installed from a PC, then download that world onto your console. You can use the free Realms trial for this.
 
  1. On a device where you can download files (PC/Mobile), sign up for the **Realms trial**.
@@ -157,7 +157,9 @@ Because of platform differences, the Java and Bedrock versions have visual diffe
 
 Note: There are other non-official workarounds you can search for, but they can be advanced or involve third party apps that don't last long, so you'll have to look that up yourself.
 
-# Advanced / Manual Configuration
+-------------------
+
+# <img src=".github/assets/folder_code-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/folder_code-dark.svg#gh-dark-mode-only" width="28" align="center" /> Advanced / Manual Configuration
 
 * **To force start/stop the ride**, you can use these function commands (cheats / commands must be enabled):
     * Java: `/function infinite_rail:start` and  `/function infinite_rail:stop`
