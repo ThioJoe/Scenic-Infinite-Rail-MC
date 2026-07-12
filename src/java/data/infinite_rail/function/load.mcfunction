@@ -128,6 +128,18 @@ scoreboard players set .todok ir 0
 function infinite_rail:check_clock
 execute if score .todok ir matches 0 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Warning: the day/night check is not working on this Minecraft version, so torch mode's Auto (night-only) setting cannot tell day from night and will not plant torches. Always-on torch mode still works. Please report this with your exact game version.","color":"yellow"}]
 
+# Self-test the thunderstorm check the same way (storm_check, quarantined
+# like check_clock, probes the thundering / not_thundering predicate pair --
+# at any moment exactly one must match). .stormok 0 = the weather predicate
+# (or storm_check itself) is broken on this version, so the No-Thunderstorms
+# mode cannot see storms. Warn only when that mode is actually on (it ships
+# off -- a load-time warning would be noise for everyone else);
+# mode_storms_off repeats the warning at click time. modes_init has already
+# run above, so .STORMMODE is seeded here.
+scoreboard players set .stormok ir 0
+function infinite_rail:storm_check
+execute if score .stormok ir matches 0 if score .STORMMODE ir matches 1 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Warning: the thunderstorm check is not working on this Minecraft version, so the Storms-off setting cannot switch storms to rain. Please report this with your exact game version.","color":"yellow"}]
+
 # Re-assert the world-tuning gamerules in any world whose ride has already
 # started (.started persists in the save; a fresh world stays untouched
 # until its first ride). This HEALS worlds that began under a pack build

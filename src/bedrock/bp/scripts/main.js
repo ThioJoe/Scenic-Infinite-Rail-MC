@@ -68,7 +68,7 @@
 //  section 7g for the algorithm itself.
 // =============================================================================
 
-import { world, system, BlockPermutation, BlockVolume, EasingType, GameMode, ItemStack } from '@minecraft/server';
+import { world, system, BlockPermutation, BlockVolume, EasingType, GameMode, ItemStack, WeatherType } from '@minecraft/server';
 // The native pop-ups used by the settings items' menus (ModalForm) and the
 // Tips item's read-only page (ActionForm). Safe as a static import: the
 // manifest declares the @minecraft/server-ui 2.0.0 dependency (stable well
@@ -157,7 +157,7 @@ const DBG = '§3[SR Debug]§r ';
 // HUD item at slot 2 (a Java ride is always on a PC, where F1 hides the
 // HUD; /hud is Bedrock's command):
 //   0  "Ride Settings"    opens the native ride form (speed, sky, sound, hide cart, mobs aggro)
-//   1  "Visual Settings"  opens the native visual form (rain, time, torches)
+//   1  "Visual Settings"  opens the native visual form (rain, storms, time, torches, track light)
 //   2  "Toggle HUD"   hides the HUD except the item-name popup / restores it
 //                     (runs infinite_rail/hud_toggle -- Bedrock-only, Java
 //                     riders have F1; an item PAIR: crossed-out-eye icon
@@ -367,7 +367,7 @@ const CONFIG_DEFAULTS = {
   SHIFT_REQ_BOTTOM: 30, SAMPLE_WINDOW: 75, SAMPLE_BLOCK_INTERVAL: 1,
   PACE_CART_BEHIND: 224, TERRAIN_GENAHEAD: 192, BUILD_PER_TICK: 15, DEBUGMODE: 0,
   SKYY: 120, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 32, SEAPICKLE: 4,
-  CARTSOUND: 1, MOBAGGRO: 1,
+  CARTSOUND: 1, MOBAGGRO: 1, NOSTORMS: 0,
 };
 
 // The rig's lead over the virtual pace position, derived from the two
@@ -475,6 +475,7 @@ const S = {
   camActive: false, // whether the optional Camera API mode is currently applied
   teleportFallback: false, // set if applyImpulse is unavailable on the seat
   hudHidden: false, // script-side mirror of .HUDHIDDEN (hudHiddenNow's cmd-bridge answer; picks the slot-2 item variant)
+  weather: '',     // last weatherChange's WeatherType as a string ('' = none seen) -- the sky read stormWatchNow answers from (no Dimension.getWeather in current @minecraft/server)
 };
 
 let dim = null;   // the overworld
@@ -858,6 +859,10 @@ function showVisualMenu(player) {
   const lightIdx = LIGHT_PRESETS.findIndex((d) => d.v === lightLevel());
   const current = {
     rain: modeOn('RAINMODE'),
+    // The toggle shows storms ALLOWED (on = vanilla weather); the .STORMMODE
+    // score marks them SUPPRESSED (mode_storms_off sets 1) -- hence the
+    // inversion here and in the handler below.
+    storms: !modeOn('STORMMODE'),
     night: nightMode(),
     // Tri-state like Time: the dropdown index IS the .TORCHMODE value.
     torches: torchMode(),
@@ -867,6 +872,7 @@ function showVisualMenu(player) {
   const form = new ModalFormData()
     .title('Scenic Rail Visual Settings')
     .toggle('Always Rain', { defaultValue: current.rain })
+    .toggle('Thunderstorms (off = storms pass as plain rain)', { defaultValue: current.storms })
     .dropdown('Time', ['Default (day/night cycle)', 'Always Night', 'Always Day'], { defaultValueIndex: current.night })
     .dropdown('Torches (scattered along new track)', ['Off', 'On (day and night)', 'Auto (at night only)'], { defaultValueIndex: current.torches })
     .dropdown('Torch density', TORCH_DENSITY.map((d) => d.label), { defaultValueIndex: current.dens })
@@ -874,8 +880,28 @@ function showVisualMenu(player) {
     .submitButton('Apply');
   form.show(player).then((r) => {
     if (r.canceled || !r.formValues) return;
-    const [rain, night, torches, dens, light] = r.formValues;
+    const [rain, storms, night, torches, dens, light] = r.formValues;
     if (current.rain !== !!rain) runCmd(`function ${NS}/mode_rain_${rain ? 'on' : 'off'}`);
+    if (current.storms !== !!storms) {
+      // Toggle shows storms allowed; the score marks them suppressed, so
+      // "Thunderstorms ON" runs mode_storms_on which CLEARS .STORMMODE.
+      runCmd(`function ${NS}/mode_storms_${storms ? 'on' : 'off'}`);
+      // Stale-function-registry belt + suspenders, same as the torch/light
+      // handlers below: the mode_storms_* files are NEW, so on a world whose
+      // registry predates them the call silently does nothing -- write the
+      // score directly if it didn't take (API mode only; on cmd-bridge
+      // worlds the read lies, and there the function route works anyway).
+      const stormWant = storms ? 0 : 1;
+      if (bridgeMode === 'api' && getScore('STORMMODE', 0) !== stormWant) {
+        setScore('STORMMODE', stormWant);
+        say(storms
+          ? '§7Thunderstorms ON - storms can roll in with the natural weather.'
+          : '§7Thunderstorms OFF - storms will pass as plain rain.');
+      }
+      // Turned off during an already-raging storm: convert it right away
+      // (the weatherChange watch only sees future changes).
+      if (!storms) stormWatchNow();
+    }
     const torchWant = torches | 0;
     if (torchWant !== current.torches) {
       runCmd(`function ${NS}/${['mode_torches_off', 'mode_torches_on', 'mode_torches_auto'][torchWant] ?? 'mode_torches_auto'}`);
@@ -1157,7 +1183,7 @@ function saveState() {
     paceX: S.paceX, paceSpeed: S.paceSpeed, targetSpeed: S.targetSpeed,
     fast: S.fast, oceanRun: S.oceanRun, landRun: S.landRun,
     lastChunk: S.lastChunk, s2: S.s2, riderName: S.riderName, riderId: S.riderId,
-    hudHidden: S.hudHidden,
+    hudHidden: S.hudHidden, weather: S.weather,
   }));
 }
 
@@ -1177,6 +1203,7 @@ function loadState() {
     S.riderName = typeof d.riderName === 'string' ? d.riderName : '';
     S.riderId = typeof d.riderId === 'string' ? d.riderId : '';
     S.hudHidden = !!d.hudHidden;
+    S.weather = typeof d.weather === 'string' ? d.weather : '';
     syncFast(); // the shared speed_step reads .fast from the scoreboard
   } catch { /* corrupt state: fall through to a fresh start */ }
 }
@@ -2862,6 +2889,56 @@ try {
   });
 } catch { /* signal unavailable: the warm window simply never arms */ }
 
+// The No-Thunderstorms watch (.STORMMODE 1 -- the Visual Settings form's
+// Thunderstorms toggle turned off; Java's twin is the storm_watch tick
+// hook): the moment the NATURAL weather cycle rolls a thunderstorm, re-roll
+// it as plain rain -- no duration given, so vanilla picks its usual random
+// rain length and the weather keeps cycling (the sky just never thunders).
+// Permanent rain (.RAINMODE) stands the watch down: its frozen cycle only
+// ever rains, and the suppression is only meant for the natural cycle
+// anyway. Guarded subscribe like playerSpawn above -- losing the signal
+// must only cost this feature, never the whole script.
+try {
+  world.afterEvents.weatherChange.subscribe((ev) => {
+    try {
+      // Track EVERY change into S.weather (persisted below) -- current
+      // @minecraft/server ships no Dimension.getWeather() (2.3.0 throws
+      // "not a function"), so this event stream is the only sky read the
+      // script has, and stormWatchNow() answers from the tracked value.
+      S.weather = String(ev.newWeather);
+      saveState();
+      if (ev.newWeather !== WeatherType.Thunder) return;
+      if (!ensureInit()) return;
+      if (!modeOn('STORMMODE') || modeOn('RAINMODE')) return;
+      runCmd('weather rain');
+    } catch (e) { reportError('storm watch', e); }
+  });
+} catch { /* signal unavailable: thunderstorms simply stay vanilla */ }
+
+// The look-at-the-sky half of the watch: the event above only sees weather
+// CHANGES, so a storm already raging when the mode lands -- a world loaded
+// mid-thunder, or mode_storms_off run from chat during one -- would ride
+// out untouched. Called every 100 ticks from the tick driver (the catch-all,
+// matching Java's per-tick storm_watch within ~5 s) and from the Visual
+// form's toggle handler (instant conversion on the click). The cmd-bridge
+// mode cache is dropped first (the form reads .STORMMODE while building
+// itself, and a click lands well inside the ~1 s cache window); the sky
+// itself is read from the event-tracked S.weather (see the body).
+function stormWatchNow() {
+  modeCache.delete('STORMMODE');
+  if (!modeOn('STORMMODE') || modeOn('RAINMODE')) return;
+  // Prefer a live API read where one exists, but current @minecraft/server
+  // has no Dimension.getWeather() (2.3.0 throws), so the working answer is
+  // the TRACKED S.weather -- every weatherChange since boot updates it and
+  // it persists in the save (ir:state), so a world reopened mid-storm still
+  // knows. Blind spot: a stormy world whose save predates the tracking (or
+  // the pack) reads unknown until the next weather change -- that one storm
+  // simply rides out.
+  let w = S.weather;
+  try { w = String(dim.getWeather()); } catch { /* not in this API version */ }
+  if (w === String(WeatherType.Thunder)) runCmd('weather rain');
+}
+
 system.afterEvents.scriptEventReceive.subscribe((ev) => {
   try {
     if (!ensureInit()) { say('§cThe pack is not initialized yet -- see any error above.'); return; }
@@ -2972,6 +3049,13 @@ system.runInterval(() => {
 
 function tick() {
   if (!ensureInit()) return;
+
+  // The No-Thunderstorms catch-all sweep (Java's storm_watch twin, §6.9):
+  // the weatherChange watch converts new storms instantly but only ever
+  // sees CHANGES -- this picks up a storm already raging when the mode
+  // lands (a world loaded mid-thunder, mode_storms_off run from chat).
+  // World state like rain mode, so it runs before the started/rider gates.
+  if (tickN % 100 === 0) { try { stormWatchNow(); } catch (e) { reportError('storm watch', e); } }
 
   if (!S.started) { autoStart(); return; }
 

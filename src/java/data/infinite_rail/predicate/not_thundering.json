@@ -1,0 +1,7 @@
+{
+  "condition": "minecraft:inverted",
+  "term": {
+    "condition": "minecraft:weather_check",
+    "thundering": true
+  }
+}

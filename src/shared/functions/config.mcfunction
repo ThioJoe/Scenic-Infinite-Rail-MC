@@ -22,9 +22,9 @@
 #  so the in-game Debug menu can show any whole group on the scoreboard
 #  sidebar (a vanilla sidebar displays one objective, max 15 rows). The
 #  objective name is right there in each line below; use the same name in
-#  /scoreboard commands. (.DEBUGMODE, .AUTOSTART and .SAMPLE_BLOCK_INTERVAL
-#  stay in the plain `ir` objective with the runtime state -- not worth
-#  sidebar rows.)
+#  /scoreboard commands. (.DEBUGMODE, .AUTOSTART, .SAMPLE_BLOCK_INTERVAL and
+#  .NOSTORMS stay in the plain `ir` objective with the runtime state -- not
+#  worth sidebar rows.)
 # =============================================================================
 
 
@@ -436,6 +436,9 @@ scoreboard players set .BUILD_PER_TICK cfg_ride 15
 # The modes themselves are toggled with chat commands, not here:
 # (spell the path infinite_rail:<name> on Java, infinite_rail/<name> on Bedrock)
 #   mode_rain_on      permanent rain            (_off)
+#   mode_storms_off   no thunderstorms -- a natural storm is switched to
+#                     plain rain the moment it starts (mode_storms_on =
+#                     vanilla storms, the default)
 #   mode_night_on     night only, frozen midnight (mode_night_off = default)
 #   mode_day_on       day only, frozen noon       (mode_day_off = default)
 #   mode_torches_on   torch-scattered track, day and night
@@ -532,6 +535,21 @@ scoreboard players set .CARTSOUND cfg_ride 0
 # mode_aggro_off) owns the live value afterwards, and a chosen setting
 # survives reloads, rejoins and ride restarts like every mode.
 scoreboard players set .MOBAGGRO cfg_ride 0
+
+# No thunderstorms: whether fresh worlds start with natural thunderstorms
+# suppressed. 1 = a thunderstorm is switched to plain rain the moment it
+# starts (the replacement rain gets vanilla's usual random duration, so the
+# weather still moves on by itself); 0 = vanilla storms (the default). Only
+# the NATURAL weather cycle is watched -- permanent rain (mode_rain_on)
+# freezes the cycle and only ever rains, so the watcher stands down while it
+# is on. This is only the DEFAULT for the .STORMMODE state score (modes_init
+# copies it once, on the first load, via the .stminit one-shot flag): the
+# Visual Settings menu's Storms switch (mode_storms_on / mode_storms_off)
+# owns the live value afterwards, and a chosen setting survives reloads,
+# rejoins and ride restarts like every mode. (Lives in the plain `ir`
+# objective with .DEBUGMODE/.AUTOSTART -- cfg_ride is at its 15 sidebar
+# rows.)
+scoreboard players set .NOSTORMS ir 0
 
 
 # --- Debugging --------------------------------------------------------------

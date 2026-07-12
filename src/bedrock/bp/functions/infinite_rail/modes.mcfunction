@@ -8,7 +8,9 @@
 # on, 2 = auto/night only -- the default) and the fourth names the torch
 # density preset (.torchdens -- friendly name only, the percentage stays
 # behind the scenes; "Custom" = a hand-set or config-seeded value that
-# matches no preset).
+# matches no preset). The last line spells out the No-Thunderstorms mode
+# (.STORMMODE: 1 = natural storms are switched to plain rain -- note the
+# inversion, "Thunderstorms: off" is the mode being ON).
 tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Modes - rain: §f"},{"score":{"name":".RAINMODE","objective":"ir"}},{"text":"§7 | sky: §f"},{"score":{"name":".SKYMODE","objective":"ir"}},{"text":"§7 | cart hidden: §f"},{"score":{"name":".HIDECART","objective":"ir"}},{"text":"§7 | sound: §f"},{"score":{"name":".SOUNDMODE","objective":"ir"}},{"text":"§7 | mobs aggro: §f"},{"score":{"name":".AGGROMODE","objective":"ir"}}]}
 execute if score .NIGHTMODE ir matches 0 unless score .speed ir = .DEFAULTSPEED cfg_ride run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Time: default | speed: §f"},{"score":{"name":".speed","objective":"ir"}}]}
 execute if score .NIGHTMODE ir matches 1 unless score .speed ir = .DEFAULTSPEED cfg_ride run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Time: night only | speed: §f"},{"score":{"name":".speed","objective":"ir"}}]}
@@ -28,3 +30,5 @@ execute if score .LIGHTMODE ir matches 11 run tellraw @a {"rawtext":[{"text":"§
 execute if score .LIGHTMODE ir matches 8 run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Track light: low"}]}
 execute if score .LIGHTMODE ir matches 0 run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Track light: off"}]}
 execute unless score .LIGHTMODE ir matches 0 unless score .LIGHTMODE ir matches 8 unless score .LIGHTMODE ir matches 11 run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Track light: custom (level §f"},{"score":{"name":".LIGHTMODE","objective":"ir"}},{"text":"§7)"}]}
+execute if score .STORMMODE ir matches 1 run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Thunderstorms: off (switched to plain rain)"}]}
+execute unless score .STORMMODE ir matches 1 run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Thunderstorms: on (default)"}]}

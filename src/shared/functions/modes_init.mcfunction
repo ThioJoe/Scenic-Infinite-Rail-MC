@@ -58,6 +58,21 @@ scoreboard players add .agginit ir 0
 execute if score .agginit ir matches 0 run scoreboard players operation .AGGROMODE ir = .MOBAGGRO cfg_ride
 execute if score .agginit ir matches 0 run scoreboard players set .agginit ir 1
 
+# No thunderstorms (.STORMMODE): 1 = a natural thunderstorm is switched to
+# plain rain the moment it starts (Java: the tick hook runs the quarantined
+# storm_watch; Bedrock: the script's weatherChange watch); 0 = vanilla
+# storms (the default). Toggled by mode_storms_on / mode_storms_off -- named
+# for the user-facing question "storms on or off?", so storms_OFF is what
+# SETS this score. Like .SOUNDMODE it has a config-side DEFAULT (.NOSTORMS)
+# instead of a fixed value, so plain add-0 seeding can't tell "never set"
+# from "off": the one-shot companion flag .stminit copies the default in
+# only on the load that first creates the flag, then a menu/command choice
+# owns the score forever after.
+scoreboard players add .STORMMODE ir 0
+scoreboard players add .stminit ir 0
+execute if score .stminit ir matches 0 run scoreboard players operation .STORMMODE ir = .NOSTORMS ir
+execute if score .stminit ir matches 0 run scoreboard players set .stminit ir 1
+
 # The adjustable ride speed (.speed -- see the shared speed_step) is state
 # like the modes: seed it from the config default only when it has never
 # been set (or was left at an invalid <= 0), so a speed chosen with the

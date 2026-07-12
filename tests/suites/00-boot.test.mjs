@@ -55,10 +55,12 @@ export default defineSuite('boot & initialization', ({ test }) => {
     eq(await mc.score('.HIDECART', 'ir'), 0, 'hide-cart off');
     eq(await mc.score('.SOUNDMODE', 'ir'), await mc.score('.CARTSOUND', 'cfg_ride'), '.SOUNDMODE seeded from .CARTSOUND');
     eq(await mc.score('.LIGHTMODE', 'ir'), 11, 'track light defaults to bright (11)');
+    eq(await mc.score('.STORMMODE', 'ir'), await mc.score('.NOSTORMS', 'ir'), '.STORMMODE seeded from .NOSTORMS');
     eq(await mc.score('.trchinit', 'ir'), 1, 'torch one-shot seed flag consumed');
     eq(await mc.score('.agginit', 'ir'), 1, 'aggro one-shot seed flag consumed');
     eq(await mc.score('.sndinit', 'ir'), 1, 'sound one-shot seed flag consumed');
     eq(await mc.score('.lgtinit', 'ir'), 1, 'track-light one-shot seed flag consumed');
+    eq(await mc.score('.stminit', 'ir'), 1, 'storms one-shot seed flag consumed');
   });
 
   test('adjustable state seeded from config defaults', async ({ mc }) => {
@@ -70,6 +72,10 @@ export default defineSuite('boot & initialization', ({ test }) => {
 
   test('day/night clock self-test passed (.todok)', async ({ mc }) => {
     eq(await mc.score('.todok', 'ir'), 1, 'the pack\'s own predicate clock check -- 0 means torch auto cannot tell day from night on this version');
+  });
+
+  test('thunderstorm self-test passed (.stormok)', async ({ mc }) => {
+    eq(await mc.score('.stormok', 'ir'), 1, 'the thundering/not_thundering predicate pair -- 0 means the No-Thunderstorms mode cannot see storms on this version');
   });
 
   test('version-name storage populated by names.mcfunction', async ({ mc }) => {

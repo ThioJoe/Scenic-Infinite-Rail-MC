@@ -154,6 +154,8 @@ const tests = [
     if (oceanspeed !== undefined && !(await s.scoreInRange('.ocnspd', 'ir', oceanspeed))) checks.push(`.ocnspd != ${oceanspeed}`);
     const odds = expected.find((e) => e.holder === '.TORCHODDS')?.value;
     if (odds !== undefined && !(await s.scoreInRange('.torchdens', 'ir', odds))) checks.push(`.torchdens != ${odds}`);
+    const nostorms = expected.find((e) => e.holder === '.NOSTORMS')?.value;
+    if (nostorms !== undefined && !(await s.scoreInRange('.STORMMODE', 'ir', nostorms))) checks.push(`.STORMMODE != ${nostorms} (.NOSTORMS)`);
     if (checks.length) throw new Error(checks.join('; '));
   }),
 
@@ -242,6 +244,39 @@ const tests = [
     if (!(await s.scoreInRange('.LIGHTMODE', 'ir', 0))) throw new Error('track light off != 0');
     await s.fn('mode_light_on');
     if (!(await s.scoreInRange('.LIGHTMODE', 'ir', 11))) throw new Error('track light on != 11');
+  }),
+
+  report('storms mode: the script converts thunder to rain (event + catch-all sweep)', async (s) => {
+    // Baseline first, with storms allowed (the default): /weather query must
+    // echo the thunder back -- this also pins the query's output format, so
+    // a format change fails HERE with the raw response instead of quietly
+    // inverting the conversion asserts below.
+    await s.fn('mode_storms_on');
+    if (!(await s.scoreInRange('.STORMMODE', 'ir', 0))) throw new Error('mode_storms_on: .STORMMODE != 0');
+    await s.cmd('weather thunder');
+    await sleep(1500);
+    const base = await s.cmd('weather query');
+    if (!/thunder/i.test(base)) throw new Error(`storms allowed, but the thunder did not stick (or 'weather query' changed format): ${base}`);
+    // Arm the watcher WHILE the storm is raging (note the naming: storms
+    // OFF = watcher ON). Re-setting thunder is not a weather CHANGE, so the
+    // event can't see this case -- it is the tick driver's ~100-tick
+    // stormWatchNow() sweep that must convert it. Allow two sweep periods.
+    await s.fn('mode_storms_off');
+    if (!(await s.scoreInRange('.STORMMODE', 'ir', 1))) throw new Error('mode_storms_off: .STORMMODE != 1');
+    await sleep(11000);
+    const swept = await s.cmd('weather query');
+    if (/thunder/i.test(swept)) throw new Error(`a storm already raging when the mode landed was not swept to rain: ${swept}`);
+    // A FRESH storm while armed: the weatherChange event converts it
+    // near-instantly (no sweep wait needed).
+    await s.cmd('weather clear');
+    await sleep(500);
+    await s.cmd('weather thunder');
+    await sleep(1500);
+    const after = await s.cmd('weather query');
+    if (/thunder/i.test(after)) throw new Error(`a fresh thunder change was not converted to rain: ${after}`);
+    // Restore the shipped default and calm the sky for the later ride tests.
+    await s.fn('mode_storms_on');
+    await s.cmd('weather clear');
   }),
 
   report('hud toggle: .HUDHIDDEN flips both ways (and the /hud lines parse)', async (s) => {

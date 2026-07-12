@@ -5,6 +5,13 @@ function infinite_rail:menu_tick
 # The Debug book's "Live state" sidebar: refresh the dbg mirror while that
 # view is selected (.SIDEBAR 4 -- see sidebar_state / debug_tick).
 execute if score .SIDEBAR ir matches 4 run function infinite_rail:debug_tick
+# No-Thunderstorms mode (.STORMMODE 1 -- the Visual Settings book's
+# "Storms: [Off]"): watch the natural weather and swap a starting
+# thunderstorm for plain rain (storm_watch, quarantined -- predicates are
+# version-risky). World state like rain mode, so it runs ride or no ride.
+# Permanent rain stands the watcher down: its frozen cycle only ever rains,
+# and the suppression is only meant for the natural cycle anyway.
+execute if score .STORMMODE ir matches 1 unless score .RAINMODE ir matches 1 run function infinite_rail:storm_watch
 execute if score .started ir matches 1 run function infinite_rail:main
 # .started 2 = a launch is in progress: begin seeded the ride and the runway
 # is being pre-built a slice per tick (see launch_tick / launch_done).

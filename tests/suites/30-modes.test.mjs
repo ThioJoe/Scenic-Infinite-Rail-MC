@@ -57,6 +57,38 @@ export default defineSuite('ride modes', ({ test }) => {
     eq(await mc.score('.RAINMODE', 'ir'), 0, 'rain off');
   });
 
+  test('storms mode: thunder is converted to rain, watcher stands down correctly', async ({ mc }) => {
+    // The thunder LEVEL ramps ~0.01/tick after /weather thunder (manual or
+    // natural alike), and weather_check only reads thundering once it
+    // crosses vanilla's threshold near tick ~100 — so every leg sprints 150
+    // ticks: enough for the ramp to finish AND for the watcher's next tick
+    // to act on it (measured on 26.2: the flip lands ~5 s in).
+    // The pair is named for the user-facing question "storms on or off?", so
+    // mode_storms_OFF is what ARMS the watcher (.STORMMODE 1).
+    await mc.fn('mode_storms_off');
+    eq(await mc.score('.STORMMODE', 'ir'), 1, 'storms off = watcher armed');
+    await mc.cmd('weather thunder');
+    await mc.sprint(150);
+    eq(await mc.storeResult('execute if predicate infinite_rail:thundering'), 0, 'thunder was converted');
+    eq(await mc.storeResult('execute if predicate infinite_rail:not_thundering'), 1, 'predicate pair agrees');
+
+    // Permanent rain stands the watcher down (the frozen cycle never
+    // thunders by itself, so a manual thunder must survive it).
+    await mc.fn('mode_rain_on');
+    await mc.cmd('weather thunder');
+    await mc.sprint(150);
+    eq(await mc.storeResult('execute if predicate infinite_rail:thundering'), 1, 'watcher stands down under permanent rain');
+    await mc.fn('mode_rain_off');
+
+    // Storms back on (the shipped default): thunder must survive the hook.
+    await mc.fn('mode_storms_on');
+    eq(await mc.score('.STORMMODE', 'ir'), 0, 'storms on = watcher off');
+    await mc.cmd('weather thunder');
+    await mc.sprint(150);
+    eq(await mc.storeResult('execute if predicate infinite_rail:thundering'), 1, 'storms allowed: thunder stays');
+    await mc.cmd('weather clear');
+  });
+
   test('cart sound / hide-cart / mobs-aggro toggles', async ({ mc }) => {
     await mc.fn('mode_sound_off');
     eq(await mc.score('.SOUNDMODE', 'ir'), 0, 'sound off');
