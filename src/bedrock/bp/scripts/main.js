@@ -866,7 +866,7 @@ function showVisualMenu(player) {
   };
   const form = new ModalFormData()
     .title('Scenic Rail Visual Settings')
-    .toggle('Rain (permanent rain)', { defaultValue: current.rain })
+    .toggle('Always Rain', { defaultValue: current.rain })
     .dropdown('Time', ['Default (day/night cycle)', 'Always Night', 'Always Day'], { defaultValueIndex: current.night })
     .dropdown('Torches (scattered along new track)', ['Off', 'On (day and night)', 'Auto (at night only)'], { defaultValueIndex: current.torches })
     .dropdown('Torch density', TORCH_DENSITY.map((d) => d.label), { defaultValueIndex: current.dens })
