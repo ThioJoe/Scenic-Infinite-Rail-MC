@@ -531,7 +531,7 @@ scoreboard players set .CARTSOUND cfg_ride 0
 # one-shot flag): the Settings menu's Mobs-aggro switch (mode_aggro_on /
 # mode_aggro_off) owns the live value afterwards, and a chosen setting
 # survives reloads, rejoins and ride restarts like every mode.
-scoreboard players set .MOBAGGRO cfg_ride 1
+scoreboard players set .MOBAGGRO cfg_ride 0
 
 
 # --- Debugging --------------------------------------------------------------
