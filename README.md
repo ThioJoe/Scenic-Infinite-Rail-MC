@@ -18,6 +18,12 @@ The idea is that you can **leave it running on a TV or monitor** as visual ambia
 
 Basically the Minecraft equivalent of "[Slow TV](https://en.wikipedia.org/wiki/Slow_television)", such as 4-8 hour train ride videos on YouTube or Netflix.
 
+<br>
+
+<p align="center"><img width="700" height="424" src="https://github.com/user-attachments/assets/fa993467-88cf-4300-bfca-ecb26a0104d3" /></p>
+
+<br>
+
 ## What it's _not_
 
 ### **Not for multiplayer servers or existing worlds:**
