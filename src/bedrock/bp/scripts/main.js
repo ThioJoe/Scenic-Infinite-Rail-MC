@@ -403,13 +403,15 @@ for (const [obj, keys] of Object.entries(CFG_GROUPS)) {
   for (const k of keys) CFG_OBJ[k] = obj;
 }
 // Every objective the pack uses, with the sidebar display name it is created
-// with (`dbg` is the Debug menu's curated live-state mirror -- display-only).
+// with (`dbg` is the Debug menu's curated live-state mirror -- display-only;
+// `dbg_live` is the Bedrock-only per-tick rig & tick diagnostics view).
 const OBJ_DISPLAY = {
   ir: 'ir',
   cfg_terrain: 'Terrain settings',
   cfg_camera: 'Camera settings',
   cfg_ride: 'Ride settings',
   dbg: 'Live state',
+  dbg_live: 'Live diag',
 };
 
 // The vanilla ocean biomes the speed-up counts (Bedrock has no biome tags,
@@ -1034,11 +1036,11 @@ function toggleHud() {
 // menu switches between them and the Live state view (the dbg mirror,
 // refreshed per tick while selected -- tickStateSidebar). Everything is
 // applied by running the same function files as Java's Debug book.
-const SIDEBAR_FN = ['sidebar_off', 'sidebar_terrain', 'sidebar_camera', 'sidebar_ride', 'sidebar_state'];
+const SIDEBAR_FN = ['sidebar_off', 'sidebar_terrain', 'sidebar_camera', 'sidebar_ride', 'sidebar_state', 'sidebar_diag'];
 function showDebugMenu(player) {
   const current = {
     chat: debugOn(),
-    sidebar: Math.min(4, Math.max(0, getScore('SIDEBAR', 0))),
+    sidebar: Math.min(5, Math.max(0, getScore('SIDEBAR', 0))),
   };
   const form = new ModalFormData()
     .title('Scenic Rail Mode Debug')
@@ -1049,6 +1051,7 @@ function showDebugMenu(player) {
       'Camera settings (cfg_camera)',
       'Ride settings (cfg_ride)',
       'Live ride state',
+      'Live rig & tick diagnostics',
     ], { defaultValueIndex: current.sidebar })
     .toggle('Print scoreboard command examples to chat', { defaultValue: false })
     .submitButton('Apply');
@@ -1075,6 +1078,68 @@ function tickStateSidebar() {
     setScore('fast', S.fast ? 1 : 0, 'dbg');
     setScore('started', S.started ? 1 : 0, 'dbg');
   } catch { /* dbg objective unavailable (split scoreboards) */ }
+}
+
+// The "Live rig & tick diagnostics" sidebar (.SIDEBAR 5, Bedrock-only --
+// these are Script API measurements Java has no equivalent for), refreshed
+// every tick while selected. The lurch hunt's real-time counterpart to the
+// debug roll line: is the rig where it should be, is the engine delivering
+// ticks on time, and is the builder starved -- watched live, per tick.
+// Rows (the sidebar sorts by value, the names identify each; ALL of this is
+// skipped while the view is off -- the gate is one score read per tick):
+//   drift   seat's distance from its glide target, in 1/100 blocks (the
+//           drift-catch input -- glide() teleports at 400)
+//   astray  rider's distance from the seat, in 1/100 blocks (the re-mount
+//           input -- the keeper re-mounts after ASTRAY_TICKS ticks over 250)
+//   astrayN consecutive too-far ticks so far (re-mount fires at 4)
+//   pvelX/Y the PLAYER's own getVelocity(), in 1/100 blocks/tick -- what the
+//           engine is actually doing to the rider, pack-driven or not
+//   svelX/Y the seat's getVelocity(), same scale (the pack's commanded
+//           motion; compare against pvel to see who is moving whom)
+//   spd/tgt/cap  pace speed: current / target / the buffer's soft ceiling,
+//           all in 1/10 blocks per second (cap below tgt = the buffer is
+//           what's limiting the ride)
+//   gap     head - pace, blocks (.PACE_CART_BEHIND = full buffer)
+//   riderBk head - rider, blocks (how far behind the build head you are)
+//   lull    wall-clock ms between the last two engine ticks (>>50 with a
+//           small tick = the ENGINE is stuttering, not this pack)
+//   tick    the script's own last tick() cost in ms
+//   starve  consecutive ticks the builder wanted to build but the chunk
+//           ahead wasn't loaded
+let diagActive = false; // refreshed once per tick in tick()
+const diag = { drift: -1, astray: -1, astrayN: 0 };
+function tickDiagSidebar() {
+  if (!diagActive) return;
+  try {
+    setScore('drift', diag.drift, 'dbg_live');
+    setScore('astray', diag.astray, 'dbg_live');
+    setScore('astrayN', diag.astrayN, 'dbg_live');
+    setScore('starve', starveRun, 'dbg_live');
+    setScore('gap', S.headX - Math.floor(S.paceX), 'dbg_live');
+    setScore('spd', Math.round(S.paceSpeed * 200), 'dbg_live');
+    setScore('tgt', Math.round(S.targetSpeed * 200), 'dbg_live');
+    const cap = Math.max(0, ((S.headX - camAhead() - 8 - S.paceX) / 40) * 20);
+    setScore('cap', Math.round(cap * 10), 'dbg_live');
+    setScore('lull', dbgLastLull, 'dbg_live');
+    setScore('tick', dbgLastCost, 'dbg_live');
+    const rider = findRider();
+    if (rider) {
+      try {
+        setScore('riderBk', Math.round(S.headX - rider.location.x), 'dbg_live');
+        const v = rider.getVelocity();
+        setScore('pvelX', Math.round(v.x * 100), 'dbg_live');
+        setScore('pvelY', Math.round(v.y * 100), 'dbg_live');
+      } catch { /* rider unloaded this tick: rows keep their last value */ }
+    }
+    try {
+      const seat = S.seatId ? world.getEntity(S.seatId) : undefined;
+      if (seat?.isValid) {
+        const sv = seat.getVelocity();
+        setScore('svelX', Math.round(sv.x * 100), 'dbg_live');
+        setScore('svelY', Math.round(sv.y * 100), 'dbg_live');
+      }
+    } catch { /* seat unloaded: rows keep their last value */ }
+  } catch { /* dbg_live objective unavailable (split scoreboards) */ }
 }
 
 // The ride's rider: normally the one player the ride belongs to, matched by
@@ -1753,6 +1818,11 @@ let dbgLullMax = 0;        // longest wall-clock gap BETWEEN consecutive ticks
 let dbgPrevTickAt = 0;     // Date.now() at the previous tick's start
 let dbgSaveMax = 0;        // worst saveState() write ms
 let dbgStarveTicks = 0;    // ticks the builder wanted to build but the chunk ahead wasn't loaded
+// The live-diagnostics sidebar's per-tick copies (not windowed like the
+// roll-line stats above -- the sidebar shows the CURRENT tick's numbers).
+let dbgLastLull = 0;       // wall-clock ms between the last two ticks
+let dbgLastCost = 0;       // the last tick()'s own cost in ms
+let starveRun = 0;         // CONSECUTIVE starved ticks right now (0 = building fine or buffer full)
 
 function buildLoop() {
   let budget = cfg('BUILD_PER_TICK');
@@ -1761,6 +1831,7 @@ function buildLoop() {
   while (budget > 0 && S.headX - Math.floor(S.paceX) < ahead) {
     if (!buildReady()) {
       dbgStarveTicks += 1;
+      starveRun += 1;
       // A FULLY starved builder stops advancing the head, so the roll line
       // (printed per 16 blocks of head travel) goes silent exactly when
       // things are worst -- keep a time-based heartbeat in debug mode.
@@ -1781,6 +1852,9 @@ function buildLoop() {
     }
     built = true;
   }
+  // The live-diag starve streak ends when anything built OR the buffer is
+  // simply full (an idle builder at full gap isn't starving).
+  if (built || S.headX - Math.floor(S.paceX) >= ahead) starveRun = 0;
   // If the builder is starved for terrain while the track buffer is running
   // low, say so once -- the likeliest causes are a missing scout (outdated
   // packs) or a low render distance capping how far terrain generates.
@@ -2253,6 +2327,15 @@ function camMove(seat, cart, sy) {
     z: S.centerZ + 0.5,
   };
   clearCartLiquids(target);
+  // Live-diag capture: the seat's current distance from its glide target
+  // (the same Manhattan metric glide's drift-catch tests against 4.0),
+  // BEFORE this tick's correction is applied.
+  if (diagActive) {
+    try {
+      const p = seat.location;
+      diag.drift = Math.round((Math.abs(target.x - p.x) + Math.abs(target.y - p.y) + Math.abs(target.z - p.z)) * 100);
+    } catch { diag.drift = -1; }
+  }
   glide(seat, target);
   if (cart) {
     // The vanilla minecart geometry draws one block above a custom
@@ -2437,6 +2520,11 @@ function keepers(seat) {
     let riderFar = true;
     let d = -1;
     try { d = distToSeat(rider.location); riderFar = d > 2.5; } catch { /* treat as far */ }
+    // Live-diag capture: the re-mount rule's actual inputs, per tick.
+    if (diagActive) {
+      diag.astray = d < 0 ? -1 : Math.round(d * 100);
+      diag.astrayN = riderAstray;
+    }
     if (riderFar) {
       riderAstray += 1;
       if (riderAstray >= ASTRAY_TICKS) {
@@ -3122,6 +3210,7 @@ system.runInterval(() => {
   if (dbgPrevTickAt > 0) {
     const lull = t0 - dbgPrevTickAt;
     if (lull > dbgLullMax) dbgLullMax = lull;
+    dbgLastLull = lull;
   }
   dbgPrevTickAt = t0;
   try { tick(); } catch (e) { reportError('tick', e); }
@@ -3129,6 +3218,7 @@ system.runInterval(() => {
   dbgWinTicks += 1;
   dbgTickCostSum += dt;
   if (dt > dbgTickCostMax) dbgTickCostMax = dt;
+  dbgLastCost = dt;
 });
 
 function tick() {
@@ -3150,6 +3240,11 @@ function tick() {
   // resets too: a rejoining client has no sound instances, so the loop must
   // be re-emitted when the ride resumes.
   if (!findRider()) { resetSound(); return; }
+
+  // The Live-diagnostics sidebar's gate, refreshed once per tick BEFORE the
+  // capture points in camMove/keepers run: while the view is off this is
+  // the feature's whole cost (one score read).
+  diagActive = getScore('SIDEBAR', 0) === 5;
 
   // Per-tick driver, mirroring main.mcfunction's order:
   tickPace();                       // 1.  pace cart X (virtual)
@@ -3219,6 +3314,7 @@ function tick() {
   tickSound();                      // 6b. minecart rolling sound (.SOUNDMODE)
   buildLoop();                      // 7.  extend the track
   tickStateSidebar();               // 8.  the Debug menu's Live state mirror
+  tickDiagSidebar();                // 8b. the Live rig & tick diagnostics view
 
   if (--saveCountdown <= 0) { saveState(); saveCountdown = 40; }
 }

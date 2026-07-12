@@ -290,6 +290,17 @@ const tests = [
     if (!(await s.scoreInRange('.HUDHIDDEN', 'ir', 0))) throw new Error('second toggle: .HUDHIDDEN != 0 (hud_show missing or unparsed?)');
   }),
 
+  report('live-diag sidebar view: sidebar_diag selects .SIDEBAR 5, sidebar_off clears it', async (s) => {
+    // Same whole-file-parse rule as the hud test: the score flip proves the
+    // new sidebar_diag file is in the registry and its setdisplay line
+    // parses. (The per-tick dbg_live refresh itself only runs during a
+    // ride -- the surrogate-ride test below exercises it.)
+    await s.fn('sidebar_diag');
+    if (!(await s.scoreInRange('.SIDEBAR', 'ir', 5))) throw new Error('sidebar_diag: .SIDEBAR != 5 (file missing or unparsed?)');
+    await s.fn('sidebar_off');
+    if (!(await s.scoreInRange('.SIDEBAR', 'ir', 0))) throw new Error('sidebar_off: .SIDEBAR != 0');
+  }),
+
   report('setup_world applies its safety gamerules (phantoms/mobgriefing off) -- the whole file must parse', async (s) => {
     // Same registry rule the hud_toggle test leans on: BDS drops an ENTIRE
     // function if a single line is unparseable. setup_world carries the ride's
@@ -364,6 +375,22 @@ const tests = [
     await sleep(20000); // the pace rolls 8 blocks/s -> expect ~160 more
     const h2 = await s.scoreValue('.headX', 'dbg', -1000, 20000);
     if (h2 === null || h2 < h1 + 50) throw new Error(`head no longer advancing: ${h1} -> ${h2} in 20 s`);
+  }),
+
+  report('live-diag sidebar refreshes during the ride (dbg_live rows written)', async (s) => {
+    // Switch the running ride onto the diag view so tickDiagSidebar's write
+    // path (drift/astray capture, velocities, spd/cap/gap, lull/tick,
+    // starve) actually executes, then read a row back. `.gap` is written
+    // unconditionally every refresh -- entity-dependent rows (velocities)
+    // may legitimately lag a tick. Restore the Live-state view afterwards
+    // (later tests read the dbg mirror).
+    await s.fn('sidebar_diag');
+    await sleep(2500);
+    const gapOk = await s.scoreInRange('.gap', 'dbg_live', 0, 100000);
+    const spdOk = await s.scoreInRange('.spd', 'dbg_live', 0, 100000);
+    await s.fn('sidebar_state');
+    if (!gapOk) throw new Error('.gap dbg_live never written -- tickDiagSidebar did not run (or threw)');
+    if (!spdOk) throw new Error('.spd dbg_live never written -- tickDiagSidebar did not run (or threw)');
   }),
 
   report('the built line is real: rail, support and light stand in the world', async (s) => {
