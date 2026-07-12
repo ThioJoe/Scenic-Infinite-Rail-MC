@@ -1,22 +1,17 @@
 name: Build packs
 
 # Builds both release packs from the split src/ tree on every push and PR:
-#   - ScenicInfiniteRailMode-Java     -> the Scenic_Infinite_Rail_Mode/ datapack
-#                                        folder (drag into the world's
-#                                        datapacks screen / folder)
+#   - ScenicInfiniteRailMode-Java     -> the Scenic_Infinite_Rail_Mode/ datapack folder (drag into the world's datapacks screen / folder)               
 #   - ScenicInfiniteRailMode-Bedrock  -> the .mcpack file (double-click to import)
-# Pushing a v* tag additionally attaches the .zip and .mcpack to a GitHub
-# Release.
 
 on:
   push:
     branches: ['**']
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write # only used by the release step on v* tags
+  contents: read
 
 jobs:
   build:
@@ -78,11 +73,3 @@ jobs:
           name: ScenicInfiniteRailMode-Bedrock-Folder-${{ github.run_number }}
           path: dist/bedrock/
           if-no-files-found: error
-
-      - name: Attach packs to release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/*.zip
-            dist/*.mcaddon
