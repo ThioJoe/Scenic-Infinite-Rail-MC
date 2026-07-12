@@ -86,23 +86,27 @@ The ride starts automatically for the first player in a new world. (It was desig
 
 Because of platform differences, the Java and Bedrock versions have visual differences, but the ride logic and settings are mostly identical.
 
-**Differences With the Datapack Itself:**
+### **Differences With the Datapack Itself:**
 - Bedrock version has some custom item icons
 - Bedrock version has a "Toggle HUD" item (see other sections for why)
 - Bedrock version uses Native menus, Java uses clickable text in books
 
-**General Bedrock Advantages:**
+### **General Bedrock Advantages:**
 - Currently, the "vibrant visuals" option is only in Bedrock edition (though will [eventually come to Java](https://www.minecraft.net/en-us/article/another-step-towards-vibrant-visuals-for-java-edition))
 - Bedrock is the only option to run on a console, like if you want to put this on your TV
 
-**Major Bedrock Drawbacks**
-- **Problem:** On console, you can't load custom behavior packs.
-- **Workaround:** The only way to use a custom behavior pack on a console for a local world is to host a realm with it, then download it onto the console. See the "[Console Installation](#console-installation-via-realms)" section below.
+### **Major Bedrock Drawbacks**
+
+**❌ Problem:** On console, you can't load custom behavior packs.
+
+**Workarounds:**
+  - The only way to use a custom behavior pack on a console for a local world is to host a realm with it, then download it onto the console.
+  - See the "[Console Installation](#console-installation-via-realms)" section below.
+
   
-- **Problem:** Bedrock apparently has a hardcoded "AFK" message that dims the screen and cannot be disabled.  This kind of defeats the purpose of the entire datapack.
-   - After 15 minutes, it says "You've been away for a bit. Press any button to jump back into the game."
-   - With the right settings it won't pause the game or lower framerate, but it still shows the message and dims the screen. 
-- **Workarounds:**
+**❌ Problem:** Bedrock apparently has a hardcoded "AFK" message that dims the screen and cannot be disabled. After 15 minutes, it says "You've been away for a bit..."
+
+**Workarounds:**
    - On PC, use software that automatically sends inputs so you don't go AFK.
    - On Console, a third-party controller with a mode that can automatically repeat inputs forever. This feature may be called "Turbo Hold", "Auto Burst", "Auto Turbo", or "Auto-Pilot".
      - For example, select the empty item slot and have it repeatedly send Left Trigger, which would do nothing.
