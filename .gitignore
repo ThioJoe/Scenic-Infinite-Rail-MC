@@ -6,7 +6,8 @@ dist_links/
 *.lnk
 
 # Other / Misc
-prompt.txt
+*.local
+*.local.txt
 *.bak*
 
 #Specific Files

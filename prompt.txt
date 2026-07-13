@@ -1,0 +1,28 @@
+I have a repository attached for a custom data pack I made for Minecraft. It should only utilize 100% vanilla minecraft stuff, no third party dependencies. 
+
+It's basically like "Slow TV", where the player just sits in a minecart and doesn't move, and it auto generates the entire rail track following the terrain. It uses some tricks to smooth out the up and down movements which you can read about in the md file.
+
+It supports both versions (bedrock and java) as a monorepo, and both are in feature parity at this point. The bedrock and java versions generate the minecart rig differently but their movements used shared logic.
+
+The full technical details of how it works are in tools/CONTEXT.md, but this file is very large, so first you can look at tools/CONTEXT-Table-Of-Contents.md. You should read the entire table of contents file at least. You should also always at least read the first section in Context.md, "## 1. What it is".
+
+----------------- General Instructions and useful info ---------------------------
+Always be sure to update the context file after making changes if it makes sense to, but especially if a change would make part of the context file incorrect/out of date. As well as the context table of contents file if any new sections are added or sections are renamed (the table of contents must always match the structure of the context.md file)
+
+Commit Notes:
+ - You can commit directly to your working branch. Just make a new branch to commit to if you don't have one already (just not the 'main' branch).
+ - Do not worry about unverified commit badges, I don't care about that. Don't bother even mentioning them. And the github action will handle autobuilding
+ - If reverting entire commits, never force push to change history, just use regular revert commits.
+ - If addressing separate multiple bugs, fixes, or features at once, push a separate commit for each to make it easier to track in the future.
+
+# Abstraction and The Logic Boundary
+To maximize maintainability, separate the "data fetching/math" from the "decision making." You should strive to use shared `.mcfunction` files for the core state machine (e.g., determining slopes, counting gaps, updating directions), but keep heavy data processing native to each platform.
+* **Data Gathering & Heavy Math (Keep Native):** Fetching terrain arrays, calculating S-curve averages, and doing floating-point math should be kept strictly in Bedrock Script API (JS) or Java `.mcfunction` hacks. Do not pass large arrays or complex math across the Script <-> Command boundary.
+* **Decision Logic (Share via `.mcfunction`):** Once the native side has boiled the data down to a single state variable (like the final `.target` elevation), pass that state into a shared `.mcfunction` (like `decide` or `consider_start`). Let the shared `.mcfunction` process the event model rules and output the final placement direction.
+
+#Testing
+You should test the changes in any way possible using the available testing environment. If there's no suite available, try to come up with a test  you can run yourself before pushing. While waiting for the server tests, the full suites can take several minutes. You should work on  your explanation of what you're doing in that time and if you finish before the test is done output the explanation immediately so I have something to read.
+-----------------------------------------------------------
+
+====== OUR JOB TODAY ======
+
