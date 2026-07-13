@@ -145,12 +145,12 @@ Note: The "Minecart Improvements" experiment is required for Java edition, but t
  ## **Bedrock Edition Installation:** 
   1. Close minecraft if it's already running _(important)_.
   2. Double click the `.mcaddon` file.
-    - It may ask which program to open with. Select "Minecraft" (or "Minecraft For Windows").
-  3. Minecraft should launch, and after a few seconds should say "Successfully imported Scenic Infinite Rail Mode" at the top.
-  4. While creating a new single player world, go to the "Behavior packs" tab, and click "Activate" next to Scenic Infinite Rail Mode
-     - It should automatically also activate the related Resource Pack after activating the Behavior Pack.
-  5. Finish creating the world.
-     - You can name it whatever, and the default settings are fine.
+    - It may ask which program to open with. Select Minecraft.
+  3. Minecraft should launch, and after a few seconds should say "Successfully imported..." at the top.
+  4. While creating a new world, go to the "Behavior packs" tab, and click "Activate" next to Scenic Infinite Rail Mode.
+     - This should automatically also activate the related Resource Pack
+  5. Finish creating the world
+     - You can name it whatever, and the default settings are fine
      - It will give a warning about achievements, just click "Create Anyway"
 
 ## **Console Installation (via Realms):**
