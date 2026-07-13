@@ -30,6 +30,7 @@ import {
 } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { collectRefs, findMismatches } from './check-version.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC_SHARED = join(ROOT, 'src', 'shared', 'functions');
@@ -43,17 +44,22 @@ const fail = (msg) => { console.error(`BUILD FAILED: ${msg}`); process.exit(1); 
 
 // ---------------------------------------------------------------------------
 // Version: single source of truth is the Bedrock BP manifest header version.
-// The RP version and the BP->RP dependency must stay in lockstep.
+// Every product-version reference in both manifests (module versions, the
+// BP->RP dependency, the RP header) must match it. The same check runs as its
+// own CI step (tools/check-version.mjs --consistency); reusing it here keeps a
+// local `node tools/build.mjs` honest too.
 // ---------------------------------------------------------------------------
-const manifest = JSON.parse(readFileSync(join(SRC_BEDROCK_BP, 'manifest.json'), 'utf8'));
-const rpManifest = JSON.parse(readFileSync(join(SRC_BEDROCK_RP, 'manifest.json'), 'utf8'));
-const VERSION = manifest.header.version.join('.');
-if (rpManifest.header.version.join('.') !== VERSION) {
-  fail(`BP version ${VERSION} != RP version ${rpManifest.header.version.join('.')}`);
-}
-const rpDep = (manifest.dependencies ?? []).find((d) => d.uuid);
-if (!rpDep || rpDep.uuid !== rpManifest.header.uuid || rpDep.version.join('.') !== VERSION) {
-  fail('BP manifest must depend on the RP header uuid at the same version');
+const versionInfo = collectRefs(ROOT);
+const VERSION = versionInfo.sot;
+const mismatches = findMismatches(versionInfo);
+if (mismatches.length || versionInfo.uuidMismatch) {
+  for (const r of mismatches) {
+    console.error(`  ${r.label} is ${r.version}, expected ${VERSION} (${r.file})`);
+  }
+  if (versionInfo.uuidMismatch) {
+    console.error('  BP->RP dependency uuid does not match the RP header uuid');
+  }
+  fail(`version references disagree with the source of truth ${VERSION} (${versionInfo.sotFile})`);
 }
 
 // ---------------------------------------------------------------------------

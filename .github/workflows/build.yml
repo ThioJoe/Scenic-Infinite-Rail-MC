@@ -21,11 +21,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 pulls the full history + all tags so the release-bump
+      # check below can find the highest existing release tag.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+
+      # BLOCKING gate. Every product-version reference in the two Bedrock
+      # manifests (module versions, the BP->RP dependency, the RP header) must
+      # match the source of truth -- header.version in src/bedrock/bp/manifest
+      # .json. A mismatch fails the job with an ::error:: annotation naming the
+      # offending reference, and the upload steps below are skipped (they gate
+      # on this step's success), so an inconsistent build never ships.
+      - name: Check version consistency
+        id: vcheck
+        run: node tools/check-version.mjs --consistency
 
       # Lints the shared dual-dialect functions, assembles both packs from
       # src/shared + src/java + src/bedrock, validates every function
@@ -39,18 +53,31 @@ jobs:
       - name: Simulate the shared logic
         run: node tools/simulate.mjs
 
+      # NON-BLOCKING gate (for artifacts). Fails the job with an ::error::
+      # annotation if the manifest version is not strictly greater than the
+      # highest existing release tag ("1.4.6" / "v1.4.6"), so an un-bumped
+      # version can't ship unnoticed -- but the uploads below still run
+      # (they gate only on the consistency check), leaving a downloadable
+      # build to test. No tags yet -> first release, passes.
+      - name: Check release version bump
+        id: relcheck
+        run: node tools/check-version.mjs --release
+
       # Artifact names carry the run number so successive test builds are
       # easy to tell apart (the number increments on failed runs too).
-      # The upload steps below run with if: !cancelled() so a simulation
-      # failure still leaves a downloadable build for testing -- the job
-      # still reports failure overall, but the artifacts aren't withheld.
+      # The upload steps below run whenever the version-consistency gate
+      # passed and the job wasn't cancelled, so a simulation failure or an
+      # un-bumped-version failure still leaves a downloadable build for
+      # testing -- the job still reports failure overall, but the artifacts
+      # aren't withheld. A consistency failure is the one case that DOES
+      # withhold them (steps.vcheck.outcome must be 'success').
 
       # Downloading this artifact yields a zip with pack.mcmeta and the rest
       # of the datapack contents at the zip ROOT (not nested inside a
       # Scenic_Infinite_Rail_Mode/ folder), ready to drop into a world's
       # datapacks folder as-is.
       - name: Upload Java datapack (folder)
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.vcheck.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: ScenicInfiniteRailMode-Java-${{ github.run_number }}
@@ -60,7 +87,7 @@ jobs:
       # Downloading this artifact yields a zip containing the .mcaddon file
       # (BP + RP); extract once and double-click the .mcaddon to import.
       - name: Upload Bedrock pack (.mcaddon)
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.vcheck.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: ScenicInfiniteRailMode-Bedrock-${{ github.run_number }}
@@ -71,7 +98,7 @@ jobs:
       # Scenic_Infinite_Rail_Mode_BP / Scenic_Infinite_Rail_Mode_RP into
       # com.mojang's development_behavior_packs / development_resource_packs.
       - name: Upload Bedrock packs (folders, for development)
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.vcheck.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: ScenicInfiniteRailMode-Bedrock-Folder-${{ github.run_number }}
