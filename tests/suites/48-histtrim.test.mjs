@@ -39,10 +39,13 @@ export default defineSuite('track history trim', ({ test }) => {
   test('end to end: a long ride holds the bound and stays self-consistent', { timeout: 480000 }, async ({ mc, note }) => {
     const { trackBase: base0 } = await startRide(mc);
     // Let the builder run far ahead so the ride crosses the 2048-column
-    // bound quickly (the gap condition is the only throttle on .BUILD_PER_TICK).
+    // bound quickly: open the gap condition AND raise the speed-scaled
+    // budget factor (build_budget: ceil(speed x factor / 20) columns/tick
+    // -- factor 40 at land speed 8 = 16 columns/tick).
     // Progress is measured against the ride's ORIGINAL anchor -- .trackBase
     // itself advances once the trim engages (that's the feature).
     await mc.cmd('scoreboard players set .PACE_CART_BEHIND cfg_ride 100000');
+    await mc.cmd('scoreboard players set .BUILD_FACTOR cfg_ride 40');
     for (let i = 0; i < 6; i++) {
       await mc.sprint(200, { timeoutMs: 240000 });
       if ((await mc.score('.headX', 'ir')) - base0 >= 2100) break;
@@ -59,6 +62,7 @@ export default defineSuite('track history trim', ({ test }) => {
     } finally {
       await mc.unfreeze();
       await mc.cmd('scoreboard players set .PACE_CART_BEHIND cfg_ride 224');
+      await mc.cmd('scoreboard players set .BUILD_FACTOR cfg_ride 3');
     }
     await stopRide(mc);
   });

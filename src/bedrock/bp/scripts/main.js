@@ -367,7 +367,7 @@ const CONFIG_DEFAULTS = {
   SLOPECLEAR: 6, DOWNCLAMP: 30,
   UPGRACE: 20, DOWNLOOK_AHEAD: 250, PLOW_GRACE_UP: 1, PLOW_GRACE_DOWN: 1,
   SHIFT_REQ_BOTTOM: 30, SAMPLE_WINDOW: 75, SAMPLE_BLOCK_INTERVAL: 1,
-  PACE_CART_BEHIND: 224, TERRAIN_GENAHEAD: 192, BUILD_PER_TICK: 15, DEBUGMODE: 0,
+  PACE_CART_BEHIND: 224, TERRAIN_GENAHEAD: 192, BUILD_FACTOR: 3, DEBUGMODE: 0,
   SKYY: 120, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 30, SEAPICKLE: 4,
   CARTSOUND: 0, MOBAGGRO: 0, NOSTORMS: 0, WORLDAGEWARN: 15,
 };
@@ -397,7 +397,7 @@ const CFG_GROUPS = {
     'CAMMODE', 'CARTYOFF'],
   cfg_ride: ['DEFAULTSPEED', 'OCEANSPEED', 'OCEANCHUNKS', 'LANDCHUNKS', 'SKYY',
     'SKYSPEED', 'TORCHODDS', 'TORCHRANGE', 'SEAPICKLE', 'SHIFT_REQ_BOTTOM',
-    'PACE_CART_BEHIND', 'TERRAIN_GENAHEAD', 'BUILD_PER_TICK', 'CARTSOUND',
+    'PACE_CART_BEHIND', 'TERRAIN_GENAHEAD', 'BUILD_FACTOR', 'CARTSOUND',
     'MOBAGGRO'],
 };
 const CFG_OBJ = {}; // knob name -> objective id (defaults to OBJ)
@@ -1898,8 +1898,24 @@ let dbgLastLull = 0;       // wall-clock ms between the last two ticks
 let dbgLastCost = 0;       // the last tick()'s own cost in ms
 let starveRun = 0;         // CONSECUTIVE starved ticks right now (0 = building fine or buffer full)
 
+// The per-tick build budget, auto-scaled to the ride's speed (Java's
+// build_budget.mcfunction twin): the builder may lay .BUILD_FACTOR x the
+// track the ride is consuming -- ceil(consumption in blocks/tick x factor)
+// columns, floored at 1. Consumption is the larger of the pace's CURRENT
+// speed and its TARGET: the target keeps recovery honest while the pace is
+// eased off by the low-buffer soft ceiling (recovering at factor x the
+// eased speed would never rebuild the buffer that lifts the easing), the
+// current speed covers the ramp overshoot cases. A fixed cap (the old
+// .BUILD_PER_TICK 15) made every catch-up burst cost worst-case work at
+// any speed -- exactly when the engine was already struggling.
+function buildBudget() {
+  const factor = Math.max(1, cfg('BUILD_FACTOR'));
+  const consume = Math.max(S.paceSpeed, S.targetSpeed); // blocks/tick
+  return Math.max(1, Math.ceil(consume * factor));
+}
+
 function buildLoop() {
-  let budget = cfg('BUILD_PER_TICK');
+  let budget = buildBudget();
   const ahead = cfg('PACE_CART_BEHIND');
   let built = false;
   while (budget > 0 && S.headX - Math.floor(S.paceX) < ahead) {
@@ -3176,6 +3192,10 @@ function init() {
       if (getScore(k, undefined, obj) === undefined) setScore(k, v, obj);
     }
   }
+  // The retired fixed build cap (replaced by .BUILD_FACTOR's speed-scaled
+  // budget -- buildBudget()): clear the stale score out of upgraded worlds'
+  // saves, or the cfg_ride sidebar view shows 16 rows and hides one.
+  runCmd('scoreboard players reset .BUILD_PER_TICK cfg_ride');
   // Seed the ride-mode toggle scores (0 = off) if they've never been set --
   // the shared modes_init, same call Java makes from load.mcfunction. Modes
   // are state, not config: they live outside config.mcfunction so a /reload

@@ -4,8 +4,8 @@
 # probed". The head advances one column east per column, so the three
 # probe-hungry walks (sample_window, near_scan, shift_scan) used to re-probe
 # the SAME terrain ~100 times each as their windows slid past it -- the
-# single biggest per-column cost, and the whole reason catch-up bursts
-# (.BUILD_PER_TICK columns in one tick) hurt. Now each X ahead of the ride
+# single biggest per-column cost, and the whole reason multi-column
+# catch-up bursts hurt. Now each X ahead of the ride
 # is probed ONCE, on first read (the surf_prep/surf_fill lazy fill), and
 # every walk reads the cached value. Terrain ahead of the ride never
 # changes (the pack only ever modifies blocks at/behind the head, and the

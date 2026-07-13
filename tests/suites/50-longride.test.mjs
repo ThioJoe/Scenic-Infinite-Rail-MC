@@ -52,8 +52,9 @@ export default defineSuite('long ride endurance', ({ test }) => {
   test('build gap bounded by .AHEAD for the whole run endpoint', async ({ mc }) => {
     const gap = await mc.score('.gap', 'ir');
     const ahead = await mc.score('.PACE_CART_BEHIND', 'cfg_ride');
-    const maxTick = await mc.score('.BUILD_PER_TICK', 'cfg_ride');
-    between(gap, 1, ahead + maxTick, '.gap within bounds');
+    // Slack: one tick's worth of speed-scaled budget (build_budget); 24 =
+    // the launch phase's fixed budget, a ceiling for any test-speed value.
+    between(gap, 1, ahead + 24, '.gap within bounds');
   });
 
   test('profile stays contiguous across the whole run (sampled pairs)', { timeout: 240000 }, async ({ mc, note }) => {

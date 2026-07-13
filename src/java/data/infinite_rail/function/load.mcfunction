@@ -42,6 +42,8 @@ scoreboard players set .C10 ir 10
 scoreboard players set .C1000 ir 1000
 # Blocks per chunk -- the divisor for the ocean-biome chunk counter.
 scoreboard players set .C16 ir 16
+# Ticks per second -- build_budget's blocks/s -> columns/tick conversion.
+scoreboard players set .C20 ir 20
 # Ticks per minute (20/s x 60) -- the auto-start world-age gate multiplies
 # the .WORLDAGEWARN minutes knob by this to compare against `time query
 # gametime` (see auto_gate).
@@ -53,6 +55,10 @@ function infinite_rail:consts
 
 # Apply all tunable settings.
 function infinite_rail:config
+# The retired fixed build cap (replaced by .BUILD_FACTOR's speed-scaled
+# budget -- see build_budget): clear the stale score out of upgraded worlds'
+# saves, or the cfg_ride sidebar view shows 16 rows and hides one.
+scoreboard players reset .BUILD_PER_TICK cfg_ride
 
 # Seed the ride-mode toggle scores (0 = off) if they've never been set. Modes
 # are state, not config: config re-runs on every /reload, so keeping them out
@@ -84,7 +90,7 @@ function infinite_rail:names
 # 65536 commands / 65536 execution forks, and a chain that exceeds a budget
 # is TRUNCATED SILENTLY, which is undebuggable in the field. The launch no
 # longer depends on this (it is phased across ticks -- launch_tick), but
-# heavy config values (.BUILD_PER_TICK, .SAMPLE_WINDOW) deserve headroom. Names are
+# heavy config values (.BUILD_FACTOR, .SAMPLE_WINDOW) deserve headroom. Names are
 # version-dependent (snake_case on 26.x), so they come from names.mcfunction
 # via set_rule.
 data modify storage infinite_rail:rule rule set from storage infinite_rail:names chain_length

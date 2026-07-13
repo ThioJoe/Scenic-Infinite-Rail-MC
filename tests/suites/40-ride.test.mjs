@@ -128,8 +128,10 @@ export default defineSuite('ride bootstrap & build pipeline', ({ test }) => {
   test('builder keeps the head within .PACE_CART_BEHIND of the cart', async ({ mc }) => {
     const gap = await mc.score('.gap', 'ir');
     const ahead = await mc.score('.PACE_CART_BEHIND', 'cfg_ride');
-    const maxTick = await mc.score('.BUILD_PER_TICK', 'cfg_ride');
-    between(gap, 1, ahead + maxTick, `.gap (${gap}) must stay within .PACE_CART_BEHIND (${ahead})`);
+    // Slack: one tick's worth of budget past the gap check. The budget is
+    // speed-scaled now (build_budget); 24 = the launch phase's fixed budget,
+    // a generous ceiling for any in-ride value at test speeds.
+    between(gap, 1, ahead + 24, `.gap (${gap}) must stay within .PACE_CART_BEHIND (${ahead})`);
   });
 
   test('chunk pipeline healthy: head never went missing', async ({ mc }) => {

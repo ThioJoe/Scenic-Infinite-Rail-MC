@@ -440,9 +440,24 @@ scoreboard players set .PACE_CART_BEHIND cfg_ride 224
 # generated terrain).
 scoreboard players set .TERRAIN_GENAHEAD cfg_ride 192
 
-# Maximum track columns built per game tick. Higher = better catch-up if the
-# server hitches, at the cost of more work per tick.
-scoreboard players set .BUILD_PER_TICK cfg_ride 15
+# How much faster than the ride's CURRENT cruise speed the builder may lay
+# track, as a multiplier. The per-tick column budget is derived from it
+# every tick: ceil(active speed in blocks/s x this / 20), floored at 1 --
+# so at the default land speed 8 the builder lays at most 2 columns per
+# tick, an ocean sprint at 32 allows 5, and a hand-raised speed raises the
+# budget with it automatically. This replaced a fixed columns-per-tick cap
+# (.BUILD_PER_TICK, 15): a flat cap sized for the fastest ride made the
+# catch-up bursts after a chunk-generation hitch cost ~15 columns in ONE
+# tick at any speed -- the exact moment the server was already struggling.
+# Proportional, the burst work stays a small constant multiple of what the
+# ride actually consumes; the only trade is that a drained track buffer
+# refills in seconds instead of instantly (invisible from the seat: track
+# is laid faster than the cart eats it either way). Higher = faster
+# catch-up with spikier ticks; must stay above 1 or the ride can outrun
+# the builder. (Java also keys the budget off the pace cart's MEASURED
+# motion, so even a /gamerule minecart speed set above the tracked cruise
+# keeps a matching budget.)
+scoreboard players set .BUILD_FACTOR cfg_ride 3
 
 
 # --- Ride modes (see the mode_* functions) -----------------------------------

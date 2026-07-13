@@ -115,6 +115,11 @@ execute unless entity @e[type=marker,tag=ir_head,limit=1] run scoreboard players
 execute if entity @e[type=marker,tag=ir_head,limit=1] run scoreboard players set .hdmiss ir 0
 execute if score .hdmiss ir matches 100 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Warning: the track builder's head is in unloaded chunks, so building is paused until its terrain loads. If this keeps happening, chunk force-loading may be broken on this Minecraft version - please report it.","color":"yellow"}]
 
-# Extend the track ahead of the pace cart, up to .BUILD_PER_TICK columns this tick.
-scoreboard players operation .budget ir = .BUILD_PER_TICK cfg_ride
+# Extend the track ahead of the pace cart. The per-tick column budget is
+# auto-scaled to the ride's current speed (build_budget: ceil of the active
+# cruise x .BUILD_FACTOR / 20, floored at 1, raised further if the cart's
+# measured motion says a hand-set gamerule is going faster) -- so catch-up
+# bursts cost a small multiple of what the ride consumes, never a flat
+# worst-case spike. Uses .mx from the stall keeper above.
+function infinite_rail:build_budget
 function infinite_rail:build_loop
