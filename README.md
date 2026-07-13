@@ -106,7 +106,7 @@ Because of platform differences, the Java and Bedrock versions have visual diffe
 - Currently, the "vibrant visuals" option is only in Bedrock edition (though will [eventually come to Java](https://www.minecraft.net/en-us/article/another-step-towards-vibrant-visuals-for-java-edition))
 - Bedrock is the only option to run on a console, like if you want to put this on your TV
 
-### **Major Bedrock Drawbacks**
+### **Bedrock Drawbacks**
 
 **❌ Problem:** On console, you can't load custom behavior packs.
 
@@ -115,12 +115,11 @@ Because of platform differences, the Java and Bedrock versions have visual diffe
   - See the "[Console Installation](#console-installation-via-realms)" section below.
 
   
-**❌ Problem:** Bedrock apparently has a hardcoded "AFK" message that dims the screen and cannot be disabled. After 15 minutes, it says "You've been away for a bit..."
+**❌ Problem:** Bedrock has a hardcoded "AFK" message that also dims the screen after 15 minutes, and cannot be disabled.
 
-**ℹ️ Workaround:** Some kind of automated input.
-   - On PC, use software that automatically sends inputs so you don't go AFK.
-   - On Console, a third-party controller with a mode that can automatically repeat inputs forever. This feature may be called "Turbo Hold", "Auto Burst", "Auto Turbo", or "Auto-Pilot".
-     - For example, select the empty item slot and have it repeatedly send Left Trigger, which would do nothing.
+**ℹ️ Workaround:** Some kind of automated input to prevent going AFK.
+   - On PC, use software that automatically sends inputs.
+   - On Console, a use a rubber band or anything to hold the left joystick. (Since you're in the cart, the left movement joystick doesn't matter)
 
 ---------
 
