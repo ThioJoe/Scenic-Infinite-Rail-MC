@@ -69,16 +69,18 @@ Basically the Minecraft equivalent of "[Slow TV](https://en.wikipedia.org/wiki/S
 <p align="center"><sub>*Toggle HUD is really only necessary on Bedrock Edition for consoles. With a keyboard, F1 can be used instead.</sub></p>
 
 ### **Ride Settings**:
-  * **Sky mode** (On/Off): If enabled, the ride goes high up into the sky instead of ground level. **Default = Off**
-  * **Cart Sound** (On/Off): Whether the cart sound is heard or silent. **Default = On**
-  * **Show Cart** (Show/Hide): Whether you can see the cart or not. **Default = Show**
-  * **Mobs Aggro** (On/Off): Mobs make noise and approach the player. **Default = On**
+  * **Sky mode** (_On/Off_): If enabled, the ride goes high up into the sky instead of ground level. **Default = Off**
+  * **Cart Sound** (_On/Off_): Whether the cart sound is heard or silent. **Default = On**
+  * **Show Cart** (_Show/Hide_): Whether you can see the cart or not. **Default = Show**
+  * **Mobs Aggro** (_On/Off_): Mobs make noise and approach the player. **Default = On**
 
 ###  **Visual Settings**: 
-  * **Rain** (On/Off): If enabled, it's always raining. If disabled, normal weather cycle. (Default = Off)
-  * **Time** (Night/Day/Default): Optionally force a time of day. If "Default", normal day/night cycle.
-  * **Torches** (Auto/On/Off): Adds torches randomly around the track. If Auto, they only appear at night. (Default = Auto)
-  * **Torch Density** (Low/Medium/High/Max): How many torches to add, if enabled. (Default = Medium)
+  * **Always Rain** (_On/Off_): If enabled, it's always raining. If disabled, normal weather cycle. **Default = Off**
+  * **Storms** (_On/Off_): If disabled, any thunderstorms would be replaced by normal rain. **Default = On**
+  * **Time** (_Night/Day/Default_): Optionally force a time of day. If "Default", normal day/night cycle.
+  * **Torches** (_Auto/On/Off_): Adds some torches near the track. If Auto, they only appear at night. **Default = Auto**
+  * **Torch Density** (_Low/Medium/High/Max_): How many torches to add, if enabled. **Default = Medium**
+  * **Track Light** (_Off/Low/On_): Self illumination level of the track and surrounding blocks. **Default = On**
 
 ###  **Speed Control Items:** 
   * **Speed +**
@@ -146,14 +148,14 @@ Note: The "Minecart Improvements" experiment is required for Java edition, but t
 
  ## **Bedrock Edition Installation:** 
   1. Close minecraft if it's already running _(important)_.
-  2. Double click the `.mcaddon` file.
+  2. Double click the `**.mcaddon**` file.
     - It may ask which program to open with. Select Minecraft.
-  3. Minecraft should launch, and after a few seconds should say "Successfully imported..." at the top.
-  4. While creating a new world, go to the "Behavior packs" tab, and click "Activate" next to Scenic Infinite Rail Mode.
+  3. Minecraft should launch, and after a few seconds should say "**Successfully imported...**" at the top.
+  4. While creating a new world, go to the "**Behavior packs**" section, and click "**Activate**" next to Scenic Infinite Rail Mode.
      - This should automatically also activate the related Resource Pack
-  5. Finish creating the world
+  5. Finish creating the world by clicking "**Create**"
      - You can name it whatever, and the default settings are fine
-     - It will give a warning about achievements, just click "Create Anyway"
+     - It may give a warning about achievements, just click "**Create Anyway**"
 
 ## **Console Installation (via Realms):**
 **Consoles cannot normally load custom behavior packs**. As a workaround you must create a Realm with the pack installed from a PC (the trial works), then download that world onto your console.
