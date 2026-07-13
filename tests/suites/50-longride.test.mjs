@@ -10,7 +10,11 @@ const SPRINT_TICKS = 2400; // two minutes of game time
 
 export default defineSuite('long ride endurance', ({ test }) => {
   test(`ride survives ${SPRINT_TICKS} ticks and keeps building`, { timeout: 420000 }, async ({ mc, state, note }) => {
-    const { trackBase } = await startRide(mc);
+    const { trackBase, railY0 } = await startRide(mc);
+    // A cull victim on the start column: roll_chunks' passed-entity cull
+    // must remove it once the release band sweeps past (asserted below,
+    // after the sprint has carried the band far beyond it).
+    await mc.cmd(`summon minecraft:armor_stand ${trackBase}.5 ${railY0 + 2} ${LINE_Z}.5 {Tags:["ir_cull_victim"],NoGravity:1b}`);
     await summonRig(mc);
     state.trackBase = trackBase;
     state.errMark = 0;
@@ -21,6 +25,17 @@ export default defineSuite('long ride endurance', ({ test }) => {
     state.headX = h1;
     note(`built ${h1 - trackBase} columns total (${h1 - h0} during the sprint)`);
     ok(h1 - h0 > 400, `expected sustained building during the sprint (got ${h1 - h0} columns)`);
+  });
+
+  test('passed entities were culled behind the ride', async ({ mc }) => {
+    // Honesty first: reload the start region -- a surviving victim in an
+    // UNLOADED chunk would otherwise be invisible to the selector and
+    // false-pass this test.
+    const base = await mc.score('.trackBase', 'ir');
+    await mc.loadRegion(base - 1, LINE_Z - 2, base + 2, LINE_Z + 2, { settleMs: 1000 });
+    eq(await mc.entityExists('@e[type=armor_stand,tag=ir_cull_victim]'), false,
+      'the victim on the start column survived the release band');
+    await mc.unloadRegion(base - 1, LINE_Z - 2, base + 2, LINE_Z + 2);
   });
 
   test('pace cart travelled with the build front', async ({ mc, note }) => {

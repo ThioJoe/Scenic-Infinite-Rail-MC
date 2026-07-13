@@ -10,6 +10,16 @@
 # store-success around the actual forceload macro call -- so it stays 0
 # whether forceload_here failed to load on this game version, aborted on a
 # macro expansion, or the forceload command itself errored.
+# Passed-entity cull -- the release band below (forceload remove,
+# ~-336..-256 x ±64) is about to unload: remove every non-player entity in
+# it first, so passed mobs, drops and stands are neither saved into the
+# unloaded chunks nor left for a revisit to reload (the safe salvage of the
+# retired trail wiper -- entities only, no block work). The band is fully
+# behind the ride by construction: the pace cart (the ride's rearmost
+# piece, plug aboard) rides at ~-224, the rider at -.RIDER_BEHIND, and the
+# head markers sit at the head itself -- so type=!player is the only
+# exclusion needed.
+execute positioned ~-336 -64 ~-64 run kill @e[type=!player,dx=80,dy=384,dz=128]
 scoreboard players set .flok ir 0
 function infinite_rail:forceload_here
 # One-shot loud diagnostic instead of the silent chunk-starved death spiral

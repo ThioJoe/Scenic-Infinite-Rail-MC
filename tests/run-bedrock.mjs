@@ -398,6 +398,37 @@ const tests = [
     if (!spdOk) throw new Error('.spd dbg_live never written -- tickDiagSidebar did not run (or threw)');
   }),
 
+  report('passed entities are culled at the corridor tail', async (s) => {
+    // Plant a victim ahead of the ride on the centerline; when the corridor
+    // tail passes it, the roll's cull removes it. Its chunk is pinned by a
+    // test tickingarea so a SURVIVING victim stays loaded and visible to
+    // testfor -- without the pin, an uncalled cull would false-pass once
+    // the chunk unloaded. The surrogate rider (riding the seat, a full
+    // CORR_BEHIND ahead of anything culled) must be untouched.
+    const h = await s.scoreValue('.headX', 'dbg', -1000, 200000);
+    if (h === null) throw new Error('no .headX from the dbg mirror');
+    const vx = h + 120;
+    await s.cmd(`tickingarea add circle ${vx} 100 ${LINE_Z} 2 sirm_cull`);
+    await sleep(2000);
+    await s.cmd(`summon armor_stand ${vx}.5 150 ${LINE_Z}.5`);
+    await s.cmd(`tag @e[type=armor_stand,x=${vx - 8},dx=16,y=-64,dy=400,z=${LINE_Z - 8},dz=16] add ir_cull_victim`);
+    const chk = await s.cmd('testfor @e[type=armor_stand,tag=ir_cull_victim]');
+    if (!/Found/i.test(chk)) { await s.cmd('tickingarea remove sirm_cull'); throw new Error(`victim did not spawn: ${chk}`); }
+    await s.setScore('.speed', 'ir', 24);
+    const t0 = Date.now();
+    let gone = false;
+    while (Date.now() - t0 < 120000) {
+      const r = await s.cmd('testfor @e[type=armor_stand,tag=ir_cull_victim]');
+      if (/No targets/i.test(r)) { gone = true; break; }
+      await sleep(3000);
+    }
+    await s.setScore('.speed', 'ir', 8);
+    await s.cmd('tickingarea remove sirm_cull');
+    if (!gone) throw new Error('the victim survived the corridor tail (cull did not fire)');
+    const rider = await s.cmd('testfor @e[type=armor_stand,tag=ir_test_rider]');
+    if (!/Found/i.test(rider)) throw new Error('the cull ate the surrogate rider');
+  }),
+
   report('the built line is real: rail, support and light stand in the world', async (s) => {
     // Probe the START column: it was placed by the same placeColumn as
     // every other column, its chunk is pinned by the test's own tickingarea

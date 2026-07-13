@@ -1890,6 +1890,7 @@ function buildLoop() {
 // simulation, less disk, less save-write churn.
 
 let corrLive = null;       // the currently-live corridor's area name (null = none)
+let corrFromX = null;      // the live corridor's western edge (the cull's bookmark)
 let corrBusy = false;      // a createTickingArea is still in flight
 let corrLoadedAt = 0;      // tickN when the last create resolved (debug)
 function tamgr() {
@@ -1942,10 +1943,16 @@ async function rollCorridor() {
     }
     await mgr.createTickingArea(next, opts);
     corrLoadedAt = tickN;
+    // Cull the slab this roll releases, while the OLD area still holds it
+    // loaded -- its last loaded moment (see cullPassedEntities).
+    if (corrFromX !== null && opts.from.x > corrFromX) {
+      cullPassedEntities(Math.max(corrFromX, opts.from.x - 128), opts.from.x, opts.from.z - 16, opts.to.z + 16);
+    }
     if (corrLive && corrLive !== next) {
       try { mgr.removeTickingArea(corrLive); } catch { /* already gone */ }
     }
     corrLive = next;
+    corrFromX = opts.from.x;
   } catch (e) {
     // Keep whatever corridor is live; the next roll retries. A half-created
     // area under the new name would block that retry -- clear it.
@@ -1964,6 +1971,36 @@ async function rollCorridor() {
 function clearCorridor() {
   try { tamgr()?.removeAllTickingAreas(); } catch { /* manager unavailable */ }
   corrLive = null;
+  corrFromX = null;
+}
+
+// The passed-entity cull -- the safe salvage of the retired trail wiper
+// (whose block-filling half both froze Java and crashed BDS): entities
+// only, no block work. Runs once per corridor roll over the slab of chunks
+// the roll releases, at its last loaded moment, so passed mobs, drops and
+// stands are neither saved into the unloaded chunks nor left for a revisit
+// to reload -- and mobs that chased the ride stop accumulating behind it.
+// Bedrock's own despawn rules already reap most hostiles this close to the
+// rider; this catches the persistent rest (villagers, golems, named
+// things, dropped items). Players are the only exclusion needed: every
+// ride entity (seat, cart, the surrogate rider on the seat) glides at
+// rigX = the corridor tail + CORR_BEHIND, a full slab ahead of anything
+// culled here, by construction. EntityQueryOptions has no box, so the
+// query is a covering sphere filtered down to the slab.
+function cullPassedEntities(x0, x1, z0, z1) {
+  if (x1 <= x0) return;
+  try {
+    const cx = (x0 + x1) / 2;
+    const cz = (z0 + z1) / 2;
+    const r = Math.sqrt(((x1 - x0) / 2 + 1) ** 2 + ((z1 - z0) / 2 + 1) ** 2 + 232 ** 2);
+    for (const e of dim.getEntities({ location: { x: cx, y: 100, z: cz }, maxDistance: r })) {
+      try {
+        if (e.typeId === 'minecraft:player') continue;
+        const p = e.location;
+        if (p.x >= x0 && p.x < x1 && p.z >= z0 && p.z <= z1) e.remove();
+      } catch { /* stale handle */ }
+    }
+  } catch { /* query raced an unload: the slab unloads regardless */ }
 }
 
 
