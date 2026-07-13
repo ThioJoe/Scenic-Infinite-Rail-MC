@@ -129,4 +129,65 @@ export default defineSuite('ride speed state machine', ({ test }) => {
     eq(await mc.score('.spdflt', 'ir'), 1, '.spdflt answers the sky default');
     await mc.setScore('.SKYMODE', 'ir', 0);
   });
+
+  // Raise-only ocean speed-up: the sprint must never SLOW the ride. speed_up
+  // lifts a slow rider up to the ocean speed, but keeps a faster rider's speed;
+  // speed_down carries a fast speed onto land, else restores the pre-ocean one.
+  test('ocean entry is RAISE-ONLY: a land speed above the ocean speed is kept, not lowered', async ({ mc, expected }) => {
+    const ocean = expected.get('.OCEANSPEED');   // 32
+    const fast = ocean + 8;                       // 40: the rider was already going faster than the ocean speed
+    await mc.setScore('.SKYMODE', 'ir', 0);
+    await mc.setScore('.fast', 'ir', 0);
+    await mc.setScore('.speed', 'ir', fast);
+    await mc.fn('speed_up');
+    eq(await mc.score('.ocnspd', 'ir'), fast, 'ocean cruise raised to the faster land speed, not dropped to .OCEANSPEED');
+    eq(await mc.score('.speed', 'ir'), fast, 'the pre-ocean land speed is preserved (untouched) for the return');
+    eq(await mc.score('.fast', 'ir'), 1, '.fast raised');
+    const rule = await speedRule(mc);
+    if (rule !== null) eq(rule, fast, 'gamerule kept the faster speed -- the ocean never slows you');
+  });
+
+  test('ocean entry raises a SLOW land speed up to the ocean speed', async ({ mc, expected }) => {
+    const ocean = expected.get('.OCEANSPEED');
+    const land = expected.get('.DEFAULTSPEED'); // 8: below the ocean speed
+    await mc.setScore('.SKYMODE', 'ir', 0);
+    await mc.setScore('.fast', 'ir', 0);
+    await mc.setScore('.speed', 'ir', land);
+    await mc.fn('speed_up');
+    eq(await mc.score('.ocnspd', 'ir'), ocean, 'ocean cruise raised to .OCEANSPEED');
+    eq(await mc.score('.speed', 'ir'), land, 'land speed untouched, held for the return');
+    const rule = await speedRule(mc);
+    if (rule !== null) eq(rule, ocean, 'gamerule got the ocean cruise');
+  });
+
+  test('return to land keeps a speed ABOVE the ocean speed (raise-only); Reset still returns to the default', async ({ mc, expected }) => {
+    const ocean = expected.get('.OCEANSPEED');
+    const fast = ocean + 8; // 40: came in fast, or sped up mid-sprint
+    await mc.setScore('.SKYMODE', 'ir', 0);
+    await mc.setScore('.fast', 'ir', 1);
+    await mc.setScore('.ocnspd', 'ir', fast);
+    await mc.setScore('.speed', 'ir', expected.get('.DEFAULTSPEED'));
+    await mc.fn('speed_down');
+    eq(await mc.score('.fast', 'ir'), 0, '.fast cleared');
+    eq(await mc.score('.speed', 'ir'), fast, 'the faster speed carries onto land -- never slowed on return');
+    const rule = await speedRule(mc);
+    if (rule !== null) eq(rule, fast, 'gamerule kept the faster speed');
+    // The "reset speed" is the config default on land, whatever speed the rider is at.
+    await mc.fn('speed_reset');
+    eq(await mc.score('.speed', 'ir'), expected.get('.DEFAULTSPEED'), 'Reset on land returns to the true default');
+  });
+
+  test('return to land restores the pre-ocean speed when the cruise was the ocean speed or below', async ({ mc, expected }) => {
+    const ocean = expected.get('.OCEANSPEED');
+    const preOcean = 6;
+    await mc.setScore('.SKYMODE', 'ir', 0);
+    await mc.setScore('.fast', 'ir', 1);
+    await mc.setScore('.ocnspd', 'ir', ocean);  // was cruising at the ocean speed
+    await mc.setScore('.speed', 'ir', preOcean); // the land speed before the sprint
+    await mc.fn('speed_down');
+    eq(await mc.score('.fast', 'ir'), 0, '.fast cleared');
+    eq(await mc.score('.speed', 'ir'), preOcean, 'restored the pre-ocean land speed');
+    const rule = await speedRule(mc);
+    if (rule !== null) eq(rule, preOcean, 'gamerule restored to the pre-ocean speed');
+  });
 });

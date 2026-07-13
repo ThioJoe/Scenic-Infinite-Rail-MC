@@ -684,11 +684,13 @@ function skySpeed() {
   return v >= 1 ? v : cfg('SKYSPEED');
 }
 
-// The ride's OCEAN cruise speed: the .ocnspd state score (adjusted by the
-// Speed items / the form's slider WHILE THE SPRINT IS ON -- in both
-// directions, the old max(.OCEANSPEED, landSpeed()) "the ocean never slows
-// the ride" rule is retired; seeded from config .OCEANSPEED by the shared
-// modes_init). Same unreadable-score fallback as the other two.
+// The ride's OCEAN cruise speed: the .ocnspd state score. On each ocean ENTRY
+// oceanCheck recomputes it RAISE-ONLY -- max(.OCEANSPEED, landSpeed()) -- so
+// the automatic speed-up never SLOWS a rider already faster than the ocean
+// speed; the Speed items / the form's slider still tune it in both directions
+// while the sprint is on (a tune sticks for that crossing). Seeded from config
+// .OCEANSPEED by the shared modes_init; same unreadable-score fallback as the
+// other two.
 function oceanSpeed() {
   const v = getScore('ocnspd', 0);
   return v >= 1 ? v : cfg('OCEANSPEED');
@@ -2105,16 +2107,25 @@ function oceanCheck() {
       dbg(`§bocean chunk - oceanRun=§f${S.oceanRun}§b/§f${cfg('OCEANCHUNKS')}§7  speed=§f${(S.paceSpeed * 20).toFixed(1)}`);
     }
     if (cfg('OCEANSPEED') >= 1 && S.oceanRun >= cfg('OCEANCHUNKS')) {
-      // speed_up: switch to the OCEAN cruise (.ocnspd -- adjustable state,
-      // default .OCEANSPEED; the Speed items tune it in both directions
-      // while the sprint is on -- tickPace re-asserts it every tick, so a
-      // mid-sprint change applies within a second). The debug line and
-      // flag flip only fire on the transition.
-      const cruise = oceanSpeed();
-      S.targetSpeed = cruise / 20;
-      if (!S.fast) dbg(`§bswitching to fast ocean mode, speed §f${cruise}`);
-      S.fast = true;
-      syncFast();
+      // speed_up (RAISE-ONLY -- mirrors Java's speed_up). The ocean speed-up
+      // must never SLOW the ride: on the ENTRY transition (!S.fast) the ocean
+      // cruise .ocnspd is set to the config ocean speed, then bumped up to the
+      // land speed .speed if that is higher -- max(.OCEANSPEED, .speed) -- so a
+      // rider already going faster than the ocean speed keeps their speed
+      // instead of being dropped to it. .speed is left untouched, holding the
+      // pre-ocean speed for the land return (speed_down) to restore, and a
+      // mid-sprint Reset still totals it to .DEFAULTSPEED.
+      if (!S.fast) {
+        const cruise = Math.max(cfg('OCEANSPEED'), landSpeed());
+        setScore('ocnspd', cruise); // the cruise the sprint re-asserts every tick
+        dbg(`§bentering ocean sprint, speed §f${cruise}`);
+        S.fast = true;
+        syncFast();
+      }
+      // Re-assert the cruise every tick: a mid-sprint Speed click / slider
+      // updated .ocnspd (the active cruise while .fast is 1), so oceanSpeed()
+      // carries the user's adjustment rather than snapping back.
+      S.targetSpeed = oceanSpeed() / 20;
     }
   } else {
     S.landRun += 1;
@@ -2123,11 +2134,18 @@ function oceanCheck() {
       dbg(`§eland chunk - landRun=§f${S.landRun}§e/§f${cfg('LANDCHUNKS')}§7  speed=§f${(S.paceSpeed * 20).toFixed(1)}`);
     }
     if (S.fast && S.landRun >= cfg('LANDCHUNKS')) {
-      // speed_down: the land cruising speed (.speed -- the config default
-      // unless adjusted with the Speed items), restored once on the
-      // transition back to land.
-      S.targetSpeed = landSpeed() / 20;
-      dbg(`§eslowing down over land, speed §f${landSpeed()}`);
+      // speed_down (RAISE-ONLY -- mirrors Java's speed_down). The cruise we
+      // were just doing is .ocnspd (oceanSpeed()):
+      //   - ABOVE the base ocean speed (came in fast, or sped up mid-sprint)
+      //     -> keep it on land, so .speed becomes it -- never slow a fast
+      //     rider on the way back;
+      //   - the ocean speed or below -> restore the pre-ocean land speed .speed.
+      // Reset then returns the land speed to the true default .DEFAULTSPEED.
+      const cur = oceanSpeed();
+      if (cur > cfg('OCEANSPEED')) setScore('speed', cur);
+      const land = landSpeed();
+      S.targetSpeed = land / 20;
+      dbg(`§ereturning to land, speed §f${land}`);
       S.fast = false;
       syncFast();
     }

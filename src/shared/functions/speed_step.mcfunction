@@ -5,10 +5,12 @@
 #   .speed  (ir) -- the LAND cruising speed (default .DEFAULTSPEED).
 #   .ocnspd (ir) -- the OCEAN cruise speed (default .OCEANSPEED), used while
 #                   the ocean sprint owns the ride (.fast 1). Adjustable in
-#                   BOTH directions -- the old max(.OCEANSPEED, .speed) rule
-#                   ("the ocean never slows the ride") is gone: the ocean has
-#                   its own speed now, and Speed - below the ocean default
-#                   works like anywhere else.
+#                   BOTH directions here -- Speed - can take it below the ocean
+#                   default mid-sprint. (The "ocean never slows the ride" rule
+#                   lives in ocean_check/speed_up now, as a raise-only entry:
+#                   .ocnspd = max(.OCEANSPEED, .speed) -- so the AUTOMATIC
+#                   speed-up never lowers a fast rider, while a manual Speed -
+#                   still can.)
 #   .skyspd (ir) -- the SKY cruising speed (default .SKYSPEED), used while
 #                   sky mode owns the ride (.SKYMODE 1).
 # All three are seeded from their config default by modes_init exactly like

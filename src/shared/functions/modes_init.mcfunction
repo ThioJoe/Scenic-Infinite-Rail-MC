@@ -92,11 +92,13 @@ execute if score .skyspd ir matches ..0 run scoreboard players operation .skyspd
 
 # The adjustable OCEAN cruise speed (.ocnspd -- what the ride cruises at
 # while the ocean sprint is on, .fast 1): same pattern again, seeded from
-# the config default .OCEANSPEED. The Speed items tune it -- in BOTH
-# directions -- while the sprint is active; the old max(.OCEANSPEED, .speed)
-# "the ocean never slows the ride" rule is retired in its favor. (With the
-# ocean speed-up disabled in config -- .OCEANSPEED 0 -- this seeds 0 and
-# re-seeds each load until the feature is enabled; it is never applied then.)
+# the config default .OCEANSPEED. This is only a sane starting value: on each
+# ocean ENTRY speed_up RECOMPUTES it raise-only -- max(.OCEANSPEED, .speed) --
+# so the ocean never SLOWS a rider already going faster than the ocean speed.
+# The Speed items still tune it in BOTH directions mid-sprint (a tune sticks
+# for that crossing; the next entry recomputes). (With the ocean speed-up
+# disabled in config -- .OCEANSPEED 0 -- this seeds 0 and re-seeds each load
+# until the feature is enabled; it is never applied then.)
 scoreboard players add .ocnspd ir 0
 execute if score .ocnspd ir matches ..0 run scoreboard players operation .ocnspd ir = .OCEANSPEED cfg_ride
 
