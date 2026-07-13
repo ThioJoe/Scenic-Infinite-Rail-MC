@@ -345,8 +345,8 @@ const CART_REST = 0.062;
 const HIDE_CARTYOFF = -5;
 
 // In-memory track history is trimmed behind the ride so an endless ride can't
-// grow memory forever (an improvement over Java's ever-growing storage list;
-// the camera only ever reads a few hundred columns around the rig).
+// grow memory forever (the camera only ever reads a few hundred columns
+// around the rig). Java's hist_trim bounds its storage list at the same 2048.
 const HIST_MAX = 2048;
 // How many trailing history entries are persisted for seamless world rejoins.
 const HIST_PERSIST = 1024;

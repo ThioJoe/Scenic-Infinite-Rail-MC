@@ -52,9 +52,13 @@ scoreboard players add .headX ir 1
 
 # --- 5. Record this column's rail height in the track history ---
 # One int per column (index = X - .trackBase); the camera reads this list to
-# fly a pre-smoothed path along the known profile (see cam_follow).
+# fly a pre-smoothed path along the known profile (see cam_follow). Bounded:
+# hist_trim drops the oldest column (advancing .trackBase with it) once the
+# list passes ~2048 entries, like Bedrock's HIST_MAX - the camera only ever
+# reads near the rig, and an unbounded list was pure world-save weight.
 data modify storage infinite_rail:track y append value 0
 execute store result storage infinite_rail:track y[-1] int 1 run scoreboard players get .railY ir
+function infinite_rail:hist_trim
 
 # --- 5b. Torch mode: maybe plant a torch on the terrain beside this column ---
 # (tri-state: 1 = always, 2 = auto -- place_torch's shared torch_auto gate
