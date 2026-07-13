@@ -130,15 +130,17 @@ Because of platform differences, the Java and Bedrock versions have visual diffe
 - **Bedrock Edition:** Requires 1.21.120 or newer; tested on 26.33
 
  ## **Java Edition Installation:**
- 1. During creation of a Single Player world, click the "More" tab, then the "Data Packs" button.
- 2. Drag and drop the downloaded `ScenicInfiniteRailMode-Java-*.zip` file onto the Minecraft window (no need to extract). Select "Yes" if it asks to confirm.
-     - In the "Available" list you should now see the newly added data pack 
- 3. Important: You must activate the data pack by hovering over its icon on the left, and clicking the "Play button" that appears while hovering.
+ 1. From the main menu, click "**Single Player**". Then "**Create New World**"
+ 2. Under the "**More**" tab, click the "**Data Packs**" button.
+ 3. Drag and drop the downloaded `ScenicInfiniteRailMode-Java-*.zip` file onto the Minecraft window (no need to extract).
+     - If it asks to confirm, select "Yes"
+     - Now, in the "Available" list you should now see the newly added data pack 
+ 5. **Important:** You must activate the data pack by **clicking the "Play button"** that appears while hovering its icon on the left.
      - The "ScenicInfiniteRailMode-Java" data pack should now show in the "Selected" list.
- 4. Click "Done".
-     - It may show a warning about experimental features. Click "Proceed".
- 5. Finish creating the world.
-     - You can name it whatever, and the default settings are fine.
+ 6. Click "**Done**".
+     - It may show a warning about experimental features. Click "**Proceed**".
+ 7. To finish creating the world, then click "**Create New World**"
+     - You can name it whatever, and the default settings are fine
 
 Note: The "Minecart Improvements" experiment is required for Java edition, but the datapack should automatically enable this for newly created worlds so you don't have to. On an existing world, if it's not enabled, it will not even appear in the list of available datapacks.
 
