@@ -13,3 +13,4 @@ dist_links/
 #Specific Files
 Make_Symlinks-Signed.ps1
 Place_Symlinks-Signed.ps1
+bump-version-Signed.ps1
