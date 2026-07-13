@@ -51,10 +51,12 @@ Basically the Minecraft equivalent of "[Slow TV](https://en.wikipedia.org/wiki/S
 # <img src=".github/assets/help-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/help-dark.svg#gh-dark-mode-only" width="28" align="center" /> How to Use
 
 ### **Starting the Ride:**
-The ride starts automatically for the first player in a new world. (It was designed and intended for single player worlds)
+- The ride starts automatically for the first player in a new world.
+- When re-joining a world, you will also automatically continue the ride
 
 > [!NOTE]
-> **Existing worlds won't auto-start.** Because the ride bulldozes a tunnel straight through everything in its path, kills entities the cart passes and leaves behind, and locks you into the seat, auto-start is only meant for a *fresh* world. If a world has already been played for a while (more than ~15 minutes), the ride will **not** start on its own — it just prints a warning. To run it there anyway, start it deliberately with `/function infinite_rail:start` (Java) or `/function infinite_rail/start` (Bedrock). You can change the age threshold, or disable this guard entirely, with the `.WORLDAGEWARN` setting in `config.mcfunction`.
+> **Existing worlds protection:** Because the ride bulldozes a tunnel straight through everything in its path, kills entities the cart leaves behind, and locks you into the seat, first-time auto-start only runs on a *fresh* world.
+> Upon running it in a world for the very first time, the datapack checks if the world is older than 15 minutes, and if so you'll need to manually start the ride via the command shown in the warning message.
 
 ## Hotbar Control Items
 
@@ -139,6 +141,8 @@ Because of platform differences, the Java and Bedrock versions have visual diffe
      - It may show a warning about experimental features. Click "Proceed".
  5. Finish creating the world.
      - You can name it whatever, and the default settings are fine.
+
+Note: The "Minecart Improvements" experiment is required for Java edition, but the datapack should automatically enable this for newly created worlds so you don't have to.
 
  ## **Bedrock Edition Installation:** 
   1. Close minecraft if it's already running _(important)_.
