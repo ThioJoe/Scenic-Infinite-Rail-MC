@@ -41,6 +41,13 @@ jobs:
         id: vcheck
         run: node tools/check-version.mjs --consistency
 
+      # Expose the manifest version (the source of truth) so the artifact names
+      # can carry it. Runs after the consistency gate, so the value is known to
+      # match every reference.
+      - name: Resolve pack version
+        id: ver
+        run: echo "version=$(node tools/check-version.mjs --print)" >> "$GITHUB_OUTPUT"
+
       # Lints the shared dual-dialect functions, assembles both packs from
       # src/shared + src/java + src/bedrock, validates every function
       # reference resolves, and writes the .zip / .mcpack files.
@@ -63,10 +70,14 @@ jobs:
         id: relcheck
         run: node tools/check-version.mjs --release
 
-      # Artifact names carry the run number so successive test builds are
-      # easy to tell apart (the number increments on failed runs too).
-      # The upload steps below run whenever the version-consistency gate
-      # passed and the job wasn't cancelled, so a simulation failure or an
+      # Artifact names are <name>_<version>-<run_number>, e.g.
+      # ScenicInfiniteRailMode-Bedrock_1.5.0-234: the manifest version sits
+      # between the pack name and the run number, so a release attachment
+      # (named <name>_<version>) is produced by simply chopping the
+      # -<run_number> off the downloaded artifact. The run number still makes
+      # successive test builds easy to tell apart (it increments on failed
+      # runs too). The upload steps below run whenever the version-consistency
+      # gate passed and the job wasn't cancelled, so a simulation failure or an
       # un-bumped-version failure still leaves a downloadable build for
       # testing -- the job still reports failure overall, but the artifacts
       # aren't withheld. A consistency failure is the one case that DOES
@@ -80,7 +91,7 @@ jobs:
         if: ${{ !cancelled() && steps.vcheck.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ScenicInfiniteRailMode-Java-${{ github.run_number }}
+          name: ScenicInfiniteRailMode-Java_${{ steps.ver.outputs.version }}-${{ github.run_number }}
           path: dist/java/Scenic_Infinite_Rail_Mode/
           if-no-files-found: error
 
@@ -90,7 +101,7 @@ jobs:
         if: ${{ !cancelled() && steps.vcheck.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ScenicInfiniteRailMode-Bedrock-${{ github.run_number }}
+          name: ScenicInfiniteRailMode-Bedrock_${{ steps.ver.outputs.version }}-${{ github.run_number }}
           path: dist/*.mcaddon
           if-no-files-found: error
 
@@ -101,6 +112,6 @@ jobs:
         if: ${{ !cancelled() && steps.vcheck.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ScenicInfiniteRailMode-Bedrock-Folder-${{ github.run_number }}
+          name: ScenicInfiniteRailMode-Bedrock-Folder_${{ steps.ver.outputs.version }}-${{ github.run_number }}
           path: dist/bedrock/
           if-no-files-found: error

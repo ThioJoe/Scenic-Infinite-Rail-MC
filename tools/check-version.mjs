@@ -21,6 +21,10 @@
 //        job reports failure so an un-bumped version can't ship unnoticed.
 //        No tags yet -> treated as the first release, passes.
 //
+//    node tools/check-version.mjs --print
+//        Prints just the source-of-truth version (no newline) to stdout, for
+//        scripting -- CI folds it into the artifact names.
+//
 //  build.mjs imports collectRefs()/findMismatches() so a local build catches
 //  version drift too. Zero dependencies.
 // =============================================================================
@@ -172,12 +176,18 @@ function runRelease() {
   process.exit(1);
 }
 
+// Print just the source-of-truth version (for scripting, e.g. artifact names).
+function runPrint() {
+  process.stdout.write(collectRefs().sot);
+}
+
 // Run only when invoked directly, not when imported by build.mjs.
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   if (process.argv.includes('--release')) runRelease();
   else if (process.argv.includes('--consistency')) runConsistency();
+  else if (process.argv.includes('--print')) runPrint();
   else {
-    console.error('Usage: node tools/check-version.mjs [--consistency | --release]');
+    console.error('Usage: node tools/check-version.mjs [--consistency | --release | --print]');
     process.exit(2);
   }
 }

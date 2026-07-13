@@ -8,7 +8,7 @@ before anyone has to download a build and ride it by hand.
 
 ```
 node tests/run.mjs                                   # Java: build from src/ and test that (~5 min)
-node tests/run.mjs --pack ScenicInfiniteRailMode-Java-vX.zip   # Java: test a CI artifact
+node tests/run.mjs --pack ScenicInfiniteRailMode-Java_X.zip   # Java: test a CI artifact
 node tests/run.mjs --pack dist/java/Scenic_Infinite_Rail_Mode  # Java: test a pack folder
 node tests/run.mjs --filter torch                    # only matching suites/tests
 node tests/run.mjs --list                            # show every test, run nothing

@@ -8,13 +8,14 @@
 //    src/java/** -> Java Edition data pack
 //    src/bedrock/** -> Bedrock Edition behavior pack
 //
-//  Outputs (all under dist/):
+//  Outputs (all under dist/). The .zip / .mcaddon names carry the version and,
+//  in CI (GITHUB_RUN_NUMBER set), a -<run_number> suffix: <pack>_<version>[-N].
 //    dist/java/Scenic_Infinite_Rail_Mode/           ready-to-drop datapack folder
-//    dist/ScenicInfiniteRailMode-Java-v<version>.zip  drag-and-drop datapack zip
+//    dist/ScenicInfiniteRailMode-Java_<version>.zip  drag-and-drop datapack zip
 //    dist/bedrock/Scenic_Infinite_Rail_Mode_BP/     behavior pack folder
 //    dist/bedrock/Scenic_Infinite_Rail_Mode_RP/     resource pack folder (the
 //                                                   invisible seat entity)
-//    dist/ScenicInfiniteRailMode-Bedrock-v<version>.mcaddon  double-click-to-
+//    dist/ScenicInfiniteRailMode-Bedrock_<version>.mcaddon  double-click-to-
 //                                                   import (BP+RP; the BP
 //                                                   manifest depends on the RP,
 //                                                   so activating one pulls both)
@@ -341,8 +342,14 @@ function zipDirectory(srcDir, outFile) {
   writeFileSync(outFile, Buffer.concat([...chunks, cdBuf, end]));
 }
 
-const javaZip = join(DIST, `ScenicInfiniteRailMode-Java-v${VERSION}.zip`);
-const bedrockAddon = join(DIST, `ScenicInfiniteRailMode-Bedrock-v${VERSION}.mcaddon`);
+// Output names are <pack>_<version>, with -<run_number> appended in CI (where
+// GITHUB_RUN_NUMBER is set) to match the uploaded artifact names -- so a
+// release attachment (<pack>_<version>) is the file with the -<run_number>
+// chopped off. Locally (no run number) the name is just <pack>_<version>.
+const runNumber = (process.env.GITHUB_RUN_NUMBER ?? '').trim();
+const stamp = runNumber ? `${VERSION}-${runNumber}` : VERSION;
+const javaZip = join(DIST, `ScenicInfiniteRailMode-Java_${stamp}.zip`);
+const bedrockAddon = join(DIST, `ScenicInfiniteRailMode-Bedrock_${stamp}.mcaddon`);
 zipDirectory(JAVA_OUT, javaZip);                    // pack.mcmeta at zip root
 zipDirectory(join(DIST, 'bedrock'), bedrockAddon);  // BP + RP folders at zip root
 
