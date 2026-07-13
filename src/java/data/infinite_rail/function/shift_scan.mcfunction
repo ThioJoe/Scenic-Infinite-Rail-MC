@@ -13,13 +13,16 @@
 #      down there instead of up on a clifftop bridge. Ground still
 #      falling away fails this (a gentle downhill face is NOT a bottom,
 #      and must keep its gap-paced swoops).
-# Probes every 2 blocks (odd offsets, paired mins -- near_scan's spike
-# eraser) out to the descent depth + .SHIFT_REQ_BOTTOM, capped at 96 (must stay
-# inside the generated corridor: .TERRAIN_GENAHEAD, default 192, covers it).
+# Reads every 2 blocks (odd offsets, paired mins -- near_scan's spike
+# eraser) out to the descent depth + .SHIFT_REQ_BOTTOM, capped at 96 (must
+# stay inside the generated corridor: .TERRAIN_GENAHEAD, default 192,
+# covers it). The heights come from the ROLLING SURFACE CACHE (surf_roll --
+# the cache always reaches at least 98, covering this scan's cap), so a
+# live shift question costs a cache walk, not a probe volley.
 # Output: .sver = the verified horizon in blocks, written EVERY column
 # (0 = not verified / not applicable / feature off). consider_start jumps
 # the gap when .sver covers descent + stretch. Must run positioned at the
-# head marker, like near_scan.
+# head marker, like near_scan (the lazy fill's probe offset is relative).
 scoreboard players set .sver ir 0
 # Gates: feature on; running flat; a descent of at least .MIN_CHANGE wanted.
 execute if score .SHIFT_REQ_BOTTOM cfg_ride matches ..0 run return 0
@@ -27,14 +30,14 @@ execute unless score .slope ir matches 0 run return 0
 scoreboard players operation .sD ir = .railY ir
 scoreboard players operation .sD ir -= .target ir
 execute if score .sD ir < .MIN_CHANGE cfg_terrain run return 0
-# Skip the probes when the gap cannot be what is blocking (the flat run
+# Skip the reads when the gap cannot be what is blocking (the flat run
 # already exceeds every gap -- the descent starts normally anyway).
 scoreboard players operation .smax ir = .SAMEGAP cfg_terrain
 scoreboard players operation .smax ir > .TURNGAP_TOP cfg_terrain
 scoreboard players operation .smax ir > .TURNGAP_BOTTOM cfg_terrain
 execute if score .flat ir >= .smax ir run return 0
 # Horizon: the whole descent plus the required landing stretch. Beyond the
-# 96 cap the shift can never verify, so don't burn the probes.
+# 96 cap the shift can never verify, so don't burn the walk.
 scoreboard players operation .sH ir = .sD ir
 scoreboard players operation .sH ir += .SHIFT_REQ_BOTTOM cfg_ride
 execute if score .sH ir matches 97.. run return 0
@@ -48,4 +51,6 @@ scoreboard players operation .sband ir -= .MIN_CHANGE cfg_terrain
 scoreboard players add .sH ir 1
 scoreboard players set .sp ir -32000
 scoreboard players set .sk ir 1
-execute positioned ~1 ~ ~ run function infinite_rail:shift_step
+# A fresh scratch copy of the cache for this walk to consume.
+data modify storage infinite_rail:surf w set from storage infinite_rail:surf c
+function infinite_rail:shift_step

@@ -97,6 +97,12 @@ scoreboard players operation .avg ir -= .HOVER cfg_terrain
 scoreboard players operation .nextLoad ir = .headX ir
 scoreboard players add .nextLoad ir 16
 
+# --- Surface cache: forget everything (surf_roll rebuilds it at the new
+# anchor on the first column; its entries then fill lazily, one probe per
+# never-read X -- see surf_roll) ---
+data modify storage infinite_rail:surf c set value []
+scoreboard players reset .surfBase ir
+
 # --- Track history: one rail-Y int per column, for the camera path ---
 data modify storage infinite_rail:track y set value []
 scoreboard players operation .trackBase ir = .headX ir
