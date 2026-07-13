@@ -109,6 +109,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // (world.tickingAreaManager -- it loads AND generates its chunks, so the
 // ride is self-sufficient headless).
 const START_X = 8; const START_Z = 8;
+// begin() snaps the centerline to Z ≡ 14 (mod 16): the track for a start at
+// z=8 sits at z=14, not under the surrogate.
+const LINE_Z = START_Z + 14 - (((START_Z % 16) + 16) % 16);
 // Only genuine script errors count while the ride runs: the console probes
 // themselves (testfor misses, testforblock mismatches) print ERROR lines.
 const scriptOnly = (lines) => lines.filter((l) => /\[Scripting\]/i.test(l));
@@ -408,13 +411,13 @@ const tests = [
     if (groundY === null) throw new Error('no groundY from the start test (querytarget failed?)');
     let atY = null;
     for (let y = groundY + 30; y >= groundY - 6; y--) {
-      const r = await s.cmd(`testforblock ${START_X} ${y} ${START_Z} golden_rail`, { quietMs: 200 });
+      const r = await s.cmd(`testforblock ${START_X} ${y} ${LINE_Z} golden_rail`, { quietMs: 200 });
       if (/Successfully found/i.test(r)) { atY = y; break; }
     }
     if (atY === null) throw new Error(`no golden_rail at the start column within Y ${groundY - 6}..${groundY + 30}`);
-    const sup = await s.cmd(`testforblock ${START_X} ${atY - 1} ${START_Z} infinite_rail:support`);
+    const sup = await s.cmd(`testforblock ${START_X} ${atY - 1} ${LINE_Z} infinite_rail:support`);
     if (!/Successfully found/i.test(sup)) throw new Error(`no support block under the rail at Y ${atY - 1}: ${sup}`);
-    const light = await s.cmd(`testforblock ${START_X} ${atY + 3} ${START_Z} light_block_11`);
+    const light = await s.cmd(`testforblock ${START_X} ${atY + 3} ${LINE_Z} light_block_11`);
     if (!/Successfully found/i.test(light)) throw new Error(`no track light above the rail at Y ${atY + 3}: ${light}`);
   }),
 

@@ -50,11 +50,23 @@ execute if score .DEBUGMODE ir matches 1 run tellraw @a [{"text":"[SR Debug] ","
 # Sky mode, if it was left on, overrides the default with its cruise speed.
 execute if score .SKYMODE ir matches 1 run function infinite_rail:sky_speed
 
-# --- Anchor the line at the player's position ---
+# --- Anchor the line at the player's position, snapped to Z ≡ 14 (mod 16) ---
+# The snap is chunk math: with the centerline at row offset 14, the rail
+# strip (z-1..z+1, offsets 13..15) fits in ONE chunk row -- the whole
+# non-torch forceload corridor is a single row -- and the ±.TORCHRANGE (30)
+# torch band spans exactly four rows. The line lands at most 14 blocks from
+# where the starter stood; the lift-onto-the-line tp below follows the head.
 summon minecraft:marker ~0.5 0.0 ~0.5 {Tags:["ir_head"]}
 summon minecraft:marker ~0.5 0.0 ~0.5 {Tags:["ir_probe"]}
-forceload add ~-16 ~-8 ~ ~8
-function infinite_rail:forceload_here
+execute store result score .cz ir run data get entity @e[type=marker,tag=ir_head,limit=1] Pos[2]
+scoreboard players operation .czd ir = .cz ir
+scoreboard players operation .czd ir %= .C16 ir
+scoreboard players set .czt ir 14
+scoreboard players operation .czt ir -= .czd ir
+execute store result storage infinite_rail:anchor dz int 1 run scoreboard players get .czt ir
+function infinite_rail:anchor_z with storage infinite_rail:anchor
+execute at @e[type=marker,tag=ir_head,limit=1] run forceload add ~-16 ~-1 ~ ~1
+execute at @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:forceload_here
 
 # --- Initial rail elevation = terrain surface here + hover altitude ---
 # probe_surface = heightmap snap + the not-terrain dig-down, so starting the

@@ -14,6 +14,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export const SURROGATE_TAG = 'ir_test_rider';
 
+/**
+ * The Z the centerline snaps to for a ride started at block z: begin
+ * anchors the line at Z ≡ 14 (mod 16), the chunk-tightest corridor (the
+ * rail strip z-1..z+1 fills row offsets 13..15 of a single chunk row).
+ */
+export function lineZ(z = 0) {
+  const b = Math.floor(z);
+  return b + 14 - (((b % 16) + 16) % 16);
+}
+/** The line for the default surrogate spot (z 0.5 -> block 0 -> line 14). */
+export const LINE_Z = lineZ(0);
+
 /** Place the surrogate rider at (x, z), on loaded ground. */
 export async function placeSurrogate(mc, { x = 0.5, z = 0.5 } = {}) {
   await mc.cmd(`kill @e[type=armor_stand,tag=${SURROGATE_TAG}]`);

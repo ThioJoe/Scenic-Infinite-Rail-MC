@@ -15,7 +15,7 @@
 // centerline.
 
 import { defineSuite, eq, ok, between } from '../lib/harness.mjs';
-import { startRide, stopRide } from '../lib/ride.mjs';
+import { startRide, stopRide, lineZ } from '../lib/ride.mjs';
 
 const NIGHT_START = 12542;
 const NIGHT_END = 23459;
@@ -40,7 +40,8 @@ async function rideAndCountTorches(mc, z) {
   const yMax = Math.min(319, Math.max(...ys) + 16);
   await stopRide(mc); // clears the pack's forceloads; we manage our own below
   const [x1, x2] = [trackBase - 2, headX + 2];
-  const [z1, z2] = [Math.floor(z) - 7, Math.floor(z) + 7];
+  // The line snaps to Z ≡ 14 mod 16 -- scan around where the track IS.
+  const [z1, z2] = [lineZ(z) - 7, lineZ(z) + 7];
   await mc.loadRegion(x1, z1, x2, z2, { settleMs: 1500 });
   const torches = await mc.countAndClearBlocks(x1, yMin, z1, x2, yMax, z2, 'minecraft:torch');
   const pickles = await mc.countAndClearBlocks(x1, yMin, z1, x2, yMax, z2, 'minecraft:sea_pickle');

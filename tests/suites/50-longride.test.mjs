@@ -4,7 +4,7 @@
 // the rig keeps flying, nothing stalls and nothing errors.
 
 import { defineSuite, eq, ok, between, closeTo } from '../lib/harness.mjs';
-import { startRide, summonRig, checkColumn, stopRide } from '../lib/ride.mjs';
+import { startRide, summonRig, checkColumn, stopRide, LINE_Z } from '../lib/ride.mjs';
 
 const SPRINT_TICKS = 2400; // two minutes of game time
 
@@ -65,8 +65,8 @@ export default defineSuite('long ride endurance', ({ test }) => {
       const x = base + i;
       const y = await mc.trackY(i);
       const prevY = i > 0 ? await mc.trackY(i - 1) : y;
-      await mc.loadRegion(x - 1, -2, x + 1, 2, { settleMs: 900 });
-      const col = await checkColumn(mc, x, y, 0, prevY);
+      await mc.loadRegion(x - 1, LINE_Z - 2, x + 1, LINE_Z + 2, { settleMs: 900 });
+      const col = await checkColumn(mc, x, y, LINE_Z, prevY);
       if (col.rail !== 'match' || col.support !== 'match' || col.light !== 'match') {
         bad.push(`x=${x} y=${y}: rail=${col.rail} support=${col.support} light=${col.light}`);
       }

@@ -364,7 +364,7 @@ const CONFIG_DEFAULTS = {
   UPGRACE: 20, DOWNLOOK_AHEAD: 250, PLOW_GRACE_UP: 1, PLOW_GRACE_DOWN: 1,
   SHIFT_REQ_BOTTOM: 30, SAMPLE_WINDOW: 75, SAMPLE_BLOCK_INTERVAL: 1,
   PACE_CART_BEHIND: 224, TERRAIN_GENAHEAD: 192, BUILD_PER_TICK: 15, DEBUGMODE: 0,
-  SKYY: 120, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 32, SEAPICKLE: 4,
+  SKYY: 120, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 30, SEAPICKLE: 4,
   CARTSOUND: 0, MOBAGGRO: 0, NOSTORMS: 0,
 };
 
@@ -1894,10 +1894,14 @@ function tamgr() {
 }
 
 function corridorOptions() {
-  // Width: Java's forceload parity -- ±8 blocks (±1 chunk) normally, the
-  // clamped .TORCHRANGE while torch mode is on or auto.
-  let w = 8;
-  if (torchMode() >= 1) w = Math.min(48, Math.max(8, cfg('TORCHRANGE')));
+  // Width: the MINIMUM that covers what the builder touches. The centerline
+  // is anchored at Z ≡ 14 (mod 16) by begin(), so ±1 block (the rail strip
+  // z-1..z+1, offsets 13..15) stays inside a single chunk row -- the whole
+  // non-torch corridor is one row of chunks. While torch mode is on or auto
+  // the width grows to the clamped .TORCHRANGE (default 30: with the
+  // anchored centerline the band [z-30, z+30] spans exactly four rows).
+  let w = 1;
+  if (torchMode() >= 1) w = Math.min(48, Math.max(2, cfg('TORCHRANGE')));
   const rigX = Math.floor(S.paceX + camAhead());
   const fromX = rigX - CORR_BEHIND;
   // Ahead: Java's .TERRAIN_GENAHEAD semantics (generate well past the
@@ -2627,7 +2631,14 @@ function begin(rider) {
   runCmd(`function ${NS}/setup_world`);
 
   const startX = Math.floor(rider.location.x);
-  S.centerZ = Math.floor(rider.location.z);
+  // The centerline snaps to Z ≡ 14 (mod 16) -- the chunk-tightest anchor:
+  // the rail strip (z-1..z+1) sits at the top three offsets of ONE chunk
+  // row, and the ±30 torch band spans exactly four rows (see
+  // corridorOptions and the .TORCHRANGE config comment). The snap shifts
+  // the line at most 14 blocks from where the starter stood; the launch
+  // teleports them onto it anyway.
+  const rawZ = Math.floor(rider.location.z);
+  S.centerZ = rawZ + 14 - (((rawZ % 16) + 16) % 16);
   S.headX = startX;
   S.nextLoad = startX + 16;
   surfMemo.clear();

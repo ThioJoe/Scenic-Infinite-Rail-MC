@@ -1,10 +1,14 @@
 # Computes the forceload macro's arguments and runs it at the current
 # position (the head marker for roll_chunks, the starting player for begin):
 #   gen = .TERRAIN_GENAHEAD -- how far ahead terrain is force-generated
-#   w   = the corridor's Z half-width: 8 (+-1 chunk) normally, raised to
-#         .TORCHRANGE (capped at 48) while torch mode is on OR auto, so
-#         randomly thrown torches always land in loaded, generated chunks
-#         instead of silently failing to place past the standard band.
+#   w   = the corridor's Z half-width: 1 normally -- the centerline is
+#         anchored at Z ≡ 14 (mod 16) by begin, so the rail strip
+#         (z-1..z+1 = row offsets 13..15) keeps the whole corridor inside
+#         a SINGLE chunk row -- raised to .TORCHRANGE (capped at 48;
+#         default 30 = exactly four rows under the anchor) while torch
+#         mode is on OR auto, so randomly thrown torches always land in
+#         loaded, generated chunks instead of silently failing to place
+#         past the standard band.
 #
 # DELIBERATELY CLOCK-BLIND: the width keys off the .TORCHMODE score alone,
 # NOT off torch_auto's live is-it-night answer. An earlier revision fetched
@@ -18,7 +22,7 @@
 # cheap insurance by comparison; the clock read now lives quarantined in
 # time_now.mcfunction, called only by place_torch.
 execute store result storage infinite_rail:args gen int 1 run scoreboard players get .TERRAIN_GENAHEAD cfg_ride
-scoreboard players set .fw ir 8
+scoreboard players set .fw ir 1
 execute if score .TORCHMODE ir matches 1.. if score .TORCHRANGE cfg_ride > .fw ir run scoreboard players operation .fw ir = .TORCHRANGE cfg_ride
 execute if score .fw ir matches 49.. run scoreboard players set .fw ir 48
 execute store result storage infinite_rail:args w int 1 run scoreboard players get .fw ir

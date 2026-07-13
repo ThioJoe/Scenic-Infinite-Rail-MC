@@ -491,12 +491,15 @@ scoreboard players set .TORCHODDS cfg_ride 35
 
 # Torch mode: how far (in blocks) a torch may land from the track's
 # centerline. Each torch rolls a random distance from 2 up to this, on a
-# random side. The floor of 2 keeps torches out of the carved bore. On Java,
-# values above 8 automatically widen the rolling forceload corridor so the
-# whole torch band stays loaded and generated (a few more chunks in memory
-# while torches are actually being planted -- in auto mode that means only
-# at night); both editions cap the effective value at 48.
-scoreboard players set .TORCHRANGE cfg_ride 32
+# random side. The floor of 2 keeps torches out of the carved bore. While
+# torch mode is on or auto, both editions widen their rolling loaded
+# corridor to this value so the whole torch band stays loaded and generated
+# (a few more chunks in memory while torches are actually being planted);
+# both cap the effective value at 48. The default of 30 is chunk-math
+# deliberate: the track's centerline is anchored at Z ≡ 14 (mod 16), so the
+# ±30 torch band spans EXACTLY four chunk rows -- 31 or 32 would tick and
+# generate a fifth row for two more blocks of throw.
+scoreboard players set .TORCHRANGE cfg_ride 30
 
 # Torch mode: where a torch would land ON WATER, plant a sea pickle on the
 # sea/lake/river bed instead (a torch can't stand on water). This is the

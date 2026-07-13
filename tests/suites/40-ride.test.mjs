@@ -5,7 +5,7 @@
 // plus the camera rig gliding the recorded profile.
 
 import { defineSuite, eq, ok, between, closeTo, includes } from '../lib/harness.mjs';
-import { placeSurrogate, beginRide, awaitLaunched, summonRig, checkColumn, SURROGATE_TAG } from '../lib/ride.mjs';
+import { placeSurrogate, beginRide, awaitLaunched, summonRig, checkColumn, SURROGATE_TAG, LINE_Z } from '../lib/ride.mjs';
 
 export default defineSuite('ride bootstrap & build pipeline', ({ test }) => {
   test('begin seeds the launch (frozen-tick inspection)', async ({ mc, state }) => {
@@ -73,7 +73,7 @@ export default defineSuite('ride bootstrap & build pipeline', ({ test }) => {
   test('physical columns match the history (rail, support, light)', { timeout: 240000 }, async ({ mc, state }) => {
     const len = await mc.trackLen();
     const base = await mc.score('.trackBase', 'ir');
-    const z = 0; // surrogate anchors at z=0.5 -> block z 0
+    const z = LINE_Z; // begin snaps the centerline to Z ≡ 14 mod 16
     await mc.loadRegion(base - 1, z - 2, base + len + 1, z + 2, { settleMs: 1500 });
     const bad = [];
     const samples = 14;

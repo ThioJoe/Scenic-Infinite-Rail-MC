@@ -11,7 +11,7 @@
 // asserts the profile stays at ground level straight through both.
 
 import { defineSuite, ok } from '../lib/harness.mjs';
-import { startRide, stopRide } from '../lib/ride.mjs';
+import { startRide, stopRide, LINE_Z } from '../lib/ride.mjs';
 
 export default defineSuite('vegetation & structures invisible to slope logic', ({ test }) => {
   test('tall log + planks walls ahead do not make the line climb', { timeout: 300000 }, async ({ mc, note }) => {
@@ -27,14 +27,14 @@ export default defineSuite('vegetation & structures invisible to slope logic', (
       // .SAMPLE_WINDOW past the head), so every column through the walls is
       // decided with them already standing.
       wallX = headX + 96;
-      await mc.loadRegion(wallX - 8, -8, wallX + 60, 8, { settleMs: 1200 });
+      await mc.loadRegion(wallX - 8, LINE_Z - 8, wallX + 60, LINE_Z + 8, { settleMs: 1200 });
       // Two solid barriers: 8 columns deep, full track width, ~22 blocks
       // above the rail line (embedded a few blocks down so they are seated
       // on the ground whatever the local surface is). jungle_wood is in
       // #minecraft:logs -> #infinite_rail:keep; oak_planks is in
       // #minecraft:planks -- both nested by #infinite_rail:not_terrain.
-      await mc.cmd(`fill ${wallX} ${railY - 4} -4 ${wallX + 7} ${railY + 22} 4 minecraft:jungle_wood`);
-      await mc.cmd(`fill ${wallX + 36} ${railY - 4} -4 ${wallX + 43} ${railY + 22} 4 minecraft:oak_planks`);
+      await mc.cmd(`fill ${wallX} ${railY - 4} ${LINE_Z - 4} ${wallX + 7} ${railY + 22} ${LINE_Z + 4} minecraft:jungle_wood`);
+      await mc.cmd(`fill ${wallX + 36} ${railY - 4} ${LINE_Z - 4} ${wallX + 43} ${railY + 22} ${LINE_Z + 4} minecraft:oak_planks`);
     } finally {
       await mc.unfreeze();
     }

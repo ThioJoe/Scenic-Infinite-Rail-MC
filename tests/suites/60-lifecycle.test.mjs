@@ -3,7 +3,7 @@
 // stopped world staying stopped.
 
 import { defineSuite, eq, ok, includes } from '../lib/harness.mjs';
-import { startRide, stopRide, placeSurrogate, beginRide, awaitLaunched, SURROGATE_TAG } from '../lib/ride.mjs';
+import { startRide, stopRide, placeSurrogate, beginRide, awaitLaunched, SURROGATE_TAG, LINE_Z } from '../lib/ride.mjs';
 
 export default defineSuite('lifecycle: reload / stop / restart', ({ test }) => {
   test('/reload mid-ride keeps state, refreshes config, ride keeps building', { timeout: 300000 }, async ({ mc, expected, state, note }) => {
@@ -58,9 +58,9 @@ export default defineSuite('lifecycle: reload / stop / restart', ({ test }) => {
 
   test('built track physically survives the stop', async ({ mc, state }) => {
     const { x, y } = state.keptColumn;
-    await mc.loadRegion(x - 1, -2, x + 1, 2, { settleMs: 1000 });
-    eq(await mc.blockIs(x, y, 0, 'minecraft:powered_rail'), 'match', `rail at ${x},${y},0 left in the world`);
-    await mc.unloadRegion(x - 1, -2, x + 1, 2);
+    await mc.loadRegion(x - 1, LINE_Z - 2, x + 1, LINE_Z + 2, { settleMs: 1000 });
+    eq(await mc.blockIs(x, y, LINE_Z, 'minecraft:powered_rail'), 'match', `rail at ${x},${y},${LINE_Z} left in the world`);
+    await mc.unloadRegion(x - 1, LINE_Z - 2, x + 1, LINE_Z + 2);
   });
 
   test('a stopped world stays stopped across /reload', async ({ mc }) => {
