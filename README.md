@@ -140,7 +140,7 @@ Because of platform differences, the Java and Bedrock versions have visual diffe
  5. Finish creating the world.
      - You can name it whatever, and the default settings are fine.
 
-Note: The "Minecart Improvements" experiment is required for Java edition, but the datapack should automatically enable this for newly created worlds so you don't have to.
+Note: The "Minecart Improvements" experiment is required for Java edition, but the datapack should automatically enable this for newly created worlds so you don't have to. On an existing world, if it's not enabled, it will not even appear in the list of available datapacks.
 
  ## **Bedrock Edition Installation:** 
   1. Close minecraft if it's already running _(important)_.
