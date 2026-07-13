@@ -247,6 +247,10 @@ const PINNED = [
   { slot: 7, type: 'minecraft:book', name: TIPS_NAME, lore: ['§7Recommended settings', '§7for the best ride'] },
   { slot: 8, type: 'minecraft:smithing_table', name: DEBUG_NAME, lore: ['§7Use to open the', '§7debug menu'] },
 ];
+// Slot -> pinned def, so the per-tick inventory keeper indexes instead of
+// scanning PINNED per slot.
+const PINNED_BY_SLOT = [];
+for (const d of PINNED) PINNED_BY_SLOT[d.slot] = d;
 
 // Which id a def actually pins: the custom item normally, the vanilla
 // fallback if THAT custom id doesn't resolve on this engine. Probed PER ID
@@ -513,26 +517,51 @@ function reportError(where, e) {
 
 // --- Small helpers -----------------------------------------------------------
 
+// Objective handles are memoized: the tick loop reads dozens of scores per
+// tick (config knobs, mode flags, brain answers), and each read used to pay
+// a world.scoreboard.getObjective() bridge call before the actual getScore.
+// A handle only ever goes stale if something outside the pack removes the
+// objective (/scoreboard objectives remove); the readers below drop the
+// memo and refetch once on any throw, so even that heals on the next call.
+const objMemo = new Map(); // objective id -> handle
 function objective(id = OBJ) {
-  return world.scoreboard.getObjective(id)
-    ?? world.scoreboard.addObjective(id, OBJ_DISPLAY[id] ?? id);
+  let o = objMemo.get(id);
+  if (!o) {
+    o = world.scoreboard.getObjective(id)
+      ?? world.scoreboard.addObjective(id, OBJ_DISPLAY[id] ?? id);
+    objMemo.set(id, o);
+  }
+  return o;
 }
 
 function getScore(name, fallback, obj = OBJ) {
   // getScore is documented to throw; on some versions it throws for fake
   // players that have never been registered (rather than returning
   // undefined), so an unguarded read of a not-yet-set score can kill the
-  // caller. Treat any throw exactly like "no score yet".
+  // caller. Treat any throw exactly like "no score yet" -- after one retry
+  // on a fresh objective handle, in case the memoized one went stale.
   try {
     const v = objective(obj).getScore(P + name);
     return v === undefined ? fallback : v;
   } catch {
-    return fallback;
+    objMemo.delete(obj);
+    try {
+      const v = objective(obj).getScore(P + name);
+      return v === undefined ? fallback : v;
+    } catch {
+      return fallback;
+    }
   }
 }
 
 function setScore(name, value, obj = OBJ) {
-  objective(obj).setScore(P + name, value | 0);
+  try {
+    objective(obj).setScore(P + name, value | 0);
+  } catch (e) {
+    // stale memoized handle (objective removed externally): refetch once
+    objMemo.delete(obj);
+    objective(obj).setScore(P + name, value | 0);
+  }
 }
 
 function cfg(name) {
@@ -1154,13 +1183,33 @@ function tickDiagSidebar() {
 // editions' test suites ride) -- and a non-player rider is matched by entity
 // id instead (undefined while its chunk is unloaded, exactly like an offline
 // player, so the same freeze rule covers both).
+// Memoized per tick: the tick driver, keepers, camMove, tickSound and the
+// diag sidebar each ask for the rider -- one player-list scan a tick is
+// plenty. Keyed on the identity too, so a begin()/stop() between ticks
+// (scriptevent handlers run outside the tick loop) can never serve a stale
+// rider; a handle that went invalid mid-tick re-resolves on the spot.
+let riderMemoAt = -1;
+let riderMemoKey = '';
+let riderMemo;
 function findRider() {
-  if (S.riderName) return world.getAllPlayers().find((p) => p.name === S.riderName);
-  if (!S.riderId) return undefined;
-  try {
-    const e = world.getEntity(S.riderId);
-    return e?.isValid ? e : undefined;
-  } catch { return undefined; }
+  const key = `${S.riderName}|${S.riderId}`;
+  if (riderMemoAt === tickN && riderMemoKey === key) {
+    if (riderMemo === undefined) return undefined;
+    try { if (riderMemo.isValid) return riderMemo; } catch { /* re-resolve */ }
+  }
+  let r;
+  if (S.riderName) {
+    r = world.getAllPlayers().find((p) => p.name === S.riderName);
+  } else if (S.riderId) {
+    try {
+      const e = world.getEntity(S.riderId);
+      r = e?.isValid ? e : undefined;
+    } catch { r = undefined; }
+  }
+  riderMemoAt = tickN;
+  riderMemoKey = key;
+  riderMemo = r;
+  return r;
 }
 
 // Find the one live entity wearing our tag, REMOVING any duplicates: rejoin
@@ -1187,13 +1236,41 @@ function findTagged(type, tag, preferId, preferType) {
   return keep;
 }
 
+// Fast path for the per-tick rig lookups: a direct get-by-id (plus a tag
+// check, so a stale id can never impersonate a rig piece) instead of the
+// full tag-filtered world entity scan. The findTagged scan still runs on
+// any fast-path miss AND at least once a second per piece -- it is also the
+// duplicate sweeper, and duplicates only ever appear in rejoin races, so a
+// stray copy lingers at most ~1 s instead of one tick. Net: two world
+// entity scans per tick become two id lookups, ~19 ticks out of 20.
+const RIG_SCAN_EVERY = 20;
+let cartScanAt = -1e9;
+let seatScanAt = -1e9;
+function fastTagged(id, tag) {
+  if (!id) return undefined;
+  try {
+    const e = world.getEntity(id);
+    return e?.isValid && e.hasTag(tag) ? e : undefined;
+  } catch { return undefined; }
+}
+
 function findCart() {
+  if (tickN - cartScanAt < RIG_SCAN_EVERY) {
+    const fast = fastTagged(S.cartId, TAG_RIDE);
+    if (fast) return fast;
+  }
+  cartScanAt = tickN;
   const cart = findTagged(null, TAG_RIDE, S.cartId, CART_TYPE);
   if (cart) S.cartId = cart.id;
   return cart;
 }
 
 function findSeat() {
+  if (tickN - seatScanAt < RIG_SCAN_EVERY) {
+    const fast = fastTagged(S.seatId, TAG_SEAT);
+    if (fast) return fast;
+  }
+  seatScanAt = tickN;
   const seat = findTagged(SEAT_TYPE, TAG_SEAT, S.seatId);
   if (seat) S.seatId = seat.id;
   return seat;
@@ -2479,6 +2556,10 @@ function spawnCartProp(pos) {
 // Returns the seat (the mover), or throws if the chunk isn't ready. Any
 // prior rig pieces are removed first so this can never duplicate.
 function spawnRig(pos) {
+  // Force the full findTagged scans (not the by-id fast path): this is the
+  // one place that must see EVERY old rig piece before spawning fresh ones.
+  seatScanAt = -1e9;
+  cartScanAt = -1e9;
   const oldSeat = findSeat();
   if (oldSeat) { try { oldSeat.remove(); } catch { /* gone */ } }
   const oldCart = findCart();
@@ -2620,12 +2701,19 @@ function keepers(seat) {
 
   // Keep the rider's inventory empty -- except the pinned hotbar items
   // (the Ride/Visual Settings, Tips and Debug menu items, Speed +/-) --
-  // hiding held items and stopping item pickup.
+  // hiding held items and stopping item pickup. The HOTBAR (slots 0-8,
+  // where the pins live and where a pickup lands first) is policed every
+  // tick; the backpack slots (9+) only every 10 ticks -- sweepDrops kills
+  // drops before they ever reach pickup range, so a backpack straggler is
+  // a rare leak that can afford half a second, and the slow cadence cuts
+  // ~27 container reads per tick from the keeper.
   try {
     const inv = rider.getComponent('minecraft:inventory')?.container;
     if (inv) {
+      const backpackSweep = tickN % 10 === 0;
       for (let i = 0; i < inv.size; i++) {
-        const want = PINNED.find((d) => d.slot === i);
+        const want = PINNED_BY_SLOT[i];
+        if (!want && i >= 9 && !backpackSweep) continue;
         const cur = inv.getItem(i);
         if (!want) {
           if (cur) inv.setItem(i, undefined);
