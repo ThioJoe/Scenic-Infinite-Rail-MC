@@ -31,8 +31,7 @@ Basically the Minecraft equivalent of "[Slow TV](https://en.wikipedia.org/wiki/S
   * It automatically locks the player into a seat as soon as you join the world, and keeps you there.
   * It also manually controls the cart and player movements, and force loads/unloads chunks in front and behind.
 
-> [!NOTE]
-> **_Not_ an official Minecraft product. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.**
+**NOTICE: _NOT_ an official Minecraft product. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.**
 
 --------
 
