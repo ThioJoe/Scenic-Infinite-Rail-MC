@@ -411,12 +411,12 @@ const tests = [
     if (groundY === null) throw new Error('no groundY from the start test (querytarget failed?)');
     let atY = null;
     for (let y = groundY + 30; y >= groundY - 6; y--) {
-      const r = await s.cmd(`testforblock ${START_X} ${y} ${LINE_Z} golden_rail`, { quietMs: 200 });
+      const r = await s.cmd(`testforblock ${START_X} ${y} ${LINE_Z} rail`, { quietMs: 200 });
       if (/Successfully found/i.test(r)) { atY = y; break; }
     }
-    if (atY === null) throw new Error(`no golden_rail at the start column within Y ${groundY - 6}..${groundY + 30}`);
-    const sup = await s.cmd(`testforblock ${START_X} ${atY - 1} ${LINE_Z} infinite_rail:support`);
-    if (!/Successfully found/i.test(sup)) throw new Error(`no support block under the rail at Y ${atY - 1}: ${sup}`);
+    if (atY === null) throw new Error(`no rail at the start column within Y ${groundY - 6}..${groundY + 30}`);
+    const sup = await s.cmd(`testforblock ${START_X} ${atY - 1} ${LINE_Z} smooth_stone`);
+    if (!/Successfully found/i.test(sup)) throw new Error(`no smooth_stone support under the rail at Y ${atY - 1}: ${sup}`);
     const light = await s.cmd(`testforblock ${START_X} ${atY + 3} ${LINE_Z} light_block_11`);
     if (!/Successfully found/i.test(light)) throw new Error(`no track light above the rail at Y ${atY + 3}: ${light}`);
   }),

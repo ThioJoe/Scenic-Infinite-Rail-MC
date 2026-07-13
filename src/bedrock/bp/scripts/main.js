@@ -425,9 +425,16 @@ const OCEAN_BIOMES = new Set([
   'minecraft:cold_ocean', 'minecraft:deep_cold_ocean',
 ]);
 
-// Column block palette (resolved once; golden_rail is Bedrock's powered rail;
-// rail_direction: 1 = flat east-west, 2 = ascending east, 3 = ascending west;
-// the light block is per-level flattened on current Bedrock).
+// Column block palette (resolved once). PLAIN rail on PLAIN smooth stone:
+// nothing rides the physical track on Bedrock (the pace is virtual, the ride
+// cart is velocity-driven scenery), so the old powered golden_rail + custom
+// redstone-producer support -- and the two resource-pack texture disguises
+// that made them LOOK plain -- were pure overhead: every placed support was
+// a redstone source powering a rail for no one. rail_direction: 1 = flat
+// east-west, 2 = ascending east, 3 = ascending west (same indices as the
+// golden rail's); the light block is per-level flattened on current
+// Bedrock. Consequence: a hand-placed cart on the leftover track coasts but
+// no longer self-propels (Java keeps its genuinely powered rails).
 let AIR, RAIL_FLAT, RAIL_UP, RAIL_DOWN, SUPPORT, TORCH;
 // Sea pickle clusters for torch mode's water case (maybeTorch), indexed by
 // pickle count 1..4 (SEA_PICKLE[0] is unused). Bedrock's sea_pickle uses
@@ -1483,14 +1490,10 @@ function shiftScan(target) {
 // calls. Same order as Java: carve the bore first, then the support (the rail
 // needs it to exist), then the rail, then the light.
 //
-// The support is this pack's CUSTOM BLOCK infinite_rail:support (BP
-// blocks/support.json): it renders with the vanilla smooth-stone texture and
-// carries minecraft:redstone_producer at full strength, so it powers the
-// rail exactly like a block of redstone while looking like a plain stone
-// pier. Bedrock has no block_display entities, so where Java DISGUISES its
-// redstone block with a display, Bedrock's support genuinely IS the
-// disguise -- one block, no entity. Falls back to a bare redstone block if
-// the custom block is unavailable (outdated behavior pack).
+// The support is a plain smooth_stone block -- the honest version of the
+// stone pier Java fakes with a display-entity disguise over its redstone
+// block. Bedrock's track carries no power at all (see the palette note at
+// RAIL_FLAT).
 
 // Clear one cell UNLESS it holds natural vegetation (the shared
 // vegetation.js classification -- Java's carve_layer does the same per-cell
@@ -2974,13 +2977,10 @@ function init() {
   }
 
   AIR = BlockPermutation.resolve('minecraft:air');
-  RAIL_FLAT = BlockPermutation.resolve('minecraft:golden_rail', { rail_direction: 1, rail_data_bit: true });
-  RAIL_UP = BlockPermutation.resolve('minecraft:golden_rail', { rail_direction: 2, rail_data_bit: true });
-  RAIL_DOWN = BlockPermutation.resolve('minecraft:golden_rail', { rail_direction: 3, rail_data_bit: true });
-  // The smooth-stone-look power block (see placeColumn); a bare redstone
-  // block does the same job undisguised if this BP is somehow outdated.
-  try { SUPPORT = BlockPermutation.resolve('infinite_rail:support'); }
-  catch { SUPPORT = BlockPermutation.resolve('minecraft:redstone_block'); }
+  RAIL_FLAT = BlockPermutation.resolve('minecraft:rail', { rail_direction: 1 });
+  RAIL_UP = BlockPermutation.resolve('minecraft:rail', { rail_direction: 2 });
+  RAIL_DOWN = BlockPermutation.resolve('minecraft:rail', { rail_direction: 3 });
+  SUPPORT = BlockPermutation.resolve('minecraft:smooth_stone');
   // A standing torch for torch mode (maybeTorch).
   try { TORCH = BlockPermutation.resolve('minecraft:torch', { torch_facing_direction: 'top' }); }
   catch { TORCH = BlockPermutation.resolve('minecraft:torch'); }
