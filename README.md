@@ -53,6 +53,9 @@ Basically the Minecraft equivalent of "[Slow TV](https://en.wikipedia.org/wiki/S
 ### **Starting the Ride:**
 The ride starts automatically for the first player in a new world. (It was designed and intended for single player worlds)
 
+> [!NOTE]
+> **Existing worlds won't auto-start.** Because the ride bulldozes a tunnel straight through everything in its path, kills entities the cart passes and leaves behind, and locks you into the seat, auto-start is only meant for a *fresh* world. If a world has already been played for a while (more than ~15 minutes), the ride will **not** start on its own — it just prints a warning. To run it there anyway, start it deliberately with `/function infinite_rail:start` (Java) or `/function infinite_rail/start` (Bedrock). You can change the age threshold, or disable this guard entirely, with the `.WORLDAGEWARN` setting in `config.mcfunction`.
+
 ## Hotbar Control Items
 
 <h3><p align="center">Bedrock:</p></h3>

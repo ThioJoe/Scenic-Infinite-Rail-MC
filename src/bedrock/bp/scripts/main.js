@@ -365,7 +365,7 @@ const CONFIG_DEFAULTS = {
   SHIFT_REQ_BOTTOM: 30, SAMPLE_WINDOW: 75, SAMPLE_BLOCK_INTERVAL: 1,
   PACE_CART_BEHIND: 224, TERRAIN_GENAHEAD: 192, BUILD_PER_TICK: 15, DEBUGMODE: 0,
   SKYY: 120, SKYSPEED: 18, TORCHODDS: 35, TORCHRANGE: 30, SEAPICKLE: 4,
-  CARTSOUND: 0, MOBAGGRO: 0, NOSTORMS: 0,
+  CARTSOUND: 0, MOBAGGRO: 0, NOSTORMS: 0, WORLDAGEWARN: 15,
 };
 
 // The rig's lead over the virtual pace position, derived from the two
@@ -2906,12 +2906,40 @@ function stop(silent) {
   if (!silent) say('§7Ride stopped.');
 }
 
+// Auto-start world-age gate (Java's auto_gate twin). Returns false -- and
+// blocks the auto-start -- when this looks like an EXISTING/played world:
+// world.getAbsoluteTime() (ticks the world has actually run, persisted in the
+// save) is at least .WORLDAGEWARN minutes. It latches .autodone so the ride
+// never auto-starts here and this never re-warns; a manual /function
+// infinite_rail/start is unaffected. Returns true (let the countdown run) on a
+// fresh world, when the guard is disabled (.WORLDAGEWARN 0), or if the engine
+// can't answer the age query (fail-open -- auto-start as before rather than
+// blocking every world).
+function autoAgeGate() {
+  const warnMin = cfg('WORLDAGEWARN');
+  if (warnMin <= 0) return true;
+  let ageTicks;
+  try { ageTicks = world.getAbsoluteTime(); } catch { return true; }
+  if (!(ageTicks >= warnMin * 1200)) return true; // also true when ageTicks is NaN/undefined
+  S.autodone = true;
+  saveState();
+  say('§eThis world looks like it has already been played for a while, so the ride did NOT auto-start.');
+  say('§7Scenic Rail Mode is meant for a §fFRESH world§7: it bulldozes a tunnel straight through everything in its path (your builds included), kills entities the cart passes and leaves behind, and locks you into the cart in adventure mode for the whole ride.');
+  say('§7If you really do want to run it here anyway, start it manually with §b/function infinite_rail/start§7.');
+  return false;
+}
+
 // tick.mcfunction's auto-starter: in a fresh world, begin the ride for the
 // first player to appear after a 5-second countdown. Once per world, ever.
 function autoStart() {
   if (S.autodone || cfg('AUTOSTART') !== 1) return;
   const players = world.getAllPlayers();
   if (players.length === 0) return;
+  // First tick a player is present: gate on world age before the countdown
+  // begins. A blocked (existing) world latches .autodone inside, so the top
+  // guard returns next tick; a fresh world proceeds. Mirrors Java's auto_gate
+  // running before the .start_timer increment.
+  if (S.startTimer === 0 && !autoAgeGate()) return;
   S.startTimer += 1;
   if (S.startTimer === 1) say('§eStarting in 5...');
   else if (S.startTimer === 20) say('§eStarting in 4...');

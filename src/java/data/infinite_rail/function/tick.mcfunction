@@ -24,6 +24,19 @@ execute if score .started ir matches 2 run function infinite_rail:launch_tick
 # rejoins too).
 # Set .AUTOSTART to 0 in config.mcfunction to disable.
 
+# Existing-world guard: the first tick a player is present in an armed,
+# not-yet-started world (before the countdown begins), decide whether this is
+# a FRESH world (let the countdown run) or one that has already been played
+# (block + warn). One-shot -- once auto_gate either latches .autodone or the
+# increment below advances .start_timer to 1, this stops firing. Skipped
+# entirely when the guard is off (.WORLDAGEWARN 0). Runs BEFORE the increment
+# so a latched .autodone this tick suppresses the countdown too. The countdown
+# guard is `unless .start_timer matches 1..` (not `if matches 0`): on a world
+# the pack was just added to, .start_timer is UNSET on the first player tick --
+# which does NOT match `0`, but DOES satisfy `unless 1..` -- so the check still
+# fires (an existing world the pack just joined is exactly what this catches).
+execute if score .AUTOSTART ir matches 1 unless score .autodone ir matches 1 if score .WORLDAGEWARN ir matches 1.. unless score .start_timer ir matches 1.. if entity @a run function infinite_rail:auto_gate
+
 # Wait until a player actually exists in the world, then count up 100 ticks (5 seconds) to let chunks load.
 execute if score .AUTOSTART ir matches 1 unless score .autodone ir matches 1 if entity @a run scoreboard players add .start_timer ir 1
 execute if score .start_timer ir matches 1 unless score .autodone ir matches 1 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Starting in 5...","color":"yellow"}]

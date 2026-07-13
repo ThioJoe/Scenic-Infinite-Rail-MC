@@ -139,6 +139,19 @@ scoreboard players set .CARTYOFF cfg_camera 12
 # infinite_rail:start on Java, /function infinite_rail/start on Bedrock).
 scoreboard players set .AUTOSTART ir 1
 
+# Existing-world guard for the auto-start above. Because the ride bulldozes a
+# tunnel straight through everything in its path, kills entities it passes and
+# leaves behind, and locks you into the cart in adventure mode, auto-starting
+# is only ever meant for a FRESH world. If the world's total played time is at
+# least this many MINUTES when the first player appears, the ride does NOT
+# auto-start -- it warns instead and waits for a deliberate manual start (the
+# start function above always works regardless). World age is read from the
+# vanilla game-time counter (Java: `time query gametime`; Bedrock:
+# world.getAbsoluteTime()), i.e. ticks the world has actually run, so a brand
+# new world reads ~0 and an existing save reads large. 0 = disable the guard
+# (auto-start in any world, played or not).
+scoreboard players set .WORLDAGEWARN ir 15
+
 
 # --- Minecart speed (the max_minecart_speed gamerule) -----------------------
 # These control the vanilla minecart max-speed gamerule (named minecartMaxSpeed

@@ -42,6 +42,10 @@ scoreboard players set .C10 ir 10
 scoreboard players set .C1000 ir 1000
 # Blocks per chunk -- the divisor for the ocean-biome chunk counter.
 scoreboard players set .C16 ir 16
+# Ticks per minute (20/s x 60) -- the auto-start world-age gate multiplies
+# the .WORLDAGEWARN minutes knob by this to compare against `time query
+# gametime` (see auto_gate).
+scoreboard players set .C1200 ir 1200
 
 # Cross-edition internal constants (the shared consts.mcfunction -- the
 # Bedrock script runs the same file from its init): .SPEEDSTEP & co.
