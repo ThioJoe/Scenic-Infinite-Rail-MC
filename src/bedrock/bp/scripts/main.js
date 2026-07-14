@@ -3262,7 +3262,24 @@ world.afterEvents.worldLoad.subscribe(ensureInit);
 // warm-up, never the whole script.
 try {
   world.afterEvents.playerSpawn.subscribe((ev) => {
-    if (ev.initialSpawn) lastJoinAt = tickN;
+    if (!ev.initialSpawn) return;
+    lastJoinAt = tickN;
+    // Un-hide the HUD on every join. Rejoining a world restores the HUD by
+    // default (the client resets /hud on world load), but the persisted
+    // .HUDHIDDEN score still reads "hidden", so the inventory keeper keeps
+    // pinning slot 2's fully-transparent held-as-nothing variant
+    // (infinite_rail:toggle_hud) -- an empty hand over an already-visible
+    // HUD, and no way to tell what's held. Clear the state to match the
+    // restored HUD so the keeper swaps the crossed-out-eye icon
+    // (toggle_hud_shown) back in; harmless when nothing was hidden (a
+    // client-side F1 hide is a different mechanism, untouched either way).
+    // Quiet -- no "HUD restored" chat, unlike the Toggle HUD item's toggle.
+    // Same three lines stop() uses; the score write goes through a command
+    // so cmd-bridge worlds reset too.
+    runCmd('hud @a reset all');
+    runCmd(`scoreboard players set ${P}HUDHIDDEN ir 0`);
+    S.hudHidden = false;
+    saveState();
   });
 } catch { /* signal unavailable: the warm window simply never arms */ }
 
