@@ -4,7 +4,7 @@
     "name": "Scenic Infinite Rail Mode (Resources)",
     "description": "Required resources for Scenic Infinite Rail Mode",
     "uuid": "23d216b2-863c-43db-bdec-c0dc4d586ce3",
-    "version": [1, 5, 1],
+    "version": [1, 5, 2],
     "min_engine_version": [1, 26, 10]
   },
   "modules": [
@@ -12,7 +12,7 @@
       "description": "Client entity definitions",
       "type": "resources",
       "uuid": "89c19071-3ffa-4523-92cd-4052352d2469",
-      "version": [1, 5, 1]
+      "version": [1, 5, 2]
     }
   ],
   "capabilities": [
