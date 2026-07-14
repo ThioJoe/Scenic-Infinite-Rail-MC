@@ -78,11 +78,27 @@ fi
 # gcc: the Bedrock test runner compiles a small LD_PRELOAD shim
 # (tests/lib/ipv6shim.c) in containers without IPv6 — BDS otherwise aborts at
 # boot with a misleading "Port may be in use" error. Harmless if IPv6 exists.
-echo "Installing prerequisites (Java 25, wget, unzip, curl, jq, gcc)..."
+echo "Installing prerequisites (wget, unzip, curl, jq, gcc; plus Java 25 if needed)..."
 if ! sudo apt-get update; then
   echo "WARNING: apt-get update reported errors; continuing since main Ubuntu repos likely succeeded." >&2
 fi
-sudo apt-get install -y openjdk-25-jre-headless wget unzip curl jq gcc
+sudo apt-get install -y wget unzip curl jq gcc
+
+# Java: the latest Minecraft server needs a modern JRE, and the harness invokes
+# `java` straight from PATH (tests/lib/server.mjs). Install openjdk-25 only when
+# a suitable Java (>= 21) isn't already provisioned — e.g. a CI job that ran
+# actions/setup-java, or a maintainer who already has one. Mirrors the Node
+# guard below, and keeps this script from failing where openjdk-25 isn't in apt.
+JAVA_MAJOR=""
+if command -v java >/dev/null 2>&1; then
+  JAVA_MAJOR=$(java -version 2>&1 | awk -F'"' '/version/ {split($2, v, "."); print (v[1] == "1" ? v[2] : v[1]); exit}')
+fi
+if [ -n "$JAVA_MAJOR" ] && [ "$JAVA_MAJOR" -ge 21 ] 2>/dev/null; then
+  echo "Java $JAVA_MAJOR already on PATH; skipping the openjdk-25 apt install."
+else
+  echo "Installing Java 25 JRE (openjdk-25-jre-headless)..."
+  sudo apt-get install -y openjdk-25-jre-headless
+fi
 
 # Node.js 18+ runs the zero-dependency test harness (tests/run.mjs). Claude
 # Code images usually ship a recent Node already; install only if missing.
