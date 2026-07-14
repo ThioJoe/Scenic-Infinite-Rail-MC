@@ -229,13 +229,17 @@ There's also a `Make-Symlinks.ps1` powershell script in the `tools` folder, whic
 
 ----------
 
-## Other Info
+# Other Info
 
-#### Supported Versions:
+### Supported Versions:
 - **Java Edition:** Versions 1.21.9 through 26.2
 - **Bedrock Edition:** Requires 1.21.120 or newer
 
-## License
-Free for personal use and monetized videos/livestreams. Redistribution, derivative publication, and other commercial use are prohibited.
+### Contributing
+I'm not currently accepting pull requests. If you have a feature request, feel free to open an issue.
 
-See [LICENSE.md](LICENSE.md).
+## License
+Free for personal, non-commercial use, including personal modifications and GitHub forks. Monetized videos and livestreams are also permitted. Other commercial use and redistribution are prohibited.
+
+See [LICENSE.md](LICENSE.md) for full terms.
+
