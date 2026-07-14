@@ -11,16 +11,16 @@
     <sub>For Minecraft</sub>
 </h1>
 
-## What is it?
-A vanilla Minecraft data pack that creates an **endless minecart ride through the world**, following the terrain with smooth camera movements.
+# What is it?
+### <p align="center">A vanilla Minecraft data pack that creates an **endless minecart ride through the world**, following the terrain with smooth camera movements.</p>
 
-The idea is that you can **leave it running on a TV or monitor** as visual ambiance.  **_No mods required._**
-
-Basically a Minecraft equivalent of those 4-8 hour train ride videos on YouTube or Netflix (aka "Slow TV").
+#### <p align="center">The idea is that you can **leave it running on a TV or monitor** as visual ambiance.  **_No mods required._**</p>
 
 <br>
 
 <p align="center"><img width="700" height="424" src="https://github.com/user-attachments/assets/fa993467-88cf-4300-bfca-ecb26a0104d3" /></p>
+
+<p align="center">Basically the Minecraft equivalent of those 4-8 hour train ride videos on YouTube or Netflix (aka "Slow TV").</p>
 
 <br>
 
