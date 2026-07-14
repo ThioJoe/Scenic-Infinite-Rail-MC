@@ -457,7 +457,7 @@ scoreboard players set .TERRAIN_GENAHEAD cfg_ride 192
 # the builder. (Java also keys the budget off the pace cart's MEASURED
 # motion, so even a /gamerule minecart speed set above the tracked cruise
 # keeps a matching budget.)
-scoreboard players set .BUILD_FACTOR cfg_ride 3
+scoreboard players set .BUILD_FACTOR cfg_ride 2
 
 
 # --- Ride modes (see the mode_* functions) -----------------------------------
