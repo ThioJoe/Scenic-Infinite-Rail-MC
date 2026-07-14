@@ -12,9 +12,12 @@
 </h1>
 
 # What is it?
-### <p align="center">A vanilla Minecraft data pack that creates an **endless minecart ride through the world**, following the terrain with smooth camera movements.</p>
 
-#### <p align="center">The idea is that you can **leave it running on a TV or monitor** as visual ambiance.  **_No mods required._**</p>
+<h3 align="center">A standalone Minecraft pack for Java and Bedrock that creates an <ins>endless minecart ride</ins> across the world, following the terrain with smooth camera motion.</h3>
+
+<h3 align="center">Leave it running all day on a TV or monitor as visual ambiance.</h3>
+
+<h3 align="center"><em>No dependencies or mods required.</em></h3>
 
 <br>
 
@@ -26,18 +29,16 @@
 
 ## ⚠️ What it's _NOT_
 
-### **Not for multiplayer servers or existing worlds:**
+### **Not for existing worlds or multiplayer servers:**
   * This is a standalone "mode", not a utility. (It's not for building rail from one place to another)
   * It automatically locks the player into a seat as soon as you join the world, and keeps you there.
-  * It also manually controls the cart and player movements, and force loads/unloads chunks in front and behind.
+  * It also manually controls the cart, destroys anything in its path, and deletes all entities left behind.
 
 **NOTICE: _NOT_ an official Minecraft product. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.**
 
 --------
 
 ## <img src=".github/assets/download-light.svg#gh-light-mode-only" width="22" align="center" /><img src=".github/assets/download-dark.svg#gh-dark-mode-only" width="22" align="center" /> How to Download
-
-**Both Java and Bedrock Editions supported**
 
 1. Go to the [Releases](https://github.com/ThioJoe/Scenic-Infinite-Rail-MC/releases) page.
 2. For the latest release, look under Assets, then download either:
@@ -49,13 +50,11 @@
 
 # <img src=".github/assets/help-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/help-dark.svg#gh-dark-mode-only" width="28" align="center" /> How to Use
 
-### **Starting the Ride:**
-- The ride starts automatically for the first player in a new world.
-- When re-joining a world, you will also automatically continue the ride
+### **Starting the Ride: Just join the world**
+- **The ride starts automatically** as soon as you join the world.
+- When re-joining a world, you will automatically continue the ride
 
-> [!NOTE]
-> **Existing worlds protection:** Because the ride bulldozes a tunnel straight through everything in its path, kills entities the cart leaves behind, and locks you into the seat, first-time auto-start only runs on a *fresh* world.
-> Upon running it in a world for the very first time, the datapack checks if the world is older than 15 minutes, and if so you'll need to manually start the ride via the command shown in the warning message.
+For instructions on how to create a world with it, see the [How To Install](#-how-to-install) section further down.
 
 ## Hotbar Control Items
 
@@ -132,17 +131,16 @@ Because of platform differences, the Java and Bedrock versions have visual diffe
 - **Bedrock Edition:** Requires 1.21.120 or newer; tested on 26.33
 
  ## **Java Edition Installation:**
- 1. From the main menu, click "**Single Player**". Then "**Create New World**"
+ 1. From the main menu, click "**Single Player**". Then "**Create New World**".
+    - You can name it whatever, and the default settings are fine
  2. Under the "**More**" tab, click the "**Data Packs**" button.
- 3. Drag and drop the downloaded `ScenicInfiniteRailMode-Java-*.zip` file onto the Minecraft window (no need to extract).
-     - If it asks to confirm, select "Yes"
-     - Now, in the "Available" list you should now see the newly added data pack 
- 4. **Important:** You must activate the data pack by **clicking the "Play button"** that appears while hovering its icon on the left.
-     - The "ScenicInfiniteRailMode-Java" data pack should now show in the "Selected" list.
- 5. Click "**Done**".
-     - It may show a warning about experimental features. Click "**Proceed**".
- 6. To finish creating the world, then click "**Create New World**"
-     - You can name it whatever, and the default settings are fine
+ 3. Drag the downloaded `ScenicInfiniteRailMode-Java-*.zip` file onto the Minecraft window (no need to extract).
+     - Confirm "Yes" if it asks. Then it should appear in the "Available" list.
+ 4. Activate the data pack by **clicking the "Play button"** that appears while hovering over its left icon.
+ 5. Ensure the datapack now shows in the "Selected" list, then click "**Done**". 
+     - If it warns about experimental features, click "**Proceed**".
+ 6. To finish creating the world, click "**Create New World**"
+
 
 Note: The "Minecart Improvements" experiment is required for Java edition, but the datapack should automatically enable this for newly created worlds so you don't have to. On an existing world, if it's not enabled, it will not even appear in the list of available datapacks.
 
