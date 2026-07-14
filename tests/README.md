@@ -272,9 +272,12 @@ suite on GitHub's runners, on real Java + Bedrock dedicated servers it provision
 with `setup_headless_env.sh`. It's a separate, slower job from the per-commit
 **Build packs** build: it triggers off each build (`workflow_run`) and
 **downloads that build's own artifacts**, so a green run confirms the exact
-`.zip` / `.mcaddon` a release would ship. It also runs the logic simulation
-(`tests/simulate.mjs`). Both editions run even if one fails; the run is marked
-failed at the end if either did.
+`.zip` / `.mcaddon` a release would ship. (A manually-dispatched run has no
+triggering build, so it reuses the most recent build's artifacts — this branch,
+else `main` — even from a build that failed only on an un-bumped version;
+falling back to a from-source build only if none exist.) It also runs the logic
+simulation (`tests/simulate.mjs`). Both editions run even if one fails; the run
+is marked failed at the end if either did.
 
 How much it runs is scoped to what the commit changed, to avoid booting servers
 for nothing:

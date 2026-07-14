@@ -28,8 +28,10 @@ on:
   workflow_run:
     workflows: ['Build packs']
     types: [completed]
-  # Manual runs build the packs from source and test those (no upstream build
-  # run to pull artifacts from) -- handy for re-checking without a new commit.
+  # Manual runs have no triggering build, so they reuse the most recent build
+  # artifacts (this branch, else main; a failed-but-uploaded build counts) --
+  # falling back to a from-source build only if none exist. Handy for
+  # re-checking without a new commit.
   workflow_dispatch:
 
 # One in-flight test run per branch; a newer build supersedes an older test run.
@@ -163,29 +165,83 @@ jobs:
           distribution: temurin
           java-version: '25'
 
-      # Pull the exact packs the build uploaded. Tolerant: if the build failed
-      # before uploading (or this is a manual dispatch), the run steps below
-      # fall back to building from source, so the suites always execute.
+      # Decide which build run's artifacts to test. On a workflow_run trigger
+      # it's the build that just finished. On a manual run there's no triggering
+      # build, so reuse the most recent build that uploaded artifacts --
+      # preferring this branch, then the default branch (main). The build need
+      # NOT have succeeded: an un-bumped-version build still uploads artifacts,
+      # and testing exactly what would ship is the point. Empty output -> none
+      # found, and the suites below build from source instead.
+      - name: Resolve the build run to test
+        id: pick
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          WR_ID: ${{ github.event.workflow_run.id }}
+          BRANCH: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          if [ "$EVENT" = "workflow_run" ]; then
+            echo "Triggered by a build run -> testing its artifacts ($WR_ID)."
+            echo "run_id=$WR_ID" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          DEFAULT_BRANCH=main
+          # Newest Build-packs run (any conclusion) on $1 that still has an
+          # unexpired Java artifact; prints its id, or nothing if none.
+          newest_with_artifact() {
+            local branch="$1" rid
+            for rid in $(gh api -X GET "/repos/$REPO/actions/workflows/build.yml/runs" \
+                          -f branch="$branch" -f per_page=20 \
+                          --jq '.workflow_runs[].id' 2>/dev/null); do
+              if gh api "/repos/$REPO/actions/runs/$rid/artifacts" \
+                    --jq '.artifacts[] | select(.expired==false) | .name' 2>/dev/null \
+                    | grep -q '^ScenicInfiniteRailMode-Java_'; then
+                echo "$rid"; return 0
+              fi
+            done
+            return 1
+          }
+
+          RID="$(newest_with_artifact "$BRANCH")" || RID=""
+          USED="$BRANCH"
+          if [ -z "$RID" ] && [ "$BRANCH" != "$DEFAULT_BRANCH" ]; then
+            RID="$(newest_with_artifact "$DEFAULT_BRANCH")" || RID=""
+            USED="$DEFAULT_BRANCH"
+          fi
+
+          if [ -n "$RID" ]; then
+            echo "Reusing artifacts from build run $RID (branch '$USED')."
+          else
+            echo "No build artifacts on '$BRANCH' or '$DEFAULT_BRANCH' -> building from source."
+          fi
+          echo "run_id=$RID" >> "$GITHUB_OUTPUT"
+
+      # Pull the packs from the resolved build run. Tolerant: a failed/absent
+      # download (expired, partial, or no run resolved) leaves the path empty
+      # and the suites below build from source, so they always execute.
       - name: Download built Java datapack
-        if: github.event_name == 'workflow_run'
+        if: steps.pick.outputs.run_id != ''
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           pattern: ScenicInfiniteRailMode-Java_*
           path: artifacts/java
           merge-multiple: true
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ steps.pick.outputs.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download built Bedrock .mcaddon
-        if: github.event_name == 'workflow_run'
+        if: steps.pick.outputs.run_id != ''
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           pattern: ScenicInfiniteRailMode-Bedrock_*
           path: artifacts/bedrock
           merge-multiple: true
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ steps.pick.outputs.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       # Downloads the latest Java + Bedrock dedicated servers from Mojang and
