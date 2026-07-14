@@ -38,13 +38,12 @@
 
 --------
 
-## <img src=".github/assets/download-light.svg#gh-light-mode-only" width="22" align="center" /><img src=".github/assets/download-dark.svg#gh-dark-mode-only" width="22" align="center" /> How to Download
+# <img src=".github/assets/download-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/download-dark.svg#gh-dark-mode-only" width="28" align="center" /> How to Download
 
 1. Go to the [Releases](https://github.com/ThioJoe/Scenic-Infinite-Rail-MC/releases) page.
 2. For the latest release, look under Assets, then download either:
     - For **Java Edition**: `ScenicInfiniteRailMode-Java-*.zip` 
     - For **Bedrock Edition**: `ScenicInfiniteRailMode-Bedrock-*.mcaddon` 
-3. For **installation steps**, see the [How To Install](#-how-to-install) section further down.
 
 -----
 
@@ -53,8 +52,8 @@
 
 **Expand the sections below for exact instructions for each edition.**
 
-The steps will basically boil down to:
-  1. Choose to create a new world
+_The steps will basically boil down to:_
+  1. Create a new world
   2. Add the pack during world setup
   3. Join the world
 
@@ -120,7 +119,7 @@ https://github.com/user-attachments/assets/33e31197-6d4d-493d-925f-54d2d2c212bd
 - **The ride starts automatically** as soon as you join the world.
 - When re-joining a world, you will automatically continue the ride
 
-## Hotbar Control Items
+## Hotbar Control Items (Ride Options)
 
 <h3><p align="center">Bedrock:</p></h3>
 <p align="center"><img width="550" alt="Bedrock Hotbar control items" src="https://github.com/user-attachments/assets/b733444a-1e68-4710-a140-253e706e09f7" /></p>
@@ -191,6 +190,9 @@ Because of platform differences, the Java and Bedrock versions have visual diffe
 
 # <img src=".github/assets/folder_code-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/folder_code-dark.svg#gh-dark-mode-only" width="28" align="center" /> Advanced / Manual Configuration
 
+ <details>
+    <summary>Expand to see advanced / manual configuration notes</summary>
+
 * **To force start/stop the ride**, you can use these function commands (cheats / commands must be enabled):
     * Java: `/function infinite_rail:start` and  `/function infinite_rail:stop`
     * Bedrock: `/function infinite_rail/start` and  `/function infinite_rail/stop`
@@ -202,12 +204,12 @@ Because of platform differences, the Java and Bedrock versions have visual diffe
     - You'll notice that in `config.mcfunction`, the lines defining the settings values are simply `scoreboard` commands. You can copy the entire line and paste it after a `/` in chat and it will update it right away.
       - For example: `scoreboard players set .TUNNELCLEAR cfg_terrain 6`
     - To make it permanent you'll need to update the value in file 
-    
+ </details>   
 
 ## Building From Source
 
 <details>
-    <summary>Expand for Details</summary>
+    <summary>Expand for building notes</summary>
 
 #### This repository is a monorepo containing shared logic and edition-specific files.
 
