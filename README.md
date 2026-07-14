@@ -12,7 +12,7 @@
 </h1>
 
 ## What is it?
-A vanilla Minecraft data pack that creates an **endless minecart ride through the world**, following the terrain in a smoothed camera seat.
+A vanilla Minecraft data pack that creates an **endless minecart ride through the world**, following the terrain with smooth camera movements.
 
 The idea is that you can **leave it running on a TV or monitor** as visual ambiance. 
 
