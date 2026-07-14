@@ -15,6 +15,15 @@ const DEFAULT_IGNORED_ERRORS = [
   /gson\/blob\/main\/Troubleshooting/,
 ];
 
+// The datapack's folder name is cosmetic -- its real identity is the
+// `infinite_rail` namespace inside data/ -- but `datapack list` reports it as
+// `file/<foldername>` and the boot suite asserts the shipped name. Deploy under
+// this canonical name no matter where the pack under test came from (a src
+// build, a `dist/java/Scenic_Infinite_Rail_Mode` folder, a CI-artifact dir that
+// download-artifact named `java`, or a zip extracted to a temp dir), so that
+// assertion holds for every --pack source and not just a from-src build.
+const DATAPACK_FOLDER = 'Scenic_Infinite_Rail_Mode';
+
 export class JavaServer {
   constructor({
     serverDir,
@@ -83,7 +92,7 @@ export class JavaServer {
       Object.entries(props).map(([k, v]) => `${k}=${v}`).join('\n') + '\n',
     );
     fs.writeFileSync(path.join(this.serverDir, 'eula.txt'), 'eula=true\n');
-    const dest = path.join(this.serverDir, 'world', 'datapacks', path.basename(this.packDir));
+    const dest = path.join(this.serverDir, 'world', 'datapacks', DATAPACK_FOLDER);
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.cpSync(this.packDir, dest, { recursive: true });
   }
