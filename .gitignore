@@ -9,6 +9,7 @@ dist_links/
 *.local
 *.local.txt
 *.bak*
+Extras/*
 
 #Specific Files
 Make_Symlinks-Signed.ps1
