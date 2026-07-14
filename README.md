@@ -27,7 +27,7 @@
 ## ⚠️ What it's _NOT_
 
 ### **Not for multiplayer servers or existing worlds:**
-  * This is a standalone "mode", not utility. (It's not for building rail from one place to another)
+  * This is a standalone "mode", not a utility. (It's not for building rail from one place to another)
   * It automatically locks the player into a seat as soon as you join the world, and keeps you there.
   * It also manually controls the cart and player movements, and force loads/unloads chunks in front and behind.
 
@@ -121,7 +121,7 @@ Because of platform differences, the Java and Bedrock versions have visual diffe
 
 **ℹ️ Workaround:** Some kind of automated input to prevent going AFK.
    - On PC, use software that automatically sends inputs.
-   - On Console, a use a rubber band or anything to hold the left joystick. (Since you're in the cart, the left movement joystick doesn't matter)
+   - On Console, a use rubber band or anything to hold the left joystick. (Since you're in the cart, the left movement joystick doesn't matter)
 
 ---------
 
@@ -137,18 +137,18 @@ Because of platform differences, the Java and Bedrock versions have visual diffe
  3. Drag and drop the downloaded `ScenicInfiniteRailMode-Java-*.zip` file onto the Minecraft window (no need to extract).
      - If it asks to confirm, select "Yes"
      - Now, in the "Available" list you should now see the newly added data pack 
- 5. **Important:** You must activate the data pack by **clicking the "Play button"** that appears while hovering its icon on the left.
+ 4. **Important:** You must activate the data pack by **clicking the "Play button"** that appears while hovering its icon on the left.
      - The "ScenicInfiniteRailMode-Java" data pack should now show in the "Selected" list.
- 6. Click "**Done**".
+ 5. Click "**Done**".
      - It may show a warning about experimental features. Click "**Proceed**".
- 7. To finish creating the world, then click "**Create New World**"
+ 6. To finish creating the world, then click "**Create New World**"
      - You can name it whatever, and the default settings are fine
 
 Note: The "Minecart Improvements" experiment is required for Java edition, but the datapack should automatically enable this for newly created worlds so you don't have to. On an existing world, if it's not enabled, it will not even appear in the list of available datapacks.
 
  ## **Bedrock Edition Installation:** 
   1. Close minecraft if it's already running _(important)_.
-  2. Double click the `**.mcaddon**` file.
+  2. Double click the **`*.mcaddon`** file.
     - It may ask which program to open with. Select Minecraft.
   3. Minecraft should launch, and after a few seconds should say "**Successfully imported...**" at the top.
   4. While creating a new world, go to the "**Behavior packs**" section, and click "**Activate**" next to Scenic Infinite Rail Mode.
@@ -201,3 +201,10 @@ There's also a `Make-Symlinks.ps1` powershell script in the `tools` folder, whic
 3. The build script aggregates shared functions from `src/shared/functions/` and edition-specific files to generate the distribution folders.
 
 </details>
+
+----------
+
+## License
+Free for personal use and monetized videos/livestreams. Redistribution, derivative publication, and other commercial use are prohibited.
+
+See [LICENSE.md](LICENSE.md).
