@@ -11,9 +11,11 @@ node tests/run.mjs                                   # Java: build from src/ and
 node tests/run.mjs --pack ScenicInfiniteRailMode-Java_X.zip   # Java: test a CI artifact
 node tests/run.mjs --pack dist/java/Scenic_Infinite_Rail_Mode  # Java: test a pack folder
 node tests/run.mjs --filter torch                    # only matching suites/tests
+node tests/run.mjs --smoke                           # Java: boot suite only ("does the pack load?")
 node tests/run.mjs --list                            # show every test, run nothing
 node tests/run-bedrock.mjs                           # Bedrock: build BP/RP from src/ (~3 min)
 node tests/run-bedrock.mjs --pack Scenic....mcaddon  # Bedrock: test a CI artifact (.mcaddon or the zip wrapping it)
+node tests/run-bedrock.mjs --smoke                   # Bedrock: load/init checks only (skip the ride)
 ```
 
 Exit code `0` = everything passed (skips allowed), `1` = failures; JSON reports land in
@@ -262,3 +264,33 @@ Full Java run: ~6–8 min (10 suites × ~15 s boot + the sprints). Bedrock: ~3 m
 (the shared-brain checks plus the headless surrogate ride).
 Suites boot fresh servers sequentially on fixed ports (25565/25575 Java, 19132 Bedrock),
 so don't run two harness invocations in parallel on one machine.
+
+## Continuous integration (the public sanity-check run)
+
+The **Integration tests** workflow (`.github/workflows/test.yml`) runs this whole
+suite on GitHub's runners, on real Java + Bedrock dedicated servers it provisions
+with `setup_headless_env.sh`. It's a separate, slower job from the per-commit
+**Build packs** build: it triggers off each build (`workflow_run`) and
+**downloads that build's own artifacts**, so a green run confirms the exact
+`.zip` / `.mcaddon` a release would ship. It also runs the logic simulation
+(`tests/simulate.mjs`). Both editions run even if one fails; the run is marked
+failed at the end if either did.
+
+How much it runs is scoped to what the commit changed, to avoid booting servers
+for nothing:
+
+- **full** — any `src/` / `tests/` / build-tool change: the simulation + every
+  Java suite + the full Bedrock suite.
+- **smoke** — a metadata-only change (`manifest.json` / `pack.mcmeta` / pack
+  icons): `run.mjs --smoke` + `run-bedrock.mjs --smoke`, the boot-only "does the
+  server still load & initialize the pack" checks.
+- **skipped** — only docs / license / `.gitignore` / assets changed.
+
+> **This CI run does not replace running the tests yourself.** It exists as a
+> public record and a final confirmation that the suite really passes on the
+> shipped artifacts — not as a reason to defer testing. Keep running the
+> relevant suites locally as you work on a change (that's what catches a
+> regression *before* it's committed); the workflow just double-checks the
+> result after the fact. Because it uses `workflow_run`, GitHub only honors the
+> copy of `test.yml` on the default branch, so it starts firing once that file
+> reaches `main`.

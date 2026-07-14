@@ -1,0 +1,252 @@
+name: Integration tests
+
+# Runs the full, real test suite -- the logic simulation AND the headless
+# Minecraft dedicated servers (Java + Bedrock) driving the actual packs -- as a
+# separate, slower job than the per-commit build. Its purpose is a public
+# record / final sanity check that every suite really passes, rather than taking
+# a developer's local run on faith.
+#
+# WHY IT TRIGGERS OFF THE BUILD (workflow_run), not on push directly:
+#   1. It tests the EXACT artifacts the build produced and would ship -- it
+#      downloads them from the triggering build run rather than rebuilding, so a
+#      green run certifies the very .zip / .mcaddon a release is cut from.
+#   2. The build already runs per commit; the slow tests deliberately do not
+#      pile onto it.
+#
+# WHAT IT RUNS depends on what the commit changed (the `scope` job):
+#   - full  : the logic simulation + every Java suite + the full Bedrock suite
+#             (any code/pack/test/tool change).
+#   - smoke : boot-only "does the server still load & init the pack" checks on
+#             both editions (a metadata-only change -- manifest.json /
+#             pack.mcmeta / pack icons -- can't alter behavior).
+#   - skip  : nothing (only docs / license / .gitignore / assets changed).
+#
+# NOTE: because this uses workflow_run, GitHub only honors the copy of this file
+# on the default branch. It starts firing once this file is merged to main.
+
+on:
+  workflow_run:
+    workflows: ['Build packs']
+    types: [completed]
+  # Manual runs build the packs from source and test those (no upstream build
+  # run to pull artifacts from) -- handy for re-checking without a new commit.
+  workflow_dispatch:
+
+# One in-flight test run per branch; a newer build supersedes an older test run.
+concurrency:
+  group: integration-tests-${{ github.event.workflow_run.head_branch || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read   # download-artifact needs this to read the build run's artifacts
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Decide how much to run from the files the triggering commit changed.
+  # ---------------------------------------------------------------------------
+  scope:
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.decide.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Determine test scope
+        id: decide
+        run: |
+          set -uo pipefail
+          # Manual dispatch has no changed-file context -> run everything.
+          if [ "${{ github.event_name }}" != "workflow_run" ]; then
+            echo "Trigger is ${{ github.event_name }} -> full scope."
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # A cancelled build (usually superseded by a newer push) has nothing
+          # worth testing -- a fresh build+test will follow. Skip it.
+          if [ "${{ github.event.workflow_run.conclusion }}" = "cancelled" ]; then
+            echo "Triggering build was cancelled -> skip."
+            echo "mode=skip" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          SHA="${{ github.event.workflow_run.head_sha }}"
+          if git rev-parse "${SHA}^1" >/dev/null 2>&1; then
+            CHANGED=$(git diff --name-only "${SHA}^1" "${SHA}")
+          else
+            # Root commit: everything is "changed".
+            CHANGED=$(git show --name-only --format= "${SHA}")
+          fi
+          echo "Changed files in ${SHA}:"
+          echo "$CHANGED" | sed 's/^/  /'
+
+          full=0
+          meta=0
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            case "$f" in
+              # Metadata only -- can change how the pack IDENTIFIES, not how it
+              # behaves. On its own -> a boot-only smoke test.
+              src/bedrock/bp/manifest.json|src/bedrock/rp/manifest.json|src/java/pack.mcmeta|src/java/pack.png|src/bedrock/bp/pack_icon.png|src/bedrock/rp/pack_icon.png)
+                meta=1 ;;
+              # Anything that can change behavior or the tests themselves -> full.
+              src/*|tests/*|tools/build.mjs|tools/check-version.mjs|.github/workflows/build.yml|.github/workflows/test.yml)
+                full=1 ;;
+              # Everything else (README, LICENSE, .gitignore, docs, .github/assets,
+              # dev scripts) is invisible to the pack -> contributes nothing.
+              *) : ;;
+            esac
+          done <<< "$CHANGED"
+
+          if [ "$full" -eq 1 ]; then
+            MODE=full
+          elif [ "$meta" -eq 1 ]; then
+            MODE=smoke
+          else
+            MODE=skip
+          fi
+          echo "Resolved test scope: $MODE"
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # The shared-logic simulation: pure Node, no server. Fast, so it gets its own
+  # job for quick feedback. Only meaningful when code changed (full).
+  # ---------------------------------------------------------------------------
+  simulate:
+    needs: scope
+    if: needs.scope.outputs.mode == 'full'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # simulate.mjs reads the emitted shared functions under dist/, so assemble
+      # them first. The shared brain is byte-identical from src, so a fresh build
+      # at this commit yields exactly the logic the release artifacts carry.
+      - name: Build packs (emit shared functions)
+        run: node tools/build.mjs
+      - name: Simulate the shared logic
+        run: node tests/simulate.mjs
+
+  # ---------------------------------------------------------------------------
+  # The real thing: provision headless Java + Bedrock dedicated servers and run
+  # the suites against the ACTUAL build artifacts. Both editions run regardless
+  # of whether the other failed; the job reports failure at the end if either
+  # did (requirement: don't stop on first fail, still mark the run failed).
+  # ---------------------------------------------------------------------------
+  server-tests:
+    needs: scope
+    if: needs.scope.outputs.mode != 'skip'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # The harness invokes `java` from PATH (tests/lib/server.mjs); the latest
+      # Minecraft server needs a modern JRE. setup_headless_env.sh sees this one
+      # and skips its own apt Java install.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      # Pull the exact packs the build uploaded. Tolerant: if the build failed
+      # before uploading (or this is a manual dispatch), the run steps below
+      # fall back to building from source, so the suites always execute.
+      - name: Download built Java datapack
+        if: github.event_name == 'workflow_run'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ScenicInfiniteRailMode-Java_*
+          path: artifacts/java
+          merge-multiple: true
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download built Bedrock .mcaddon
+        if: github.event_name == 'workflow_run'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ScenicInfiniteRailMode-Bedrock_*
+          path: artifacts/bedrock
+          merge-multiple: true
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Downloads the latest Java + Bedrock dedicated servers from Mojang and
+      # sets up the headless env the harness auto-detects (~/minecraft_test_env).
+      # No network allowlist to worry about on GitHub-hosted runners.
+      - name: Provision headless Minecraft servers
+        run: bash tests/setup_headless_env.sh
+
+      - name: Run the integration suites
+        env:
+          MODE: ${{ needs.scope.outputs.mode }}
+        run: |
+          # NOTE: no `set -e` -- both editions must run even if the first fails.
+          set -uo pipefail
+
+          SMOKE=""
+          [ "$MODE" = "smoke" ] && SMOKE="--smoke"
+
+          # Prefer the built artifacts; empty path -> the runner builds from src.
+          JAVA_PACK=""
+          if [ -f artifacts/java/pack.mcmeta ]; then
+            JAVA_PACK="$PWD/artifacts/java"
+          fi
+          BR_PACK="$(ls artifacts/bedrock/*.mcaddon 2>/dev/null | head -n1 || true)"
+
+          echo "Scope: $MODE"
+          echo "Java pack under test:    ${JAVA_PACK:-<build from source>}"
+          echo "Bedrock pack under test: ${BR_PACK:-<build from source>}"
+          echo "### Integration tests ($MODE)" >> "$GITHUB_STEP_SUMMARY"
+
+          fail=0
+
+          echo "::group::Java suite"
+          node tests/run.mjs $SMOKE ${JAVA_PACK:+--pack "$JAVA_PACK"}
+          jrc=$?
+          echo "::endgroup::"
+          if [ "$jrc" -eq 0 ]; then
+            echo "- :white_check_mark: Java suite passed" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- :x: Java suite FAILED (exit $jrc)" >> "$GITHUB_STEP_SUMMARY"
+            fail=1
+          fi
+
+          echo "::group::Bedrock suite"
+          node tests/run-bedrock.mjs $SMOKE ${BR_PACK:+--pack "$BR_PACK"}
+          brc=$?
+          echo "::endgroup::"
+          if [ "$brc" -eq 0 ]; then
+            echo "- :white_check_mark: Bedrock suite passed" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- :x: Bedrock suite FAILED (exit $brc)" >> "$GITHUB_STEP_SUMMARY"
+            fail=1
+          fi
+
+          exit $fail
+
+      # The per-test JSON reports, kept for inspecting a failed run.
+      - name: Upload test reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ github.run_number }}
+          path: tests/.work/results*.json
+          if-no-files-found: ignore

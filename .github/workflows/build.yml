@@ -51,14 +51,14 @@ jobs:
       # Lints the shared dual-dialect functions, assembles both packs from
       # src/shared + src/java + src/bedrock, validates every function
       # reference resolves, and writes the .zip / .mcpack files.
+      #
+      # The logic simulation (tests/simulate.mjs) and the full headless-server
+      # integration suites are NOT run here -- they live in the separate
+      # "Integration tests" workflow (.github/workflows/test.yml), which triggers
+      # off this build, downloads the very artifacts uploaded below, and tests
+      # them. Keeping the slow tests out of this per-commit build is deliberate.
       - name: Build both packs
         run: node tools/build.mjs
-
-      # Interprets the emitted shared .mcfunction files (Java and Bedrock
-      # copies) over synthetic terrains and asserts the event-model and
-      # camera invariants -- and that both editions decide identically.
-      - name: Simulate the shared logic
-        run: node tools/simulate.mjs
 
       # NON-BLOCKING gate (for artifacts). Fails the job with an ::error::
       # annotation if the manifest version is not strictly greater than the
@@ -77,11 +77,11 @@ jobs:
       # -<run_number> off the downloaded artifact. The run number still makes
       # successive test builds easy to tell apart (it increments on failed
       # runs too). The upload steps below run whenever the version-consistency
-      # gate passed and the job wasn't cancelled, so a simulation failure or an
-      # un-bumped-version failure still leaves a downloadable build for
-      # testing -- the job still reports failure overall, but the artifacts
-      # aren't withheld. A consistency failure is the one case that DOES
-      # withhold them (steps.vcheck.outcome must be 'success').
+      # gate passed and the job wasn't cancelled, so an un-bumped-version
+      # failure still leaves a downloadable build for testing -- the job still
+      # reports failure overall, but the artifacts aren't withheld. A
+      # consistency failure is the one case that DOES withhold them
+      # (steps.vcheck.outcome must be 'success').
 
       # Downloading this artifact yields a zip with pack.mcmeta and the rest
       # of the datapack contents at the zip ROOT (not nested inside a

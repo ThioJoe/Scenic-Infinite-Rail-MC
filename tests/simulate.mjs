@@ -35,7 +35,7 @@
 //  its core guarantees: never below the rail line, exact on settled flats,
 //  parallel mid-climb.
 //
-//  Run after tools/build.mjs:  node tools/simulate.mjs
+//  Run after tools/build.mjs:  node tests/simulate.mjs
 // =============================================================================
 
 import { readFileSync, existsSync } from 'node:fs';

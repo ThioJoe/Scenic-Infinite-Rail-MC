@@ -37,8 +37,11 @@ src/
                         item invisible while it's hidden -- CONTEXT.md §11e)
 tools/
   build.mjs             assembles + validates + zips both packs (zero deps)
+tests/
   simulate.mjs          interprets the emitted shared functions and asserts
-                        the algorithm's invariants (CI runs this)
+                        the algorithm's invariants -- run by the separate
+                        Integration tests workflow (and locally during dev),
+                        not the per-commit build (see tests/README.md)
 ```
 
 ## Build
@@ -46,7 +49,8 @@ tools/
 Requires Node.js 18+ (no npm packages):
 
 ```
-node tools/build.mjs node tools/simulate.mjs   # optional but recommended: logic regression test
+node tools/build.mjs      # assemble both packs into dist/
+node tests/simulate.mjs   # optional but recommended: logic regression test
 ```
 
 Outputs, all under `dist/` (gitignored):
@@ -59,7 +63,9 @@ Outputs, all under `dist/` (gitignored):
 | `dist/bedrock/Scenic_Infinite_Rail_Mode_RP/` | The resource pack as a folder (for `development_resource_packs`) |
 | `dist/ScenicInfiniteRailMode-Bedrock_*.mcaddon` | Double-click to import into Bedrock (BP + RP in one file) |
 
-GitHub Actions runs `build.mjs` + `simulate.mjs` on every push, wrapped by two version-check steps (`tools/check-version.mjs`), and uploads three artifacts named `<pack>_<version>-<run_number>` -- the manifest version sits between the pack name and the run number (e.g. `ScenicInfiniteRailMode-Bedrock_1.5.0-234`): `ScenicInfiniteRailMode-Java_V-N` (the datapack contents -- `pack.mcmeta`, `data/`, etc. -- zipped at the archive root, so extracting drops straight into a world's `datapacks/` folder without an extra nested folder to peel off), `ScenicInfiniteRailMode-Bedrock_V-N` (the `.mcaddon`), and `ScenicInfiniteRailMode-Bedrock-Folder_V-N` (the unzipped BP + RP folders, for dropping straight into `development_behavior_packs` / `development_resource_packs` while testing). The run number (`N`, which increments on failed runs too) keeps successive test builds easy to tell apart; the version (`V`, read from the manifest by the `Resolve pack version` step) means a release attachment named `<pack>_<version>` is produced by simply chopping the `-<run_number>` off the downloaded artifact. The artifact-upload steps run even if `simulate.mjs` or the release-bump check fails (`if: !cancelled() && steps.vcheck.outcome == 'success'`), so a logic regression or an un-bumped version still leaves a downloadable build to test against -- the job itself still reports failure. (CI does not attach build artifacts to GitHub releases -- that is done by hand from these artifacts; artifacts otherwise live only on the workflow run.)
+Two workflows split the work. The per-commit **Build packs** workflow (`.github/workflows/build.yml`) runs `build.mjs` on every push, wrapped by two version-check steps (`tools/check-version.mjs`), and uploads three artifacts named `<pack>_<version>-<run_number>` -- the manifest version sits between the pack name and the run number (e.g. `ScenicInfiniteRailMode-Bedrock_1.5.0-234`): `ScenicInfiniteRailMode-Java_V-N` (the datapack contents -- `pack.mcmeta`, `data/`, etc. -- zipped at the archive root, so extracting drops straight into a world's `datapacks/` folder without an extra nested folder to peel off), `ScenicInfiniteRailMode-Bedrock_V-N` (the `.mcaddon`), and `ScenicInfiniteRailMode-Bedrock-Folder_V-N` (the unzipped BP + RP folders, for dropping straight into `development_behavior_packs` / `development_resource_packs` while testing). The run number (`N`, which increments on failed runs too) keeps successive test builds easy to tell apart; the version (`V`, read from the manifest by the `Resolve pack version` step) means a release attachment named `<pack>_<version>` is produced by simply chopping the `-<run_number>` off the downloaded artifact. The artifact-upload steps run even if the release-bump check fails (`if: !cancelled() && steps.vcheck.outcome == 'success'`), so an un-bumped version still leaves a downloadable build to test against -- the job itself still reports failure. (CI does not attach build artifacts to GitHub releases -- that is done by hand from these artifacts; artifacts otherwise live only on the workflow run.)
+
+The slower **Integration tests** workflow (`.github/workflows/test.yml`) is a separate job -- a public record / final sanity check that the whole suite really passes, not a substitute for running the tests locally while developing. It triggers off each **Build packs** run (`workflow_run`) and **downloads that build's own artifacts**, so a green run certifies the exact `.zip` / `.mcaddon` a release would be cut from. It runs `tests/simulate.mjs` plus the full headless-server suites (`tests/run.mjs`, `tests/run-bedrock.mjs`) on real Java + Bedrock dedicated servers it provisions with `tests/setup_headless_env.sh`. Both editions run even when one fails; the run is marked failed at the end if either did. How much runs is scoped to what the commit changed: **full** (any `src/` / `tests/` / build-tool change), **smoke** (a metadata-only change -- `manifest.json` / `pack.mcmeta` / pack icons -- runs `--smoke`, the boot-only "does the server still load & init the pack" checks), or **skipped** (only docs / license / `.gitignore` / assets changed). Because it uses `workflow_run`, GitHub honors only the copy on the default branch -- it starts firing once `test.yml` is merged to `main`.
 
 The project version's single source of truth is `header.version` in `src/bedrock/bp/manifest.json` (Java's `pack.mcmeta` carries only a Minecraft-compatibility `pack_format`, never a product version, so it is not part of this). It is mirrored in six places:
 
@@ -90,7 +96,7 @@ Two conventions make the identical-copy guarantee possible — this replaces the
 1. **Score holders use the `.` prefix everywhere.** `#NAME` fake players are a Java-only convention (Bedrock's parser rejects `#`); `.`-prefixed fake players parse on both engines, so *both* editions now use `.HOVER`, `.slope`, `.dir`, … — same variables, same objectives (runtime state in `ir`, the tunables in the three sidebar-sized groups `cfg_terrain`/`cfg_camera`/`cfg_ride` — see CONTEXT.md §4.1), same spelling. Live-tweaking from chat is identical on both editions: `/scoreboard players set .HOVER cfg_terrain 8`.
 2. **Shared-to-shared function calls go through bare-name bridges.** Java spells a function path `infinite_rail:end_event`, Bedrock spells it `infinite_rail/end_event` — so shared files spell neither. They call the bare name `ir_end_event`, the one function-call form both engines accept: Java resolves it in the `minecraft` namespace, Bedrock from the `functions/` root, and each edition supplies a one-line trampoline there (`src/java/data/minecraft/function/ir_*.mcfunction`, `src/bedrock/bp/functions/ir_*.mcfunction`) that hops into the real shared file. Three calls are bridged this way: `ir_consider_start`, `ir_start_event`, `ir_end_event`. The assembled-pack validation checks every bridge resolves on both sides.
 
-`tools/simulate.mjs` guards the whole arrangement: it interprets the **emitted** Java and Bedrock copies (each resolved through its own edition's bridges) over eleven synthetic terrains and fails if their decisions ever diverge or the algorithm breaks an invariant (contiguous 45° events, deadband, gap spacing with the big-event gap credit, the climb schedule, the descent floor and runway rules, terrain convergence, the `.veg`/`.retro` carve-mode contract, camera floor/flats/parallel-climb guarantees).
+`tests/simulate.mjs` guards the whole arrangement: it interprets the **emitted** Java and Bedrock copies (each resolved through its own edition's bridges) over eleven synthetic terrains and fails if their decisions ever diverge or the algorithm breaks an invariant (contiguous 45° events, deadband, gap spacing with the big-event gap credit, the climb schedule, the descent floor and runway rules, terrain convergence, the `.veg`/`.retro` carve-mode contract, camera floor/flats/parallel-climb guarantees).
 
 ## Adding or changing a function
 

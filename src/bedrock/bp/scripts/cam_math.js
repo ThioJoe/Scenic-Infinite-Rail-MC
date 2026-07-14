@@ -8,7 +8,7 @@
 //   height    = max(c1, s2, line(rig))           (never below the rail line)
 //
 // This file is deliberately engine-free (no @minecraft/server import): it is
-// used by scripts/main.js in-game AND imported by tools/simulate.mjs, so the
+// used by scripts/main.js in-game AND imported by tests/simulate.mjs, so the
 // regression test exercises the exact math that ships.
 
 export function camHeight({ trackY, index, fx, lift10, blend, smooth, s2 }) {

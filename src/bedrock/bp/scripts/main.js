@@ -2304,7 +2304,7 @@ function tickPace() {
 
 // --- The smooth camera ---------------------------------------------------------
 // The height construction itself lives in cam_math.js (shared with the
-// tools/simulate.mjs regression test, so the shipped math is what gets
+// tests/simulate.mjs regression test, so the shipped math is what gets
 // tested); this wrapper derives the rig's column index and fraction from the
 // pace position, exactly like cam_follow.mcfunction does from the pace cart.
 
