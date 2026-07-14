@@ -4,7 +4,7 @@
     "name": "Scenic Infinite Rail Mode",
     "description": "Endless scenic minecart ride",
     "uuid": "5999065f-d9f1-41fc-9576-877ed59141d4",
-    "version": [1, 5, 0],
+    "version": [1, 5, 1],
     "min_engine_version": [1, 26, 10]
   },
   "modules": [
@@ -12,14 +12,14 @@
       "description": "Shared + Bedrock-specific .mcfunction files",
       "type": "data",
       "uuid": "6f31b3c4-be1e-4e0e-b991-b2525706d324",
-      "version": [1, 5, 0]
+      "version": [1, 5, 1]
     },
     {
       "description": "Script API port of the builder, camera and ride logic",
       "type": "script",
       "language": "javascript",
       "uuid": "1d3c56b9-8119-49e0-b787-f384e1820bfe",
-      "version": [1, 5, 0],
+      "version": [1, 5, 1],
       "entry": "scripts/main.js"
     }
   ],
@@ -34,7 +34,7 @@
     },
     {
       "uuid": "23d216b2-863c-43db-bdec-c0dc4d586ce3",
-      "version": [1, 5, 0]
+      "version": [1, 5, 1]
     }
   ]
 }
