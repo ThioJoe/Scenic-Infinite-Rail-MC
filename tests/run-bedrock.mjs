@@ -3,6 +3,7 @@
 //
 //   node tests/run-bedrock.mjs                       # build BP/RP from src/
 //   node tests/run-bedrock.mjs --pack Scenic....mcaddon   # test a CI artifact
+//   node tests/run-bedrock.mjs --smoke               # load/init checks only (skip the ride)
 //   node tests/run-bedrock.mjs --server-dir /path/to/bedrock_server
 //
 // Boots the headless BDS with the behavior+resource pack under test in a
@@ -25,6 +26,11 @@ fs.mkdirSync(WORK_DIR, { recursive: true });
 
 const args = process.argv.slice(2);
 const opt = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
+// --smoke: the "does the pack still load & initialize" tier -- runs only the
+// tests marked { smoke: true } below (boot, config apply, item registry, mode
+// seeding), skipping the long surrogate ride. Used by CI for metadata-only
+// commits (a manifest/icon change can't move the ride, only how the pack loads).
+const smoke = args.includes('--smoke');
 
 // Locate the test server (provisioned by tests/setup_headless_env.sh).
 const serverDirCandidates = [
@@ -98,7 +104,9 @@ for (const f of ['config.mcfunction', 'consts.mcfunction']) {
 
 // ---------- tests ----------
 const results = [];
-const report = (name, fn) => ({ name, fn });
+// report(name, fn) or report(name, { smoke: true }, fn). Tests tagged smoke
+// are the "does the pack load & initialize" subset that --smoke runs on its own.
+const report = (name, a, b) => (typeof a === 'function' ? { name, fn: a } : { name, smoke: !!a.smoke, fn: b });
 const NIGHT_START = 12542; const NIGHT_END = 23459;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -119,12 +127,12 @@ let rideMark = 0;
 let groundY = null; // the surrogate's resting level = the start column's surface
 
 const tests = [
-  report('BDS boots with the pack, no script/content-log errors', async (s) => {
+  report('BDS boots with the pack, no script/content-log errors', { smoke: true }, async (s) => {
     const errs = s.scriptErrorsSince(0);
     if (errs.length) throw new Error(`content-log/script errors during boot:\n  ${errs.slice(0, 8).join('\n  ')}`);
   }),
 
-  report('script init applied config.mcfunction to the scoreboard', async (s) => {
+  report('script init applied config.mcfunction to the scoreboard', { smoke: true }, async (s) => {
     if (!expected.length) throw new Error('no expected config parsed from the BP');
     const wrong = [];
     for (const { holder, objective, value } of expected) {
@@ -133,7 +141,7 @@ const tests = [
     if (wrong.length) throw new Error(`config values not applied: ${wrong.join('; ')}`);
   }),
 
-  report('the pack\'s own custom items registered (.itemsok: speed trio + the Toggle HUD pair)', async (s) => {
+  report('the pack\'s own custom items registered (.itemsok: speed trio + the Toggle HUD pair)', { smoke: true }, async (s) => {
     // init() probes every bp/items/*.json id with new ItemStack and mirrors
     // the combined answer to .itemsok; a failed probe re-tries every ~30 s,
     // so poll past one retry before declaring the item registry broken.
@@ -145,7 +153,7 @@ const tests = [
     throw new Error('.itemsok never reached 1: a bp/items/*.json id did not register on BDS (check the content log)');
   }),
 
-  report('modes_init seeded the defaults (torch auto, mobs aggro, speeds, track light)', async (s) => {
+  report('modes_init seeded the defaults (torch auto, mobs aggro, speeds, track light)', { smoke: true }, async (s) => {
     const checks = [];
     if (!(await s.scoreInRange('.TORCHMODE', 'ir', 2))) checks.push('.TORCHMODE != 2 (auto)');
     if (!(await s.scoreInRange('.LIGHTMODE', 'ir', 11))) checks.push('.LIGHTMODE != 11 (bright)');
@@ -476,7 +484,8 @@ const tests = [
 ];
 
 // ---------- run ----------
-console.log('\n=== Bedrock smoke suite ===');
+const selected = smoke ? tests.filter((t) => t.smoke) : tests;
+console.log(`\n=== Bedrock smoke suite${smoke ? ' (--smoke: load/init only)' : ''} ===`);
 const server = new BedrockServer({ serverDir, bpDir, rpDir });
 let failedCount = 0;
 try {
@@ -486,7 +495,7 @@ try {
   await server.start();
   console.log(`up in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 
-  for (const t of tests) {
+  for (const t of selected) {
     const started = Date.now();
     try {
       await t.fn(server);

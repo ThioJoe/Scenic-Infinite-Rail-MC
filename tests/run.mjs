@@ -5,6 +5,7 @@
 //   node tests/run.mjs --pack dist/Scenic....zip   # test a built artifact zip
 //   node tests/run.mjs --pack path/to/Scenic_Infinite_Rail_Mode  # a pack folder
 //   node tests/run.mjs --filter torch         # only suites/tests matching
+//   node tests/run.mjs --smoke                # boot suite only (does the pack load?)
 //   node tests/run.mjs --list                 # list suites/tests, run nothing
 //
 // Each suite boots the headless test server with a brand-new world (fixed
@@ -48,6 +49,10 @@ const serverDirCandidates = [
 const serverDir = serverDirCandidates.find((d) => fs.existsSync(path.join(d, 'server.jar')));
 const filter = opt('--filter')?.toLowerCase();
 const jsonOut = opt('--json');
+// --smoke: the "does the server still load & initialize the pack" tier -- runs
+// only the boot suite (00-boot). Used by CI for metadata-only commits, where a
+// full ride suite can't tell you anything a boot check can't.
+const smoke = has('--smoke');
 
 if (!serverDir) {
   console.error('No Java test server found. Looked for server.jar in:');
@@ -91,6 +96,7 @@ const allResults = [];
 const t0 = Date.now();
 
 for (const suite of suites) {
+  if (smoke && !/^00-/.test(suite.file)) continue;
   if (filter
     && !suite.name.toLowerCase().includes(filter)
     && !suite.tests.some((t) => t.name.toLowerCase().includes(filter))) {
