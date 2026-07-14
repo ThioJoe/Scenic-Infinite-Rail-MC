@@ -1,17 +1,26 @@
 name: Build packs
 
-# Builds both release packs from the split src/ tree on every push and PR:
-#   - ScenicInfiniteRailMode-Java     -> the Scenic_Infinite_Rail_Mode/ datapack folder (drag into the world's datapacks screen / folder)               
+# Builds both release packs from the split src/ tree on every push or PR that
+# changes src/ (see the paths filter below):
+#   - ScenicInfiniteRailMode-Java     -> the Scenic_Infinite_Rail_Mode/ datapack folder (drag into the world's datapacks screen / folder)
 #   - ScenicInfiniteRailMode-Bedrock  -> the .mcpack file (double-click to import)
 
 on:
   push:
     branches: ['**']
-    paths-ignore:
-      - 'README.md'
+    # Only build when the pack SOURCE (or the build script that assembles it)
+    # changes. A doc / license / other-tooling-only commit produces a
+    # byte-identical pack, so there's nothing new to build -- nor, since the
+    # Integration tests workflow chains off this build, to test. (The version
+    # source of truth lives at src/bedrock/bp/manifest.json, so version bumps
+    # are covered.) Use workflow_dispatch to force a build without such a change.
+    paths:
+      - 'src/**'
+      - 'tools/build.mjs'
   pull_request:
-    paths-ignore:
-      - 'README.md'
+    paths:
+      - 'src/**'
+      - 'tools/build.mjs'
   workflow_dispatch:
 
 permissions:

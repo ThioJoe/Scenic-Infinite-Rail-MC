@@ -218,7 +218,7 @@ There's also a `Make-Symlinks.ps1` powershell script in the `tools` folder, whic
   - For Java, you can drag the `_Java` folder into the Data Packs window to create a new world with the combined java build.
   - You'll probably have to re-run the `.ps1` script if you make any changes that add a new file.
 
-**Recommended:** The repository has a build script as a GitHub workflow action. You can simply fork the repo and it should make new build artifacts on every commit.
+**Recommended:** The repository has a build script as a GitHub workflow action. You can simply fork the repo and it should make new build artifacts on every commit that changes the pack source (anything under `src/`, or the build script itself).
 
 **For building locally:**
 1. Ensure a JavaScript runtime (Node.js) is available.
