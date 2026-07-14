@@ -4,15 +4,17 @@
 
 Copyright © 2026 ThioJoe. All rights reserved.
 
-Permission is granted to download, use, and modify Scenic Infinite Rail Mode solely for personal, non-commercial use, except for the media uses expressly permitted below.
+Permission **is granted** to download, use, and modify Scenic Infinite Rail Mode solely for personal, non-commercial use, except for the media uses expressly permitted below.
 
-You may modify the project for your own private use. You may not distribute, reupload, publish, sell, sublicense, or otherwise make available the original project, modified versions, or derivative works without prior written permission from the copyright holder.
+You **may** modify the project for your own personal, non-commercial use. You **may not** distribute, reupload, publish, sell, sublicense, or otherwise make available the original project, modified versions, or derivative works without prior written permission from the copyright holder.
 
-You may share links to the project’s official GitHub repository or official release downloads.
+You **may** use GitHub’s built-in "Fork" feature to create and maintain a fork of this repository solely for personal, non-commercial modification and use.
 
-Displaying, demonstrating, or featuring the project in videos, livestreams, reviews, and other media is permitted, including through monetized channels, provided that the project itself is not redistributed or sold.
+You **may** share links to the project’s official GitHub repository or official release downloads.
 
-Except for the media uses expressly permitted above, commercial use of the project is prohibited without prior written permission from the copyright holder.
+Displaying, demonstrating, or featuring the project in videos, livestreams, reviews, and other media **is permitted**, including through monetized channels, provided that the project itself is not redistributed or sold.
+
+Except for the media uses expressly permitted above, commercial use of the project **is prohibited** without prior written permission from the copyright holder.
 
 This project is provided “as is,” without warranty of any kind, express or implied.
 
