@@ -48,13 +48,64 @@
 
 -----
 
+
+# <img src=".github/assets/system_update-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/system_update-dark.svg#gh-dark-mode-only" width="28" align="center" /> Quick Setup
+
+**Expand the sections below for exact instructions for each edition.**
+
+The steps will basically boil down to:
+  1. Choose to create a new world
+  2. Add the pack during world setup
+  3. Join the world
+
+ ## **Java Edition Setup Steps:**
+ <details>
+    <summary>Click here to expand Java Edition instructions</summary>
+     
+<br>
+     
+ 1. From the main menu, click "**Single Player**". Then "**Create New World**".
+    - You can name it whatever, and the default settings are fine
+ 2. Under the "**More**" tab, click the "**Data Packs**" button.
+ 3. Drag the downloaded `ScenicInfiniteRailMode-Java-*.zip` file onto the Minecraft window (no need to extract).
+     - Confirm "Yes" if it asks. Then it should appear in the "Available" list.
+ 4. Activate the data pack by **clicking the "Play button"** that appears while hovering over its left icon.
+ 5. Ensure the datapack now shows in the "Selected" list, then click "**Done**". 
+     - If it warns about experimental features, click "**Proceed**".
+ 6. To finish creating the world, click "**Create New World**"
+
+Note: The "Minecart Improvements" experiment is required for Java edition, but the datapack should automatically enable this for newly created worlds so you don't have to. On an existing world, if it's not enabled, it will not even appear in the list of available datapacks.
+</details>
+
+ ## **Bedrock Edition Setup Steps:** 
+
+  <details>
+    <summary>Click here to expand Bedrock Edition instructions</summary>
+     
+<br>
+
+  1. Close minecraft if it's already running _(important)_.
+  2. Double click the **`*.mcaddon`** file.
+    - It may ask which program to open with. Select Minecraft.
+  3. Minecraft should launch, and after a few seconds should say "**Successfully imported...**" at the top.
+  4. While creating a new world, go to the "**Behavior packs**" section, and click "**Activate**" next to Scenic Infinite Rail Mode.
+     - This should automatically also activate the related Resource Pack
+  5. Finish creating the world by clicking "**Create**"
+     - You can name it whatever, and the default settings are fine
+     - It may give a warning about achievements, just click "**Create Anyway**"
+
+</details>
+
+## **Console Setup (Xbox etc):**
+#### For instructions for Bedrock on console, see: [This detailed tutorial on the Wiki](https://github.com/ThioJoe/Scenic-Infinite-Rail-MC/wiki/Installing-The-Pack-On-Console)
+
+-------------------
+
 # <img src=".github/assets/help-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/help-dark.svg#gh-dark-mode-only" width="28" align="center" /> How to Use
 
 ### **Starting the Ride: Just join the world**
 - **The ride starts automatically** as soon as you join the world.
 - When re-joining a world, you will automatically continue the ride
-
-For instructions on how to create a world with it, see the [How To Install](#-how-to-install) section further down.
 
 ## Hotbar Control Items
 
@@ -94,7 +145,7 @@ For instructions on how to create a world with it, see the [How To Install](#-ho
 
 ------
 
-# <img src=".github/assets/balance-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/balance-dark.svg#gh-dark-mode-only" width="28" align="center" /> Java vs Bedrock Editions
+# <img src=".github/assets/balance-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/balance-dark.svg#gh-dark-mode-only" width="28" align="center" /> Java vs Bedrock Edition Differences
 
 Because of platform differences, the Java and Bedrock versions have visual differences, but the ride logic and settings are mostly identical.
 
@@ -124,45 +175,6 @@ Because of platform differences, the Java and Bedrock versions have visual diffe
 
 ---------
 
-# <img src=".github/assets/system_update-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/system_update-dark.svg#gh-dark-mode-only" width="28" align="center" /> How to Install
-
-#### Supported Versions:
-- **Java Edition:** Version 1.21.9 through 26.2
-- **Bedrock Edition:** Requires 1.21.120 or newer; tested on 26.33
-
- ## **Java Edition Installation:**
- 1. From the main menu, click "**Single Player**". Then "**Create New World**".
-    - You can name it whatever, and the default settings are fine
- 2. Under the "**More**" tab, click the "**Data Packs**" button.
- 3. Drag the downloaded `ScenicInfiniteRailMode-Java-*.zip` file onto the Minecraft window (no need to extract).
-     - Confirm "Yes" if it asks. Then it should appear in the "Available" list.
- 4. Activate the data pack by **clicking the "Play button"** that appears while hovering over its left icon.
- 5. Ensure the datapack now shows in the "Selected" list, then click "**Done**". 
-     - If it warns about experimental features, click "**Proceed**".
- 6. To finish creating the world, click "**Create New World**"
-
-
-Note: The "Minecart Improvements" experiment is required for Java edition, but the datapack should automatically enable this for newly created worlds so you don't have to. On an existing world, if it's not enabled, it will not even appear in the list of available datapacks.
-
- ## **Bedrock Edition Installation:** 
-  1. Close minecraft if it's already running _(important)_.
-  2. Double click the **`*.mcaddon`** file.
-    - It may ask which program to open with. Select Minecraft.
-  3. Minecraft should launch, and after a few seconds should say "**Successfully imported...**" at the top.
-  4. While creating a new world, go to the "**Behavior packs**" section, and click "**Activate**" next to Scenic Infinite Rail Mode.
-     - This should automatically also activate the related Resource Pack
-  5. Finish creating the world by clicking "**Create**"
-     - You can name it whatever, and the default settings are fine
-     - It may give a warning about achievements, just click "**Create Anyway**"
-
-## **Console Installation (via Realms):**
-**Consoles cannot normally load custom behavior packs**. As a workaround you must create a Realm with the pack installed from a PC (the trial works), then download that world onto your console.
-
-### → For a detailed tutorial getting it on Xbox / Console, see: [This page on the Wiki](https://github.com/ThioJoe/Scenic-Infinite-Rail-MC/wiki/Installing-The-Pack-On-Console)
-
-Note: There are other non-official workarounds you can search for, but they can be advanced or involve third party apps that don't last long, so you'll have to look that up yourself.
-
--------------------
 
 # <img src=".github/assets/folder_code-light.svg#gh-light-mode-only" width="28" align="center" /><img src=".github/assets/folder_code-dark.svg#gh-dark-mode-only" width="28" align="center" /> Advanced / Manual Configuration
 
@@ -201,6 +213,12 @@ There's also a `Make-Symlinks.ps1` powershell script in the `tools` folder, whic
 </details>
 
 ----------
+
+## Other Info
+
+#### Supported Versions:
+- **Java Edition:** Versions 1.21.9 through 26.2
+- **Bedrock Edition:** Requires 1.21.120 or newer
 
 ## License
 Free for personal use and monetized videos/livestreams. Redistribution, derivative publication, and other commercial use are prohibited.
