@@ -39,11 +39,11 @@ Basically the Minecraft equivalent of "[Slow TV](https://en.wikipedia.org/wiki/S
 
 **Both Java and Bedrock Editions supported**
 
-1. Go to the Releases page.
+1. Go to the [Releases](https://github.com/ThioJoe/Scenic-Infinite-Rail-MC/releases) page.
 2. For the latest release, look under Assets, then download either:
     - For **Java Edition**: `ScenicInfiniteRailMode-Java-*.zip` 
     - For **Bedrock Edition**: `ScenicInfiniteRailMode-Bedrock-*.mcaddon` 
-3. For **installation steps**, see the [How To Install](#how-to-install) section further down.
+3. For **installation steps**, see the [How To Install](#-how-to-install) section further down.
 
 -----
 
@@ -114,7 +114,7 @@ Because of platform differences, the Java and Bedrock versions have visual diffe
 
 **ℹ️ Workaround:** Download the world through a realm.
   - The only way to use a custom behavior pack on a console for a local world is to host a realm with it, then download it onto the console.
-  - See the "[Console Installation](#console-installation-via-realms)" section below.
+  - See the [Console Installation Tutorial](https://github.com/ThioJoe/Scenic-Infinite-Rail-MC/wiki/Installing-The-Pack-On-Console) article on the Wiki.
 
   
 **❌ Problem:** Bedrock has a hardcoded "AFK" message that also dims the screen after 15 minutes, and cannot be disabled.
