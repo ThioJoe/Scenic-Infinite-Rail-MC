@@ -58,12 +58,12 @@ The steps will basically boil down to:
   2. Add the pack during world setup
   3. Join the world
 
- ## **Java Edition Setup Steps:**
+ ## **Java Edition Setup:**
  <details>
     <summary>Click here to expand Java Edition instructions</summary>
-     
 <br>
-     
+
+### Steps:
  1. From the main menu, click "**Single Player**". Then "**Create New World**".
     - You can name it whatever, and the default settings are fine
  2. Under the "**More**" tab, click the "**Data Packs**" button.
@@ -73,17 +73,24 @@ The steps will basically boil down to:
  5. Ensure the datapack now shows in the "Selected" list, then click "**Done**". 
      - If it warns about experimental features, click "**Proceed**".
  6. To finish creating the world, click "**Create New World**"
+ 
+<br>
+
+### Quick Video Walkthrough:
+
+https://github.com/user-attachments/assets/0b581cda-9c46-4bdc-b613-7f0676b2a500
+
 
 Note: The "Minecart Improvements" experiment is required for Java edition, but the datapack should automatically enable this for newly created worlds so you don't have to. On an existing world, if it's not enabled, it will not even appear in the list of available datapacks.
 </details>
 
- ## **Bedrock Edition Setup Steps:** 
+ ## **Bedrock Edition Setup:** 
 
   <details>
     <summary>Click here to expand Bedrock Edition instructions</summary>
-     
 <br>
 
+### Steps:
   1. Close minecraft if it's already running _(important)_.
   2. Double click the **`*.mcaddon`** file.
     - It may ask which program to open with. Select Minecraft.
@@ -93,6 +100,12 @@ Note: The "Minecart Improvements" experiment is required for Java edition, but t
   5. Finish creating the world by clicking "**Create**"
      - You can name it whatever, and the default settings are fine
      - It may give a warning about achievements, just click "**Create Anyway**"
+
+<br>
+
+### Quick Video Walkthrough:
+
+https://github.com/user-attachments/assets/33e31197-6d4d-493d-925f-54d2d2c212bd
 
 </details>
 
