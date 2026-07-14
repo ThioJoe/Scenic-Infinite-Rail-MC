@@ -14,9 +14,9 @@
 ## What is it?
 A vanilla Minecraft data pack that creates an **endless minecart ride through the world**, following the terrain with smooth camera movements.
 
-The idea is that you can **leave it running on a TV or monitor** as visual ambiance. 
+The idea is that you can **leave it running on a TV or monitor** as visual ambiance.  **_No mods required._**
 
-Basically the Minecraft equivalent of "[Slow TV](https://en.wikipedia.org/wiki/Slow_television)", such as 4-8 hour train ride videos on YouTube or Netflix.
+Basically a Minecraft equivalent of those 4-8 hour train ride videos on YouTube or Netflix (aka "Slow TV").
 
 <br>
 
