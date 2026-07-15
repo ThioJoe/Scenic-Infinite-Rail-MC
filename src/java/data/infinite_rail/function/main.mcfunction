@@ -95,6 +95,15 @@ ride @e[type=minecart,tag=ir_ride,limit=1] mount @e[type=item_display,tag=ir_sea
 execute store result score .mx ir run data get entity @e[type=minecart,tag=ir_cart,limit=1] Motion[0] 100
 execute if score .mx ir matches ..10 run data merge entity @e[type=minecart,tag=ir_cart,limit=1] {Motion:[0.5d,0.0d,0.0d]}
 
+# Watchdog: the motion re-boost above can't help a cart that DERAILED (fell
+# off the track end into terrain when chunk loading lagged) or vanished --
+# pace_watch compares the cart's X across 3-second windows (60 ticks) and,
+# when it stopped going anywhere, snaps it back onto the built track
+# (pace_fix). Runs before cam_follow so a recovery moves cart and rig in
+# the same tick.
+scoreboard players add .wdt ir 1
+execute if score .wdt ir matches 60.. run function infinite_rail:pace_watch
+
 # Smooth camera: fly the rig along the recorded profile ahead of the pace cart.
 execute if entity @e[type=minecart,tag=ir_cart,limit=1] run function infinite_rail:cam_follow
 

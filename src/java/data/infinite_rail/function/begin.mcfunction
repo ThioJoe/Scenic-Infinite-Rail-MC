@@ -65,6 +65,12 @@ scoreboard players set .czt ir 14
 scoreboard players operation .czt ir -= .czd ir
 execute store result storage infinite_rail:anchor dz int 1 run scoreboard players get .czt ir
 function infinite_rail:anchor_z with storage infinite_rail:anchor
+# Remember the snapped centerline (block Z) as state: the pace watchdog's
+# recovery teleport needs an absolute Z that doesn't depend on any entity
+# still being loaded (the head can be in unloaded chunks in exactly the
+# situations that strand the cart).
+scoreboard players operation .lineZ ir = .cz ir
+scoreboard players operation .lineZ ir += .czt ir
 execute at @e[type=marker,tag=ir_head,limit=1] run forceload add ~-16 ~-1 ~ ~1
 execute at @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:forceload_here
 
@@ -136,6 +142,17 @@ scoreboard players operation .lastChunk ir -= .RIDER_BEHIND cfg_camera
 scoreboard players operation .lastChunk ir /= .C16 ir
 scoreboard players set .oceanRun ir 0
 scoreboard players set .landRun ir 0
+
+# --- Seed the pace-cart watchdog (pace_watch, run from main every 60
+# ticks): baseline X = the cart just summoned, clean interval clock and
+# counters. .wdfixn is the lifetime recovery count -- the test suites
+# assert it stays 0 on a healthy ride, so it must reset per ride.
+scoreboard players operation .wdX ir = .cartX ir
+scoreboard players operation .wdX ir *= .C10 ir
+scoreboard players set .wdt ir 0
+scoreboard players set .wdstuck ir 0
+scoreboard players set .wdmiss ir 0
+scoreboard players set .wdfixn ir 0
 
 # --- Hand the rest of the launch to the ticker (launch_tick/launch_done) ---
 # The runway pre-build (out to the rig position + 32 columns) plus the rig
