@@ -17,10 +17,14 @@
 //      reload quiet, and a ride that goes down STUCK between two checks
 //      must be rescued on schedule after it comes back up.
 //
-// The whole suite runs on a server pinned to the MINIMUM view/simulation
-// distance (3/3) -- emulating the low-power "TV NUC" setup from the field
-// report -- which doubles as proof the ride itself works there: the chunk
-// pipeline is forceload-driven and must not care about either setting.
+// The whole suite runs on a server pinned to view/simulation distance 2/2
+// -- the Java client's own render-distance floor (the Fast preset's
+// minimum is 2 chunks, and on singleplayer the integrated server inherits
+// it), emulating the low-power "TV NUC" setup from the field report. The
+// dedicated server may clamp these internally; whatever it grants is the
+// lowest it can run, and the suite passing there doubles as proof the
+// ride itself doesn't care: the chunk pipeline is forceload-driven and
+// independent of both settings.
 
 import { defineSuite, eq, neq, ok, between, closeTo, includes, skip } from '../lib/harness.mjs';
 import { startRide, stopRide, summonRig, SURROGATE_TAG, LINE_Z } from '../lib/ride.mjs';
@@ -55,11 +59,21 @@ async function railLevelAt(mc, x) {
   return Math.min(await mc.trackY(i - 1), await mc.trackY(i));
 }
 
-/** Assert the pace cart sits ON the line: centered on Z, at rail height. */
+/** Assert the pace cart sits ON the line: centered on Z, at rail height.
+ *  Frozen around the reads: position and history are fetched over several
+ *  RCON round-trips, and a live cart climbing between the X and Y reads
+ *  gets compared against a stale column's rail level (the suite-conventions
+ *  "freeze before multi-value consistency reads" rule). */
 async function assertOnTrack(mc, label) {
-  const p = await cartPos(mc);
+  await mc.freeze();
+  let p, rail;
+  try {
+    p = await cartPos(mc);
+    rail = await railLevelAt(mc, p.x);
+  } finally {
+    await mc.unfreeze();
+  }
   closeTo(p.z, LINE_Z + 0.5, 0.75, `${label}: cart Z centered on the line`);
-  const rail = await railLevelAt(mc, p.x);
   between(p.y - rail, -0.5, 2.0, `${label}: cart Y ${p.y.toFixed(2)} rides the rail level ${rail}`);
 }
 
@@ -94,7 +108,7 @@ async function rejoinWorld(server, mc) {
 }
 
 export default defineSuite('pace-cart watchdog', {
-  server: { props: { 'view-distance': '3', 'simulation-distance': '3' } },
+  server: { props: { 'view-distance': '2', 'simulation-distance': '2' } },
 }, ({ test }) => {
   test('ride starts on a minimum-distance server; watchdog armed', { timeout: 240000 }, async ({ mc }) => {
     await startRide(mc);
