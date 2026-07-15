@@ -22,6 +22,9 @@ To maximize maintainability, separate the "data fetching/math" from the "decisio
 
 #Testing
 You should test the changes in any way possible using the available testing environment. If there's no suite available, try to come up with a test  you can run yourself before pushing. While waiting for the server tests, the full suites can take several minutes. You should work on  your explanation of what you're doing in that time and if you finish before the test is done output the explanation immediately so I have something to read.
+
+When possible and applicable, when initially designing a new test, also verify a “negative hypothesis” or expected failure mode for it, basically set of inputs or conditions where it SHOULD fail, and ensure it also fails when it should. This way we know the test is actually testing the correct thing, and a success is not misleading.  You don't need to necessarily include the "negative" test in the permanent test suite (unless it makes sense to). You can just use it to verify it's a meaningful test.
+
 -----------------------------------------------------------
 
 ====== OUR JOB TODAY ======
