@@ -135,10 +135,28 @@ const CORR_B = 'ir_corr_b';
 const CORR_BEHIND = 24;
 // Per-area chunk cap. world.tickingAreaManager allows 300 ticking chunks
 // per pack, and the A/B handoff briefly holds BOTH corridors -- capping one
-// corridor at 140 keeps the overlap safely inside the budget (the cap only
-// binds at extreme torch widths; corridorOptions() trims the LENGTH to fit,
-// never below the sample window the builder needs).
+// corridor at 140 keeps the overlap safely inside the budget (with the
+// torch band split into its own stub the main corridor is one chunk row
+// wide and never gets near the cap; corridorOptions() still trims the
+// LENGTH to fit, never below the sample window the builder needs).
 const CORR_BUDGET = 140;
+// The TORCH STUB -- a second, independent A/B ticking-area pair: the wide
+// (±.TORCHRANGE) but SHORT span around the build head that keeps the torch
+// band loaded and generated while torches are actually planting
+// (torchLit(): always-on mode, or auto mode at night). Torches only ever
+// land beside the column being built, so the wide rows never need the main
+// corridor's .TERRAIN_GENAHEAD reach -- a stub covering the span built
+// since the last roll (-16) plus a couple of rolls of generation lead
+// (+32) is enough. Splitting it out keeps the main corridor one chunk row
+// wide at ANY time and drops the wide rows entirely through auto-mode days
+// -- chunk GENERATION is the biggest avoidable load on weak machines, and
+// a catch-up burst's queue no longer carries ~5x the area in torch
+// scenery the builder doesn't need. (Same split as Java's forceload
+// macro: narrow deep row + wide near stub.)
+const TORCH_A = 'ir_torch_a';
+const TORCH_B = 'ir_torch_b';
+const TORCH_STUB_BEHIND = 16;
+const TORCH_STUB_AHEAD = 32;
 // How far past the head buildReady() requires loaded chunks (the first
 // third of the default 48-block .SAMPLE_WINDOW; the rest may lag and fall
 // back per-sample).
@@ -1981,11 +1999,15 @@ function buildLoop() {
 //
 // Each roll claims the NEW span first and releases the old one only after
 // the create resolves (the A/B name pair), so the overlap never unloads.
-// The corridor is deliberately narrow -- ±1 chunk normally, the clamped
-// .TORCHRANGE while torch mode may throw torches wider (clock-blind, like
-// Java's forceload_here) -- so the pack's ticking/generation footprint is a
-// ~3-chunk-wide band instead of the scout bubble's 13x13 disc: less mob
-// simulation, less disk, less save-write churn.
+// The corridor is deliberately narrow -- ALWAYS ±1 block around the
+// anchored centerline (one chunk row): the torch band lives in its own
+// short, wide stub near the head (rollTorchStub, the TORCH_A/B pair),
+// created only while torches are actually planting (torchLit()) -- so the
+// pack's ticking/generation footprint is a ~1-chunk-wide band plus a small
+// stub at night, instead of the scout bubble's 13x13 disc or the old
+// full-length 5-row torch corridor: less mob simulation, less disk, less
+// save-write churn, and a generation queue that never buries the track
+// row's chunks under torch scenery.
 
 let corrLive = null;       // the currently-live corridor's area name (null = none)
 let corrFromX = null;      // the live corridor's western edge (the cull's bookmark)
@@ -1996,14 +2018,21 @@ function tamgr() {
 }
 
 function corridorOptions() {
-  // Width: the MINIMUM that covers what the builder touches. The centerline
-  // is anchored at Z ≡ 14 (mod 16) by begin(), so ±1 block (the rail strip
-  // z-1..z+1, offsets 13..15) stays inside a single chunk row -- the whole
-  // non-torch corridor is one row of chunks. While torch mode is on or auto
-  // the width grows to the clamped .TORCHRANGE (default 30: with the
-  // anchored centerline the band [z-30, z+30] spans exactly four rows).
-  let w = 1;
-  if (torchMode() >= 1) w = Math.min(48, Math.max(2, cfg('TORCHRANGE')));
+  // Width: the MINIMUM that covers what the builder touches -- always ±1
+  // block. The centerline is anchored at Z ≡ 14 (mod 16) by begin(), so the
+  // rail strip (z-1..z+1, offsets 13..15) stays inside a single chunk row.
+  // The torch band deliberately does NOT widen this corridor anymore: it
+  // rides in its own short stub near the head (torchStubOptions), created
+  // only while torches are actually planting. (Java's twin band needs the
+  // NEIGHBOR rows forced too -- ±15, three rows -- because a forceloaded
+  // chunk only entity-ticks once its surroundings are generated and the
+  // implicit ticket ladder loses that race under load. Manager ticking
+  // areas don't have that failure: createTickingArea resolves only when
+  // every chunk in the box is loaded AND ticking, generation included,
+  // and the buildReady gate + the pace's buffer-aware soft speed ceiling
+  // absorb whatever latency remains -- so one row is genuinely enough
+  // here.)
+  const w = 1;
   const rigX = Math.floor(S.paceX + camAhead());
   const fromX = rigX - CORR_BEHIND;
   // Ahead: Java's .TERRAIN_GENAHEAD semantics (generate well past the
@@ -2042,9 +2071,13 @@ async function rollCorridor() {
     await mgr.createTickingArea(next, opts);
     corrLoadedAt = tickN;
     // Cull the slab this roll releases, while the OLD area still holds it
-    // loaded -- its last loaded moment (see cullPassedEntities).
+    // loaded -- its last loaded moment (see cullPassedEntities). The Z span
+    // is fixed at ±64 around the centerline (Java's release band's
+    // half-width): the main corridor is only one row wide now, but the
+    // torch stub can have held up to ±48 loaded through this slab earlier,
+    // and culling a never-loaded chunk is a no-op.
     if (corrFromX !== null && opts.from.x > corrFromX) {
-      cullPassedEntities(Math.max(corrFromX, opts.from.x - 128), opts.from.x, opts.from.z - 16, opts.to.z + 16);
+      cullPassedEntities(Math.max(corrFromX, opts.from.x - 128), opts.from.x, S.centerZ - 64, S.centerZ + 64);
     }
     if (corrLive && corrLive !== next) {
       try { mgr.removeTickingArea(corrLive); } catch { /* already gone */ }
@@ -2070,6 +2103,72 @@ function clearCorridor() {
   try { tamgr()?.removeAllTickingAreas(); } catch { /* manager unavailable */ }
   corrLive = null;
   corrFromX = null;
+  torchLive = null;
+}
+
+// --- The torch stub (see the TORCH_A/B constants' header) -----------------
+// The short, wide ticking area around the head that keeps the ±.TORCHRANGE
+// torch band loaded and generated -- but ONLY while torches are actually
+// planting: always-on torch mode, or auto mode at night (torchLit(), the
+// same shared torch_auto answer that gates placement itself). Java's twin
+// is the forceload macro's stub add, gated by .torchlit in forceload_here.
+// An auto-mode DAY therefore costs zero wide chunks, and a starved
+// generator never queues torch scenery ahead of track-row chunks. Rolled on
+// the same 16-block cadence as the corridor plus a 100-tick reconcile (so
+// dusk widens and dawn releases within ~5 s, not only on the next roll).
+// Degradation is graceful and deliberate: no stub (budget exhausted, create
+// still in flight, manager missing) just means a throw beyond the loaded
+// rows silently fails to place -- the priority is always the track row.
+
+let torchLive = null;      // the live stub's area name (null = none)
+let torchBusy = false;     // a stub createTickingArea is still in flight
+
+function torchStubOptions() {
+  const w = Math.min(48, Math.max(2, cfg('TORCHRANGE')));
+  return {
+    dimension: dim,
+    from: { x: S.headX - TORCH_STUB_BEHIND, y: 0, z: S.centerZ - w },
+    to: { x: S.headX + TORCH_STUB_AHEAD, y: 0, z: S.centerZ + w },
+  };
+}
+
+async function rollTorchStub() {
+  const mgr = tamgr();
+  if (!mgr || torchBusy || !dim) return;
+  torchBusy = true;
+  const next = torchLive === TORCH_A ? TORCH_B : TORCH_A;
+  try {
+    if (!S.started || !torchLit()) {
+      // Torches aren't planting right now (off, or an auto-mode day): the
+      // wide band earns no ticking chunks. Release and stand down.
+      if (torchLive) { try { mgr.removeTickingArea(torchLive); } catch { /* already gone */ } torchLive = null; }
+      return;
+    }
+    const opts = torchStubOptions();
+    if (!mgr.hasCapacity(opts)) {
+      // No headroom for the stub (or its A/B overlap): torch placement
+      // degrades rather than the main corridor shrinking -- "torch chunks
+      // last" is the whole point of the split. Release any old stub (its
+      // span is stale anyway) and let a later roll retry.
+      if (torchLive) { try { mgr.removeTickingArea(torchLive); } catch { /* already gone */ } torchLive = null; }
+      return;
+    }
+    await mgr.createTickingArea(next, opts);
+    if (torchLive && torchLive !== next) {
+      try { mgr.removeTickingArea(torchLive); } catch { /* already gone */ }
+    }
+    torchLive = next;
+  } catch (e) {
+    // Keep whatever stub is live; a half-created area under the new name
+    // would block the retry -- clear it.
+    try { mgr.removeTickingArea(next); } catch { /* never created */ }
+    if (tickN - lastBuildErrAt > 100) {
+      lastBuildErrAt = tickN;
+      dbg(`torch stub update failed: ${e}`);
+    }
+  } finally {
+    torchBusy = false;
+  }
 }
 
 // The passed-entity cull -- the safe salvage of the retired trail wiper
@@ -2109,8 +2208,10 @@ function rollChunks() {
   S.nextLoad += 16;
   // Re-anchor the ticking-area corridor on the new span (Java's forceload
   // cadence). Fire-and-forget: rollCorridor skips itself while a previous
-  // create is still resolving.
+  // create is still resolving. The torch stub rolls on the same cadence
+  // (and self-decides whether it should exist at all -- torchLit()).
   void rollCorridor();
+  void rollTorchStub();
   // Drop surface-probe memo entries the head has passed.
   for (const k of surfMemo.keys()) if (k < x) surfMemo.delete(k);
   if (debugOn()) {
@@ -2816,6 +2917,7 @@ function begin(rider) {
   clearCorridor();
   S.paceX = startX + 0.5;
   void rollCorridor();
+  void rollTorchStub();
   if (!tamgr()) {
     say('§eThis engine has no world.tickingAreaManager (script ticking areas). The ride cannot prepare terrain ahead -- it needs Bedrock 1.26.10+ with the FULL current behavior pack.');
   }
@@ -3233,6 +3335,7 @@ function init() {
   // A resumed ride needs its corridor back before the builder can move (and
   // before the rider's chunk can load on a headless resume).
   if (S.started) void rollCorridor();
+  if (S.started) void rollTorchStub();
   if (S.started) say('§7Ride resumed. Run §b/function infinite_rail/stop§7 to end it.');
   else say('§7Loaded. A fresh world starts the ride automatically; run §b/function infinite_rail/start§7 to (re)start it here.');
   inited = true;
@@ -3492,6 +3595,12 @@ function tick() {
   // travel, but a corridor lost to an error (or a resume raced by chunk
   // loading) must come back even while the head is pinned.
   if (!corrLive && !corrBusy && tickN % 100 === 0) void rollCorridor();
+  // 1c. torch-stub reconcile, offset from the corridor heal's phase: dusk
+  // and dawn happen BETWEEN 16-block rolls (or while the head is pinned),
+  // so flip the stub within ~5 s of torchLit() changing -- create at dusk,
+  // release at dawn (that release IS the day-time saving). Only acts on a
+  // lit/exists mismatch: a live, correctly-placed stub is left alone.
+  if (!torchBusy && tickN % 100 === 50 && torchLit() !== (torchLive !== null)) void rollTorchStub();
   let seat = findSeat();
   let cart = findCart();
   // A lost cart prop (killed by something) heals CART-ONLY, at the rig,

@@ -520,13 +520,15 @@ scoreboard players set .TORCHODDS cfg_ride 35
 # Torch mode: how far (in blocks) a torch may land from the track's
 # centerline. Each torch rolls a random distance from 2 up to this, on a
 # random side. The floor of 2 keeps torches out of the carved bore. While
-# torch mode is on or auto, both editions widen their rolling loaded
-# corridor to this value so the whole torch band stays loaded and generated
-# (a few more chunks in memory while torches are actually being planted);
-# both cap the effective value at 48. The default of 30 is chunk-math
-# deliberate: the track's centerline is anchored at Z ≡ 14 (mod 16), so the
-# ±30 torch band spans EXACTLY four chunk rows -- 31 or 32 would tick and
-# generate a fifth row for two more blocks of throw.
+# torches are ACTIVELY planting (always-on mode; auto mode only at night),
+# both editions keep a short "torch stub" of chunks this wide loaded and
+# generated around the build head -- torches only ever land beside the
+# column being built, so the wide band never reaches ahead with the main
+# corridor, and an auto-mode day costs no wide chunks at all; both cap the
+# effective value at 48. The default of 30 is chunk-math deliberate: the
+# track's centerline is anchored at Z ≡ 14 (mod 16), so the ±30 torch band
+# spans EXACTLY four chunk rows -- 31 or 32 would tick and generate a
+# fifth row for two more blocks of throw.
 scoreboard players set .TORCHRANGE cfg_ride 30
 
 # Torch mode: where a torch would land ON WATER, plant a sea pickle on the
