@@ -46,11 +46,15 @@ export default defineSuite('speed-scaled build budget', ({ test }) => {
     await mc.setScore('.mx', 'ir', 0);
   });
 
-  test('live ride: a burst tick builds exactly the scaled budget', { timeout: 240000 }, async ({ mc, note }) => {
+  test('live ride: a burst tick builds exactly the scaled budget', { timeout: 240000 }, async ({ mc, note, expected }) => {
     await placeSurrogate(mc);
     // Determinism: no ocean sprint (the fixed seed is ocean-heavy), so the
-    // cruise stays at the land speed 8 -> budget = ceil(8x3/20) = 2.
+    // cruise stays at the land speed 8; and the factor is PINNED to 3 --
+    // the shipped .BUILD_FACTOR default is a tunable (it has already moved
+    // 3 -> 2), and this leg asserts the budget FORMULA, not the knob's
+    // current default -> budget = ceil(8x3/20) = 2.
     await mc.cmd('scoreboard players set .OCEANSPEED cfg_ride 0');
+    await mc.cmd('scoreboard players set .BUILD_FACTOR cfg_ride 3');
     await beginRide(mc);
     await awaitLaunched(mc);
 
@@ -78,8 +82,10 @@ export default defineSuite('speed-scaled build budget', ({ test }) => {
       note(`burst rate followed the knob: ${d1}/40 then ${d2}/20 columns per tick`);
     } finally {
       await mc.unfreeze();
-      await mc.cmd('scoreboard players set .BUILD_FACTOR cfg_ride 3');
-      await mc.cmd('scoreboard players set .PACE_CART_BEHIND cfg_ride 224');
+      // Restore the SHIPPED defaults (from the pack's own config), not the
+      // pinned test values.
+      await mc.setScore('.BUILD_FACTOR', 'cfg_ride', expected.get('.BUILD_FACTOR'));
+      await mc.setScore('.PACE_CART_BEHIND', 'cfg_ride', expected.get('.PACE_CART_BEHIND'));
     }
     await stopRide(mc);
   });

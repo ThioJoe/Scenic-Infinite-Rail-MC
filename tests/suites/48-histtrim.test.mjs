@@ -36,7 +36,7 @@ export default defineSuite('track history trim', ({ test }) => {
     await mc.cmd('data modify storage infinite_rail:track y set value []');
   });
 
-  test('end to end: a long ride holds the bound and stays self-consistent', { timeout: 480000 }, async ({ mc, note }) => {
+  test('end to end: a long ride holds the bound and stays self-consistent', { timeout: 480000 }, async ({ mc, note, expected }) => {
     const { trackBase: base0 } = await startRide(mc);
     // Let the builder run far ahead so the ride crosses the 2048-column
     // bound quickly: open the gap condition AND raise the speed-scaled
@@ -61,8 +61,10 @@ export default defineSuite('track history trim', ({ test }) => {
       eq(await mc.trackY(len - 1), await mc.score('.railY', 'ir'), 'newest entry is the current rail Y');
     } finally {
       await mc.unfreeze();
-      await mc.cmd('scoreboard players set .PACE_CART_BEHIND cfg_ride 224');
-      await mc.cmd('scoreboard players set .BUILD_FACTOR cfg_ride 3');
+      // Restore the SHIPPED defaults (from the pack's own config), not
+      // hardcoded copies that can go stale when the config is retuned.
+      await mc.setScore('.PACE_CART_BEHIND', 'cfg_ride', expected.get('.PACE_CART_BEHIND'));
+      await mc.setScore('.BUILD_FACTOR', 'cfg_ride', expected.get('.BUILD_FACTOR'));
     }
     await stopRide(mc);
   });
