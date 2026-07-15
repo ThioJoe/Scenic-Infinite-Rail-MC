@@ -117,7 +117,7 @@ https://github.com/user-attachments/assets/33e31197-6d4d-493d-925f-54d2d2c212bd
 
 ### **Starting the Ride: Just join the world**
 - **The ride starts automatically** as soon as you join the world.
-- The auto-start whisks you to X = -99,000 first, so the eastbound journey spends as long as possible at low coordinates (where Bedrock's floating-point positions are at their most precise). Manual starts (`/function` command) always begin right where you stand.
+- During its short countdown, the auto-start prepares a starting area at X = -99,000 and seats you there as the ride begins — so the eastbound journey spends as long as possible at low coordinates (where Bedrock's floating-point positions are at their most precise). Manual starts (`/function` command) always begin right where you stand.
 - When re-joining a world, you will automatically continue the ride
 
 ## Hotbar Control Items (Ride Options)

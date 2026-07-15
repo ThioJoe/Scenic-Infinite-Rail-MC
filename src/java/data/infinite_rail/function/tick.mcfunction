@@ -39,24 +39,32 @@ execute if score .AUTOSTART ir matches 1 unless score .autodone ir matches 1 if 
 
 # Wait until a player actually exists in the world, then count up 100 ticks (5 seconds) to let chunks load.
 execute if score .AUTOSTART ir matches 1 unless score .autodone ir matches 1 if entity @a run scoreboard players add .start_timer ir 1
-# The tick the countdown begins, move the starter to the western start line
-# (X -99000 -- see auto_relocate: maximizes the ride's time at low absolute
-# coordinates, where Bedrock's 32-bit float positions are precise; Java
-# mirrors it for parity). The countdown doubles as the journey west's
-# chunk-loading time, and the readiness hold below covers slow machines.
-execute if score .start_timer ir matches 1 unless score .autodone ir matches 1 as @p run function infinite_rail:auto_relocate
+# The tick the countdown begins, start force-generating the landing pad at
+# the western start line (X -99000 -- see auto_prep: maximizes the ride's
+# time at low absolute coordinates, where Bedrock's 32-bit float positions
+# are precise; Java mirrors it for parity). The player is NOT moved yet --
+# the countdown is the pad's chunk-loading time, and the teleport happens
+# at the very end (auto_place, below), straight into begin's same-tick
+# seat lift. That is what the countdown was always for; it just loads the
+# destination now instead of the spawn.
+execute if score .start_timer ir matches 1 unless score .autodone ir matches 1 run function infinite_rail:auto_prep
 execute if score .start_timer ir matches 1 unless score .autodone ir matches 1 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Starting in 5...","color":"yellow"}]
 execute if score .start_timer ir matches 20 unless score .autodone ir matches 1 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Starting in 4...","color":"yellow"}]
 execute if score .start_timer ir matches 40 unless score .autodone ir matches 1 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Starting in 3...","color":"yellow"}]
 execute if score .start_timer ir matches 60 unless score .autodone ir matches 1 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Starting in 2...","color":"yellow"}]
 execute if score .start_timer ir matches 80 unless score .autodone ir matches 1 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Starting in 1...","color":"yellow"}]
-# At 100+ ticks, start -- HELD until the chunk under the (relocated) player
-# is loaded: begin's surface probe is synchronous and must land on real
-# terrain. .relok is preset 1 and the quarantined auto_ready only ever
-# LOWERS it (fail-open: if `if loaded` breaks on some version, this fires
-# at 100 ticks exactly like the pre-relocation pack). Retries every tick;
-# a one-shot note at 300 (10 s of holding) says what the wait is.
+# At 100+ ticks: teleport the starter to the pad and start, in the SAME
+# tick -- HELD until the landing pad is actually generated (begin's surface
+# probe is synchronous and must land on real terrain). .relok is preset 1
+# and the quarantined auto_ready only ever LOWERS it (fail-open: if `if
+# loaded` breaks on some version, this fires at 100 ticks like before the
+# relocation existed). Retries every tick; a one-shot note at 300 (10 s of
+# holding) says what the wait is. auto_place immediately followed by start
+# is what makes the arrival seamless: begin captures the player's new
+# position and its launch lift seats them on the rail line before the
+# client renders a single mid-air frame.
 execute if score .start_timer ir matches 100.. unless score .autodone ir matches 1 run scoreboard players set .relok ir 1
 execute if score .start_timer ir matches 100.. unless score .autodone ir matches 1 run function infinite_rail:auto_ready
 execute if score .start_timer ir matches 300 unless score .autodone ir matches 1 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Still generating the starting terrain...","color":"yellow"}]
+execute if score .start_timer ir matches 100.. unless score .autodone ir matches 1 if score .relok ir matches 1 as @p run function infinite_rail:auto_place
 execute if score .start_timer ir matches 100.. unless score .autodone ir matches 1 if score .relok ir matches 1 run function infinite_rail:start

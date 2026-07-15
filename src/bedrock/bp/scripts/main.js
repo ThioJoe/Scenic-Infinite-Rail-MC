@@ -3139,25 +3139,58 @@ function autoAgeGate() {
 }
 
 // tick.mcfunction's auto-starter: in a fresh world, begin the ride for the
-// Auto-start's westward relocation (Java twin: auto_relocate.mcfunction --
-// keep START_X in step with its /tp literal). Fresh worlds only by
-// construction: the countdown this hangs off never runs once .autodone is
-// set, so a manual restart resumes in place instead of rewinding 99k west.
-// The starter drops from Y 320 (above the build limit -- no terrain can
-// swallow the target) while chunks stream in beneath them; the ride's
-// damage gamerules aren't applied until begin(), so a 30-second
-// Resistance 255 makes the landing (and any terrain-streaming suffocation)
-// harmless. begin()'s launch seats them on the rail line regardless of
-// where they came to rest.
+// Auto-start's westward start line (Java twins: auto_prep / auto_place /
+// auto_ready -- keep these constants in step with their literals). Fresh
+// worlds only by construction: the countdown this hangs off never runs
+// once .autodone is set, so a manual restart resumes in place instead of
+// rewinding 99k west.
+//
+// Two phases, so the player is never dangled mid-air over ungenerated
+// terrain: the tick the countdown BEGINS, prepStartPad() creates a
+// dedicated ticking area over the landing zone -- the manager loads AND
+// generates it server-side while the 5 seconds run (the countdown's
+// original whole job, just pointed at the destination) -- and only at the
+// countdown's END does placeStarter() move the player, onto the pad's
+// real surface, with begin() seating them on the rail line moments later.
+// begin()'s reset removes every pack ticking area, so the pad cleans
+// itself up the instant the ride takes over.
 const START_X = -99000;
-function autoRelocate(p) {
-  try { p.addEffect('minecraft:resistance', 600, { amplifier: 255, showParticles: false }); } catch { /* cosmetic guard only */ }
+const START_Z = 14; // the centerline residue: the anchor snap is zero here
+const START_PAD = 'ir_start_pad';
+function prepStartPad() {
+  const mgr = tamgr();
+  if (!mgr || !dim) return;
+  void (async () => {
+    try {
+      await mgr.createTickingArea(START_PAD, {
+        dimension: dim,
+        from: { x: START_X - 32, y: 0, z: START_Z - 32 },
+        to: { x: START_X + 64, y: 0, z: START_Z + 32 },
+      });
+    } catch (e) {
+      // begin()'s own generation poll covers a missing pad -- the start
+      // just spends a moment on "Still generating the starting terrain".
+      dbg(`start pad create failed: ${e}`);
+    }
+  })();
+}
+function placeStarter(p) {
   try {
-    p.teleport({ x: START_X + 0.5, y: 320, z: p.location.z });
+    // The pad has had the whole countdown to generate, so the surface read
+    // normally answers -- probeSurface, the ride's own liquid-aware probe
+    // (getTopmostBlock alone lands on the sea FLOOR over oceans). The
+    // Y-320 fallback (above the build limit, can't be inside terrain) plus
+    // a short Resistance covers the rare pad that is still generating --
+    // begin()'s launch seats the player shortly either way.
+    let y = 320;
+    const surf = probeSurface(START_X, START_Z);
+    if (typeof surf === 'number' && surf > -63) y = surf + 1;
+    if (y >= 319) { try { p.addEffect('minecraft:resistance', 600, { amplifier: 255, showParticles: false }); } catch { /* cosmetic */ } }
+    p.teleport({ x: START_X + 0.5, y, z: START_Z + 0.5 });
   } catch (e) {
     // A failed teleport just means the ride starts where the player stands
     // -- the pre-relocation behavior, never a blocked auto-start.
-    dbg(`auto-start relocation failed: ${e}`);
+    dbg(`auto-start placement failed: ${e}`);
   }
 }
 
@@ -3172,19 +3205,23 @@ function autoStart() {
   // running before the .start_timer increment.
   if (S.startTimer === 0 && !autoAgeGate()) return;
   S.startTimer += 1;
-  // The tick the countdown begins, move the starter to the western start
-  // line (autoRelocate, X = START_X): Bedrock positions are 32-bit floats,
+  // The tick the countdown begins, start generating the landing pad at the
+  // western start line (X = START_X): Bedrock positions are 32-bit floats,
   // so precision decays with |X| -- starting at -99,000 doubles the runway
-  // the ride spends within five significant figures. The countdown doubles
-  // as travel/chunk-streaming time, and begin()'s own generation poll
-  // holds the launch until the start terrain is actually ready.
-  if (S.startTimer === 1) autoRelocate(players[0]);
+  // the ride spends within five significant figures. The player is only
+  // moved at the countdown's END (placeStarter, below), onto generated
+  // ground; begin()'s own generation poll covers a pad that somehow isn't
+  // ready even then.
+  if (S.startTimer === 1) prepStartPad();
   if (S.startTimer === 1) say('§eStarting in 5...');
   else if (S.startTimer === 20) say('§eStarting in 4...');
   else if (S.startTimer === 40) say('§eStarting in 3...');
   else if (S.startTimer === 60) say('§eStarting in 2...');
   else if (S.startTimer === 80) say('§eStarting in 1...');
-  else if (S.startTimer >= 100) begin(players[0]);
+  else if (S.startTimer >= 100) {
+    placeStarter(players[0]);
+    begin(players[0]);
+  }
 }
 
 // --- Init + the tick driver ----------------------------------------------------

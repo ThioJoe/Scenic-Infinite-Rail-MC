@@ -60,25 +60,43 @@ export default defineSuite('auto-start world-age gate', ({ test }) => {
     await stopRide(mc);
   });
 
-  test('auto_relocate moves the starter to the western start line, keeping Z', async (ctx) => {
+  test('auto_prep generates the landing pad; auto_ready clears the hold once it exists', { timeout: 180000 }, async (ctx) => {
     const mc = ctx.mc;
-    // The countdown's relocation runs `as` the player; here a stand stands
-    // in (same trick as the surrogate rider). Both ends must be loaded: the
-    // origin so the stand can be summoned, the destination so the
-    // teleported stand stays selectable for the readback.
+    // Phase 1 of the polished auto-start: the countdown's first tick queues
+    // the landing pad's chunks (no player involved), and the start is held
+    // by auto_ready until they are really loaded. Poll like the tick loop
+    // does: preset .relok 1, run the probe, read it back.
+    await mc.fn('auto_prep');
+    const r = await mc.cmd('forceload query -99000 14');
+    ok(/is marked for force loading/.test(r), `the pad's anchor chunk is forceloaded: ${r}`);
+    const t0 = Date.now();
+    let ready = false;
+    while (Date.now() - t0 < 60000) {
+      await mc.setScore('.relok', 'ir', 1);
+      await mc.fn('auto_ready');
+      if (await mc.score('.relok', 'ir') === 1) { ready = true; break; }
+      await new Promise((res) => setTimeout(res, 1000));
+    }
+    ok(ready, 'auto_ready cleared the hold once the pad generated (.relok stayed 1)');
+    await mc.cmd('forceload remove -99032 -18 -98936 46'); // leave no pad behind for later tests
+  });
+
+  test('auto_place drops the starter on the start line (block -99000, the Z 14 centerline)', async (ctx) => {
+    const mc = ctx.mc;
+    // Phase 2, at the countdown's END: `as` the player, tp to the pad --
+    // begin then seats them the same tick. A stand stands in; both ends
+    // must be loaded for the summon and the readback.
     await mc.loadRegion(-8, -8, 24, 24, { settleMs: 1200 });
-    await mc.loadRegion(-99016, -16, -98984, 16, { settleMs: 1500 });
+    await mc.loadRegion(-99016, -2, -98984, 30, { settleMs: 1200 });
     await mc.cmd('kill @e[type=armor_stand,tag=ir_reloc_test]');
     await mc.cmd('summon minecraft:armor_stand 8.5 150 3.5 {Tags:["ir_reloc_test"],NoGravity:1b}');
-    await mc.cmd('execute as @e[type=armor_stand,tag=ir_reloc_test,limit=1] run function infinite_rail:auto_relocate');
+    await mc.cmd('execute as @e[type=armor_stand,tag=ir_reloc_test,limit=1] run function infinite_rail:auto_place');
     const x = await mc.entityNum('@e[type=armor_stand,tag=ir_reloc_test,limit=1]', 'Pos[0]');
-    const y = await mc.entityNum('@e[type=armor_stand,tag=ir_reloc_test,limit=1]', 'Pos[1]');
     const z = await mc.entityNum('@e[type=armor_stand,tag=ir_reloc_test,limit=1]', 'Pos[2]');
-    closeTo(x, -99000, 0.75, 'relocated to the X -99000 start line');
-    eq(Math.round(y), 320, 'dropped in above the build limit (no terrain can swallow the target)');
-    closeTo(z, 3.5, 0.25, 'Z preserved -- the line still anchors beside where the player was');
+    closeTo(x, -98999.5, 0.25, 'landed on block -99000');
+    closeTo(z, 14.5, 0.25, 'landed on the Z ≡ 14 centerline residue (anchor snap of zero)');
     await mc.cmd('kill @e[type=armor_stand,tag=ir_reloc_test]');
-    await mc.unloadRegion(-99016, -16, -98984, 16);
+    await mc.unloadRegion(-99016, -2, -98984, 30);
     await mc.unloadRegion(-8, -8, 24, 24);
   });
 
