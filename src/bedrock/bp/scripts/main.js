@@ -1028,7 +1028,11 @@ function showTips(player) {
 	  '',
       '§7- Use a §fwired controller§7 to avoid the "controller disconnected" warning',
 	  '',
-      '§7- To run a custom pack on console: host it on a §fRealm§7 (a trial Realm works), then §fdownload the world as a local copy§7 to play it offline with the pack intact',
+	  '§7- Wrap a §frubber band§7 around the left joystick to prevent the 15-minute AFK message.',
+	  '',
+      '§7- To run a custom pack on console: host it on a §fRealm§7 (a trial Realm works), then §fdownload the world as a local copy§7 to play it offline with the pack intact. §fTutorial available at: ',
+	  '§7GitHub.com/ThioJoe/Scenic-Infinite-',
+	  '§7Rail-MC/wiki',
     ].join('\n'))
     .button('Close');
   form.show(player).catch((e) => reportError('tips page', e));
