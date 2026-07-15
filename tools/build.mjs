@@ -140,6 +140,57 @@ for (const f of sharedFiles) {
 }
 
 // ---------------------------------------------------------------------------
+// 1b. The Bedrock script's CONFIG_DEFAULTS mirror of config.mcfunction.
+//
+// cfg() in scripts/main.js needs a literal fallback for every knob: on
+// cmd-bridge worlds (split scoreboards) the Script API cannot read the
+// scores the command-run config wrote, and on a half-installed pack the
+// config function cannot run at all. config.mcfunction stays the single
+// source of truth -- this check fails the build whenever the mirror (or
+// CFG_GROUPS' objective placement) drifts from it, because hand-sync does
+// not hold (.BUILD_FACTOR and .MIN_CHANGE both drifted that way).
+// ---------------------------------------------------------------------------
+{
+  const knobs = new Map(); // NAME -> { objective, value }
+  for (const line of shared.get('config.mcfunction').split('\n')) {
+    const m = line.match(/^scoreboard players set \.([A-Za-z0-9_]+) ([A-Za-z0-9_]+) (-?\d+)\s*$/);
+    if (m) knobs.set(m[1], { objective: m[2], value: parseInt(m[3], 10) });
+  }
+  if (knobs.size < 25) fail(`config.mcfunction: only ${knobs.size} knobs parsed -- format changed?`);
+
+  const script = readFileSync(join(SRC_BEDROCK_BP, 'scripts', 'main.js'), 'utf8');
+  const defSrc = script.match(/const CONFIG_DEFAULTS = \{([\s\S]*?)\n\};/);
+  if (!defSrc) fail('scripts/main.js: CONFIG_DEFAULTS block not found');
+  const defaults = new Map(
+    [...defSrc[1].matchAll(/([A-Za-z0-9_]+):\s*(-?\d+)/g)].map((m) => [m[1], parseInt(m[2], 10)]));
+
+  const groupSrc = script.match(/const CFG_GROUPS = \{([\s\S]*?)\n\};/);
+  if (!groupSrc) fail('scripts/main.js: CFG_GROUPS block not found');
+  const groupOf = new Map(); // NAME -> cfg_* objective (the script's default is ir)
+  for (const g of groupSrc[1].matchAll(/(cfg_[a-z]+):\s*\[([\s\S]*?)\]/g)) {
+    for (const k of g[2].matchAll(/'([A-Za-z0-9_]+)'/g)) groupOf.set(k[1], g[1]);
+  }
+
+  for (const [name, { objective, value }] of knobs) {
+    if (!defaults.has(name)) {
+      fail(`scripts/main.js CONFIG_DEFAULTS is missing ${name} (config.mcfunction sets .${name} ${objective} ${value})`);
+    }
+    if (defaults.get(name) !== value) {
+      fail(`scripts/main.js CONFIG_DEFAULTS.${name} is ${defaults.get(name)}, but config.mcfunction sets ${value} -- update the mirror`);
+    }
+    const reads = groupOf.get(name) ?? 'ir';
+    if (reads !== objective) {
+      fail(`.${name}: config.mcfunction writes it into ${objective}, but the script reads it from ${reads} (CFG_GROUPS)`);
+    }
+  }
+  for (const name of defaults.keys()) {
+    if (!knobs.has(name)) {
+      fail(`scripts/main.js CONFIG_DEFAULTS has ${name}, which config.mcfunction never sets -- remove it or add the knob`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 2. Assemble the output trees.
 // ---------------------------------------------------------------------------
 const JAVA_OUT = join(DIST, 'java', 'Scenic_Infinite_Rail_Mode');

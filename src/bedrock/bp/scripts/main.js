@@ -359,6 +359,9 @@ const HIST_PERSIST = 1024;
 // script can survive a wiped scoreboard and knows what to read. Values are
 // re-read from the scoreboard every tick, so live "/scoreboard players set
 // .HOVER ir 8" tweaks work mid-ride exactly like Java.
+// config.mcfunction is the source of truth: the build FAILS if this mirror
+// drifts from it (tools/build.mjs step 1b), so retune the knob there and
+// copy the new value here.
 const CONFIG_DEFAULTS = {
   HOVER: 2, TUNNELCLEAR: 6, CAMHEIGHT: 0, CAMBLEND: 6, CAMSMOOTH: 6, CAMLIFT: 20,
   RIDER_BEHIND: 160, CAMMODE: 0, CARTYOFF: 12, AUTOSTART: 1,
@@ -385,7 +388,7 @@ function camAhead() {
 // sidebar-sized groups (a vanilla sidebar shows ONE objective, max 15 rows)
 // so the Debug menu can display any whole group; .DEBUGMODE/.AUTOSTART stay
 // in `ir` with the runtime state. Must match config.mcfunction and Java's
-// load.mcfunction.
+// load.mcfunction (the config.mcfunction half is build-enforced -- step 1b).
 const CFG_GROUPS = {
   // (.SAMPLE_BLOCK_INTERVAL lives in `ir` with .DEBUGMODE/.AUTOSTART --
   // cfg_terrain is back at the 15-row sidebar cap.)
