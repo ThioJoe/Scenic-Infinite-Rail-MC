@@ -694,7 +694,7 @@ function torchLit() {
 
 // The Track light level (.LIGHTMODE -- mode_light_on/low/off, or the Visual
 // Settings form's dropdown: 11 = the bright line (the default), 8 = a dim
-// glow, 0 = none -- dark tunnels and nights). Any hand-set 0..15 works in
+// glow, 0 = none. Any hand-set 0..15 works in
 // API-bridge mode; on cmd-bridge worlds the read degrades to the nearest
 // preset (two successCount probes, cached ~1 s -- placeColumn asks per
 // column, the torchMode() pattern).
@@ -781,9 +781,9 @@ const TORCH_DENSITY = [
 // matches Java's book row [Off] [Low] [On]). v = the .LIGHTMODE light level
 // the mode_light_* function files set.
 const LIGHT_PRESETS = [
-  { fn: 'off', label: 'Off (dark tunnels & nights)', v: 0 },
-  { fn: 'low', label: 'Low (dim glow)', v: 8 },
-  { fn: 'on', label: 'On (bright, default)', v: 11 },
+  { fn: 'off', label: 'Off', v: 0 },
+  { fn: 'low', label: 'Low / Dim', v: 8 },
+  { fn: 'on', label: 'On (default)', v: 11 },
 ];
 function torchDensity() {
   const v = getScore('torchdens', 0);
