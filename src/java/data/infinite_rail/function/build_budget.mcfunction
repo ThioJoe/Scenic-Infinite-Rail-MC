@@ -4,8 +4,8 @@
 # floored at 1. A fixed cap (the old .BUILD_PER_TICK 15) was sized for the
 # fastest ride at any speed, so a catch-up burst after a chunk-generation
 # hitch cost ~15 columns in ONE tick right when the server was already
-# struggling; proportional, a land-speed burst is 2 columns, an ocean
-# sprint's 5, and the spike can never dwarf the ride it serves. The trade
+# struggling; proportional, a land-speed burst is 1 column, an ocean
+# sprint's 4, and the spike can never dwarf the ride it serves. The trade
 # is recovery TIME (a fully drained 224-block buffer refills in seconds
 # instead of one tick), which is invisible from the seat: track is laid
 # faster than the cart eats it from the first tick either way.
