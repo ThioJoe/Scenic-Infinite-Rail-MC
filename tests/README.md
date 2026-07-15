@@ -105,6 +105,7 @@ toggles) are all covered directly.
 | `46-surface` | surface restoration after carving: controlled mounds + `place_flat` straight into them — grass-topped ground regrows grass beside the rails, snow cover comes back as grass + a snow layer, a buried span falls back to its top cell, deep rock and already-open ground stay untouched |
 | `50-longride` | 2 400 ticks of sprinting: sustained building, cart progress, contiguity + physical checks along the whole line, rig still on-profile, no errors |
 | `60-lifecycle` | `/reload` mid-ride (state survives, config refreshes, build continues), `stop` teardown (entities gone, forceloads cleared, **track remains**), stopped-stays-stopped, second ride restarts cleanly |
+| `90-perf` | **opt-in** (skipped unless `SIRM_PERF=1`): burst-cost measurement around the 16-block chunk roll — `/tick query` percentiles over a live ride, decomposed into fresh-generation vs unload-only vs no-rolls windows. Produces notes, not pass/fail thresholds (numbers are hardware-relative); pin the server to one core (a `java` PATH shim running `exec taskset -c 0 java "$@"`) to simulate a weak device |
 
 ## Adding a test
 
