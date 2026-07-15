@@ -17,6 +17,14 @@
 import { defineSuite, eq, ok, between } from '../lib/harness.mjs';
 import { startRide, stopRide, lineZ } from '../lib/ride.mjs';
 
+/** Is the chunk holding (x, z) forceloaded right now? */
+async function chunkForced(mc, x, z) {
+  const r = await mc.cmd(`forceload query ${Math.floor(x)} ${Math.floor(z)}`);
+  if (/is not marked/.test(r)) return false;
+  if (/is marked for force loading/.test(r)) return true;
+  throw new Error(`forceload query: unexpected response ${JSON.stringify(r)}`);
+}
+
 const NIGHT_START = 12542;
 const NIGHT_END = 23459;
 
@@ -130,5 +138,48 @@ export default defineSuite('torch mode', ({ test }) => {
     between(planted, Math.max(8, Math.floor(columns * 0.15)), columns + 5,
       `always-on plants regardless of daytime (got ${planted} of ${columns})`);
     await mc.fn('mode_torches_auto'); // restore the default
+  });
+
+  // ---------- the torch stub: the corridor only widens while torches plant ----------
+
+  test('torch stub: wide chunks exist only at night (auto), only near the head', { timeout: 300000 }, async ({ mc, note }) => {
+    // Realistic width again: ±30 spans multiple chunk rows, so wide-vs-
+    // narrow is observable per chunk (the earlier tests pinned it to 4).
+    await mc.setScore('.TORCHRANGE', 'cfg_ride', 30);
+    await mc.cmd('time set 6000');
+    const lz = lineZ(1200);
+    const wideZ = lz + 24; // one-two chunk rows off the centerline: torch-band territory
+    await startRide(mc, { z: 1200.5 });
+    try {
+      // Let a couple of 16-block rolls happen under daytime.
+      await mc.sprint(200, { timeoutMs: 120000 });
+      await mc.freeze();
+      let headX = await mc.score('.headX', 'ir');
+      eq(await chunkForced(mc, headX - 8, lz), true, 'the track row is always forceloaded');
+      eq(await chunkForced(mc, headX - 8, wideZ), false, 'auto-mode DAY: no wide torch band is loaded (the old clock-blind cost)');
+      await mc.unfreeze();
+      // Night falls: the next built column refreshes .torchlit, the next
+      // 16-block roll adds the wide stub around the head.
+      await mc.cmd('time set 18000');
+      await mc.sprint(200, { timeoutMs: 120000 });
+      await mc.freeze();
+      headX = await mc.score('.headX', 'ir');
+      eq(await chunkForced(mc, headX - 8, wideZ), true, 'auto-mode NIGHT: the torch band near the head is loaded');
+      eq(await chunkForced(mc, headX + 100, wideZ), false, 'the stub is SHORT: no wide band rides the full corridor reach');
+      eq(await chunkForced(mc, headX + 100, lz), true, 'while the narrow track row still reaches deep ahead');
+      await mc.unfreeze();
+      // Dawn: new rolls stop adding wide chunks (the band behind drains via
+      // the normal release band as the ride moves on).
+      await mc.cmd('time set 6000');
+      await mc.sprint(400, { timeoutMs: 180000 });
+      await mc.freeze();
+      headX = await mc.score('.headX', 'ir');
+      eq(await chunkForced(mc, headX - 8, wideZ), false, 'auto-mode day again: fresh rolls are narrow');
+      await mc.unfreeze();
+      note('corridor shape verified by forceload query: row deep + stub wide at night, row only by day');
+    } finally {
+      await mc.unfreeze().catch(() => {});
+      await stopRide(mc);
+    }
   });
 });

@@ -460,6 +460,30 @@ const tests = [
     if (!/Successfully found/i.test(light)) throw new Error(`no track light above the rail at Y ${atY + 3}: ${light}`);
   }),
 
+  report('torch stub: dusk creates and dawn releases the wide band, ride unbroken', async (s) => {
+    // The corridor no longer widens for torches: a second ticking-area pair
+    // (the torch stub, rollTorchStub) exists only while torches actually
+    // plant -- auto mode at night. BDS has no command that can see script
+    // ticking areas, so the assertable surface is behavioral: both
+    // transitions must run their create/release against the live manager
+    // with zero script errors, and the builder must keep advancing through
+    // them (a wedged manager or a throwing stub would starve it). The
+    // 100-tick reconcile flips the stub within ~5 s of the clock crossing
+    // the night window, plus a couple of seconds for the create to resolve.
+    const mark = s.mark();
+    const h0 = await s.scoreValue('.headX', 'dbg', -1000, 200000);
+    if (h0 === null) throw new Error('no .headX from the dbg mirror');
+    await s.cmd('time set 18000'); // dusk: reconcile creates the stub
+    await sleep(10000);
+    await s.cmd('time set 6000');  // dawn: reconcile releases it
+    await sleep(10000);
+    const h1 = await s.scoreValue('.headX', 'dbg', -1000, 200000);
+    if (h1 === null) throw new Error('no .headX from the dbg mirror after the flips');
+    if (h1 <= h0) throw new Error(`builder stalled across the stub transitions (head ${h0} -> ${h1})`);
+    const errs = scriptOnly(s.scriptErrorsSince(mark));
+    if (errs.length) throw new Error(`script errors across stub transitions:\n  ${errs.slice(0, 8).join('\n  ')}`);
+  }),
+
   // (No command-level item probe on purpose: the pack's own items carry
   // menu_category "none", which hides them from the COMMAND item enum --
   // /replaceitem answers "Syntax error: Unexpected ..." for a perfectly
