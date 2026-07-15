@@ -135,6 +135,11 @@ scoreboard players set .CARTYOFF cfg_camera 12
 # 1 = the ride starts by itself for the first player to appear in a fresh
 # world -- no command needed. It only ever auto-starts once per world, and
 # stopping with the stop function stays stopped across rejoins.
+# The auto-started ride begins at X = -99,000 (the countdown teleports the
+# first player there): heading east forever, that roughly doubles the time
+# spent at low absolute coordinates, where Bedrock's 32-bit floating-point
+# positions are at their most precise (Java mirrors it for parity). Manual
+# starts are never relocated -- they anchor where you stand.
 # 0 = classic manual start via the start function (/function
 # infinite_rail:start on Java, /function infinite_rail/start on Bedrock).
 scoreboard players set .AUTOSTART ir 1

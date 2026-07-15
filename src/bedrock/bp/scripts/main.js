@@ -3139,6 +3139,28 @@ function autoAgeGate() {
 }
 
 // tick.mcfunction's auto-starter: in a fresh world, begin the ride for the
+// Auto-start's westward relocation (Java twin: auto_relocate.mcfunction --
+// keep START_X in step with its /tp literal). Fresh worlds only by
+// construction: the countdown this hangs off never runs once .autodone is
+// set, so a manual restart resumes in place instead of rewinding 99k west.
+// The starter drops from Y 320 (above the build limit -- no terrain can
+// swallow the target) while chunks stream in beneath them; the ride's
+// damage gamerules aren't applied until begin(), so a 30-second
+// Resistance 255 makes the landing (and any terrain-streaming suffocation)
+// harmless. begin()'s launch seats them on the rail line regardless of
+// where they came to rest.
+const START_X = -99000;
+function autoRelocate(p) {
+  try { p.addEffect('minecraft:resistance', 600, { amplifier: 255, showParticles: false }); } catch { /* cosmetic guard only */ }
+  try {
+    p.teleport({ x: START_X + 0.5, y: 320, z: p.location.z });
+  } catch (e) {
+    // A failed teleport just means the ride starts where the player stands
+    // -- the pre-relocation behavior, never a blocked auto-start.
+    dbg(`auto-start relocation failed: ${e}`);
+  }
+}
+
 // first player to appear after a 5-second countdown. Once per world, ever.
 function autoStart() {
   if (S.autodone || cfg('AUTOSTART') !== 1) return;
@@ -3150,6 +3172,13 @@ function autoStart() {
   // running before the .start_timer increment.
   if (S.startTimer === 0 && !autoAgeGate()) return;
   S.startTimer += 1;
+  // The tick the countdown begins, move the starter to the western start
+  // line (autoRelocate, X = START_X): Bedrock positions are 32-bit floats,
+  // so precision decays with |X| -- starting at -99,000 doubles the runway
+  // the ride spends within five significant figures. The countdown doubles
+  // as travel/chunk-streaming time, and begin()'s own generation poll
+  // holds the launch until the start terrain is actually ready.
+  if (S.startTimer === 1) autoRelocate(players[0]);
   if (S.startTimer === 1) say('§eStarting in 5...');
   else if (S.startTimer === 20) say('§eStarting in 4...');
   else if (S.startTimer === 40) say('§eStarting in 3...');

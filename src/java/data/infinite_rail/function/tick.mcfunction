@@ -39,9 +39,24 @@ execute if score .AUTOSTART ir matches 1 unless score .autodone ir matches 1 if 
 
 # Wait until a player actually exists in the world, then count up 100 ticks (5 seconds) to let chunks load.
 execute if score .AUTOSTART ir matches 1 unless score .autodone ir matches 1 if entity @a run scoreboard players add .start_timer ir 1
+# The tick the countdown begins, move the starter to the western start line
+# (X -99000 -- see auto_relocate: maximizes the ride's time at low absolute
+# coordinates, where Bedrock's 32-bit float positions are precise; Java
+# mirrors it for parity). The countdown doubles as the journey west's
+# chunk-loading time, and the readiness hold below covers slow machines.
+execute if score .start_timer ir matches 1 unless score .autodone ir matches 1 as @p run function infinite_rail:auto_relocate
 execute if score .start_timer ir matches 1 unless score .autodone ir matches 1 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Starting in 5...","color":"yellow"}]
 execute if score .start_timer ir matches 20 unless score .autodone ir matches 1 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Starting in 4...","color":"yellow"}]
 execute if score .start_timer ir matches 40 unless score .autodone ir matches 1 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Starting in 3...","color":"yellow"}]
 execute if score .start_timer ir matches 60 unless score .autodone ir matches 1 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Starting in 2...","color":"yellow"}]
 execute if score .start_timer ir matches 80 unless score .autodone ir matches 1 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Starting in 1...","color":"yellow"}]
-execute if score .start_timer ir matches 100 unless score .autodone ir matches 1 run function infinite_rail:start
+# At 100+ ticks, start -- HELD until the chunk under the (relocated) player
+# is loaded: begin's surface probe is synchronous and must land on real
+# terrain. .relok is preset 1 and the quarantined auto_ready only ever
+# LOWERS it (fail-open: if `if loaded` breaks on some version, this fires
+# at 100 ticks exactly like the pre-relocation pack). Retries every tick;
+# a one-shot note at 300 (10 s of holding) says what the wait is.
+execute if score .start_timer ir matches 100.. unless score .autodone ir matches 1 run scoreboard players set .relok ir 1
+execute if score .start_timer ir matches 100.. unless score .autodone ir matches 1 run function infinite_rail:auto_ready
+execute if score .start_timer ir matches 300 unless score .autodone ir matches 1 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Still generating the starting terrain...","color":"yellow"}]
+execute if score .start_timer ir matches 100.. unless score .autodone ir matches 1 if score .relok ir matches 1 run function infinite_rail:start
