@@ -46,6 +46,16 @@ export default defineSuite('server version compatibility', ({ test }) => {
     eq(v, 'false', 'the phantom-spawning gamerule (spawn_phantoms / doInsomnia) must be false after setup_world');
   });
 
+  test('mob death drops are disabled after setup_world (the cull must be loot-free)', async ({ mc, note }) => {
+    // The roll's passed-entity cull and the crowd keeper kill mobs by
+    // command; loot spawning after the kill selector evaluated would be
+    // saved into the chunks the roll releases. mob_drops is doMobLoot's
+    // 26.x name (paralleling block_drops -- there is no mob_loot).
+    const v = await gameruleQuery(mc, 'mob_drops') ?? await gameruleQuery(mc, 'doMobLoot');
+    note(`mob-drops rule = ${v}`);
+    eq(v, 'false', 'the mob-loot gamerule (mob_drops / doMobLoot) must be false after setup_world');
+  });
+
   test('command-chain budget gamerule exists and was raised by load', async ({ mc }) => {
     const rule = await mc.storageString('infinite_rail:names', 'chain_length');
     ok(rule, 'chain-budget rule name in storage');

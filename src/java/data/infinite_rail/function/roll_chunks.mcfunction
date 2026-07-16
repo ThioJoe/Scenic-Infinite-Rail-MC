@@ -23,15 +23,12 @@
 # piece, plug aboard) rides at ~-224, the rider at -.RIDER_BEHIND, and the
 # head markers sit at the head itself -- so type=!player is the only
 # exclusion needed.
+# (Mobs killed here spawn NO loot: setup_world turns mob death drops off --
+# doMobLoot / 26.x mob_drops -- because loot would spawn AFTER this kill's
+# selector evaluated and be saved into the very chunks the release below
+# unloads. No XP either: command kills give no player credit. Bedrock's
+# cull has no such gap -- its entity.remove() despawns without drops.)
 execute positioned ~-336 -64 ~-64 run kill @e[type=!player,dx=80,dy=384,dz=128]
-# Second pass, items only: mobs killed by the line above drop their loot
-# (doMobLoot is on; only doTileDrops is off), and those item entities spawn
-# AFTER the first kill's selector was evaluated -- without this pass they
-# were saved into the very chunks the release below unloads, the exact
-# thing the cull exists to prevent. (No XP pass needed: command kills give
-# no player credit, so no orbs spawn. Bedrock's cull has no such gap -- its
-# entity.remove() despawns without drops.)
-execute positioned ~-336 -64 ~-64 run kill @e[type=item,dx=80,dy=384,dz=128]
 # Release the band behind, synchronous with the trigger on purpose: bands
 # tile at exactly 16 blocks per roll, and a release deferred into a phase
 # could be skipped during catch-up bursts (triggers can arrive faster than

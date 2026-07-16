@@ -12,6 +12,11 @@ gamerule dofiretick false
 gamerule doinsomnia false
 # Prevent blocks broken by the track builder from dropping items.
 gamerule dotiledrops false
+# No mob death drops either (cross-edition parity with the Java copies): the
+# rider can never collect items (inventory keeper), sweepDrops kills drops
+# near the seat only for the pickup SOUND, and passed drops otherwise linger
+# beside the track until the corridor cull reaches them.
+gamerule domobloot false
 # Disable all environmental damage to ensure true invulnerability.
 gamerule falldamage false
 gamerule firedamage false

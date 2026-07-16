@@ -331,12 +331,15 @@ const tests = [
     };
     await s.cmd('gamerule doinsomnia true');
     await s.cmd('gamerule mobgriefing true');
+    await s.cmd('gamerule domobloot true');
     const ran = await s.fn('setup_world');
     if (/unknown function/i.test(ran)) throw new Error(`setup_world is not in the registry -- a line failed to parse and BDS dropped the whole file: ${ran}`);
     const ins = await readBool('doinsomnia');
     if (ins.v !== 'false') throw new Error(`doinsomnia = ${ins.v} after setup_world (phantoms NOT disabled -- a dropped file drops every safety gamerule). raw: ${JSON.stringify(ins.raw)}`);
     const grf = await readBool('mobgriefing');
     if (grf.v !== 'false') throw new Error(`mobgriefing = ${grf.v} after setup_world (track unprotected). raw: ${JSON.stringify(grf.raw)}`);
+    const loot = await readBool('domobloot');
+    if (loot.v !== 'false') throw new Error(`domobloot = ${loot.v} after setup_world (mob death drops NOT disabled -- Java-parity rule). raw: ${JSON.stringify(loot.raw)}`);
   }),
 
   // --- The surrogate ride: the whole build pipeline, headlessly ------------

@@ -25,6 +25,10 @@ gamerule spawn_phantoms false
 # dropping items. doTileDrops' snake_case name is block_drops (verified against
 # the 26.2 command registry -- there was never a do_tile_drops).
 gamerule block_drops false
+# No mob death drops either (see the base copy's comment): doMobLoot's
+# snake_case name is mob_drops, paralleling block_drops (verified against the
+# 26.2 command registry -- mob_loot and do_mob_loot both reject).
+gamerule mob_drops false
 # Disable all environmental damage to ensure true invulnerability (no damage sounds or fire screen).
 gamerule fall_damage false
 gamerule fire_damage false
