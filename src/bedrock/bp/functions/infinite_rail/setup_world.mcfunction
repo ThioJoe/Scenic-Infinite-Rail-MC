@@ -24,6 +24,14 @@ gamerule freezedamage false
 gamerule drowningdamage false
 # If something impossible happens, come straight back (spawnpoint follows the ride).
 gamerule doimmediaterespawn true
+# Freeze random block ticks (Bedrock-only; Java keeps vanilla random ticks):
+# nothing the ride needs grows or decays, and every random-ticking chunk in
+# the corridor costs engine work per tick on the machines that can least
+# afford it. Accepted side effects: spared leaf crowns never decay here
+# (Java's still do -- §7i), crops/grass near the line stop growing, and
+# torch-side ice never melts (which retires Java's torch-pop-on-ice gotcha
+# for Bedrock).
+gamerule randomtickspeed 0
 # Keep the spawn-protection area from anchoring chunks at the origin.
 gamerule spawnradius 0
 # No recipe unlocking (every unlock pops a toast + chat line; false = the

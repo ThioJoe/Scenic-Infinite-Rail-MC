@@ -332,6 +332,7 @@ const tests = [
     await s.cmd('gamerule doinsomnia true');
     await s.cmd('gamerule mobgriefing true');
     await s.cmd('gamerule domobloot true');
+    await s.cmd('gamerule randomtickspeed 3');
     const ran = await s.fn('setup_world');
     if (/unknown function/i.test(ran)) throw new Error(`setup_world is not in the registry -- a line failed to parse and BDS dropped the whole file: ${ran}`);
     const ins = await readBool('doinsomnia');
@@ -340,6 +341,11 @@ const tests = [
     if (grf.v !== 'false') throw new Error(`mobgriefing = ${grf.v} after setup_world (track unprotected). raw: ${JSON.stringify(grf.raw)}`);
     const loot = await readBool('domobloot');
     if (loot.v !== 'false') throw new Error(`domobloot = ${loot.v} after setup_world (mob death drops NOT disabled -- Java-parity rule). raw: ${JSON.stringify(loot.raw)}`);
+    // Parse the value after the '=' -- the console line is prefixed with a
+    // timestamp, so a bare \d+ match would grab the year instead.
+    const rtsRaw = await s.cmd('gamerule randomtickspeed');
+    const rts = rtsRaw.match(/randomtickspeed\s*=\s*(\d+)/i);
+    if (!rts || rts[1] !== '0') throw new Error(`randomtickspeed = ${rts ? rts[1] : '?'} after setup_world (random ticks NOT frozen). raw: ${JSON.stringify(rtsRaw)}`);
   }),
 
   // --- The surrogate ride: the whole build pipeline, headlessly ------------
