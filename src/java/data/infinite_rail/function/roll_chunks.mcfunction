@@ -20,6 +20,14 @@
 # head markers sit at the head itself -- so type=!player is the only
 # exclusion needed.
 execute positioned ~-336 -64 ~-64 run kill @e[type=!player,dx=80,dy=384,dz=128]
+# Second pass, items only: mobs killed by the line above drop their loot
+# (doMobLoot is on; only doTileDrops is off), and those item entities spawn
+# AFTER the first kill's selector was evaluated -- without this pass they
+# were saved into the very chunks the release below unloads, the exact
+# thing the cull exists to prevent. (No XP pass needed: command kills give
+# no player credit, so no orbs spawn. Bedrock's cull has no such gap -- its
+# entity.remove() despawns without drops.)
+execute positioned ~-336 -64 ~-64 run kill @e[type=item,dx=80,dy=384,dz=128]
 scoreboard players set .flok ir 0
 function infinite_rail:forceload_here
 # One-shot loud diagnostic instead of the silent chunk-starved death spiral
