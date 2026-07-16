@@ -28,12 +28,17 @@ export const LINE_Z = lineZ(0);
 
 /** Place the surrogate rider at (x, z), on loaded ground. */
 export async function placeSurrogate(mc, { x = 0.5, z = 0.5 } = {}) {
-  await mc.cmd(`kill @e[type=armor_stand,tag=${SURROGATE_TAG}]`);
   await mc.loadRegion(Math.floor(x) - 16, Math.floor(z) - 16, Math.floor(x) + 16, Math.floor(z) + 16, { settleMs: 1200 });
-  await mc.cmd(`summon minecraft:armor_stand ${x} 250 ${z} {Tags:["${SURROGATE_TAG}"],NoGravity:1b,Invisible:1b}`);
-  if (!(await mc.entityExists(`@e[type=armor_stand,tag=${SURROGATE_TAG},limit=1]`))) {
-    throw new Error('surrogate rider did not spawn (chunk not loaded?)');
+  // On a slow machine (pinned-core runs, busy CI runners) the forceloaded
+  // chunk can still be generating after the settle -- the summon then
+  // silently fails. Retry with a pause instead of aborting the whole suite.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    await mc.cmd(`kill @e[type=armor_stand,tag=${SURROGATE_TAG}]`);
+    await mc.cmd(`summon minecraft:armor_stand ${x} 250 ${z} {Tags:["${SURROGATE_TAG}"],NoGravity:1b,Invisible:1b}`);
+    if (await mc.entityExists(`@e[type=armor_stand,tag=${SURROGATE_TAG},limit=1]`)) return;
+    await sleep(2500);
   }
+  throw new Error('surrogate rider did not spawn (chunk not loaded?)');
 }
 
 /** Run begin as the surrogate. Returns immediately with .started == 2. */

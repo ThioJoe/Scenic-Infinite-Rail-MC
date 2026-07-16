@@ -1,4 +1,4 @@
-# Phase 7 of the roll (roll_phase): the TORCH STUB -- the wide (±.fw) but
+# Phase 3 of the roll (roll_phase): the TORCH STUB -- the wide (±.fw) but
 # short (~-16..~+32 in X) force-add around the head that keeps thrown
 # torches landing in loaded, generated chunks while torches are actively
 # planting (see the forceload macro's header for the stub/band split's
