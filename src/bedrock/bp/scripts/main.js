@@ -510,7 +510,14 @@ const S = {
 
 let dim = null;   // the overworld
 let inited = false;
-let saveCountdown = 0;
+// State-save pacing: due on a fixed 40-tick phase (19 -- chosen so a save
+// tick never coincides with the keepers' %20/%10 slices OR any of the %100
+// checks: the residues of %100-phase ticks mod 40 never include 19), and deferred
+// off any tick that also ran a chunk roll (lastRollTick) so the two costs
+// never stack in one tick. savePending carries a deferred save to the next
+// roll-free tick.
+let savePending = false;
+let lastRollTick = -1;
 // How the script talks to the shared .mcfunction brain. 'api' uses the native
 // scoreboard API (normal). If the startup self-test finds that API-written
 // scores are invisible to commands (a split some versions exhibit), it flips
@@ -2074,17 +2081,23 @@ async function rollCorridor() {
     }
     await mgr.createTickingArea(next, opts);
     corrLoadedAt = tickN;
-    // Cull the slab this roll releases, while the OLD area still holds it
-    // loaded -- its last loaded moment (see cullPassedEntities). The Z span
-    // is fixed at ±64 around the centerline (Java's release band's
-    // half-width): the main corridor is only one row wide now, but the
-    // torch stub can have held up to ±48 loaded through this slab earlier,
-    // and culling a never-loaded chunk is a no-op.
+    // The OLD area's release is handed to the cull as a completion callback:
+    // the cull must run while the old area still holds its slab loaded, and
+    // since the cull is now deferred + drained across ticks (below), the
+    // release waits for it. The A/B overlap therefore lives a few ticks
+    // longer than before -- well inside the manager budget (two ~25-chunk
+    // corridors + a stub are nowhere near the 300-chunk cap).
+    const oldArea = corrLive && corrLive !== next ? corrLive : null;
+    const releaseOld = () => { if (oldArea) { try { mgr.removeTickingArea(oldArea); } catch { /* already gone */ } } };
+    // Cull the slab this roll releases, at its last loaded moment (see
+    // cullPassedEntities). The Z span is fixed at ±64 around the centerline
+    // (Java's release band's half-width): the main corridor is only one row
+    // wide now, but the torch stub can have held up to ±48 loaded through
+    // this slab earlier, and culling a never-loaded chunk is a no-op.
     if (corrFromX !== null && opts.from.x > corrFromX) {
-      cullPassedEntities(Math.max(corrFromX, opts.from.x - 128), opts.from.x, S.centerZ - 64, S.centerZ + 64);
-    }
-    if (corrLive && corrLive !== next) {
-      try { mgr.removeTickingArea(corrLive); } catch { /* already gone */ }
+      cullPassedEntities(Math.max(corrFromX, opts.from.x - 128), opts.from.x, S.centerZ - 64, S.centerZ + 64, releaseOld);
+    } else {
+      releaseOld();
     }
     corrLive = next;
     corrFromX = opts.from.x;
@@ -2188,24 +2201,45 @@ async function rollTorchStub() {
 // rigX = the corridor tail + CORR_BEHIND, a full slab ahead of anything
 // culled here, by construction. EntityQueryOptions has no box, so the
 // query is a covering sphere filtered down to the slab.
-function cullPassedEntities(x0, x1, z0, z1) {
-  if (x1 <= x0) return;
-  try {
-    const cx = (x0 + x1) / 2;
-    const cz = (z0 + z1) / 2;
-    const r = Math.sqrt(((x1 - x0) / 2 + 1) ** 2 + ((z1 - z0) / 2 + 1) ** 2 + 232 ** 2);
-    for (const e of dim.getEntities({ location: { x: cx, y: 100, z: cz }, maxDistance: r })) {
-      try {
-        if (e.typeId === 'minecraft:player') continue;
-        const p = e.location;
-        if (p.x >= x0 && p.x < x1 && p.z >= z0 && p.z <= z1) e.remove();
-      } catch { /* stale handle */ }
-    }
-  } catch { /* query raced an unload: the slab unloads regardless */ }
+// Burst hygiene: the whole job is DEFERRED two ticks off the corridor
+// create's resolution tick (which is exactly when the engine just finished
+// a batch of chunk generation) and the removals DRAIN a few per tick; the
+// caller's `done` (the old corridor area's release) runs after the last
+// removal, preserving "cull while the slab is still loaded". The slab
+// cannot unload mid-drain -- the old area holds it until done() runs.
+function cullPassedEntities(x0, x1, z0, z1, done) {
+  const finish = () => { if (done) done(); };
+  if (x1 <= x0) { finish(); return; }
+  system.runTimeout(() => {
+    const victims = [];
+    try {
+      const cx = (x0 + x1) / 2;
+      const cz = (z0 + z1) / 2;
+      const r = Math.sqrt(((x1 - x0) / 2 + 1) ** 2 + ((z1 - z0) / 2 + 1) ** 2 + 232 ** 2);
+      for (const e of dim.getEntities({ location: { x: cx, y: 100, z: cz }, maxDistance: r })) {
+        try {
+          if (e.typeId === 'minecraft:player') continue;
+          const p = e.location;
+          if (p.x >= x0 && p.x < x1 && p.z >= z0 && p.z <= z1) victims.push(e);
+        } catch { /* stale handle */ }
+      }
+    } catch { /* query raced an unload: the slab unloads regardless */ }
+    const drain = () => {
+      let n = 0;
+      while (victims.length && n < 8) {
+        try { victims.pop().remove(); } catch { /* already gone */ }
+        n += 1;
+      }
+      if (victims.length) system.run(drain);
+      else finish();
+    };
+    drain();
+  }, 2);
 }
 
 
 function rollChunks() {
+  lastRollTick = tickN; // the state save defers off roll ticks (see savePending)
   const x = S.headX, y = S.railY, z = S.centerZ;
   runCmd(`setworldspawn ${x} ${y + 1} ${z}`);
   runCmd(`spawnpoint @a ${x} ${y + 1} ${z}`);
@@ -2213,9 +2247,13 @@ function rollChunks() {
   // Re-anchor the ticking-area corridor on the new span (Java's forceload
   // cadence). Fire-and-forget: rollCorridor skips itself while a previous
   // create is still resolving. The torch stub rolls on the same cadence
-  // (and self-decides whether it should exist at all -- torchLit()).
+  // (and self-decides whether it should exist at all -- torchLit()) but is
+  // STAGGERED a few ticks behind the corridor, so the two createTickingArea
+  // requests -- each an engine-side chunk-load/generation kick -- never land
+  // in the same tick (burst hygiene; rollTorchStub tolerates firing after a
+  // stop(): it checks S.started and stands down).
   void rollCorridor();
-  void rollTorchStub();
+  system.runTimeout(() => { try { void rollTorchStub(); } catch (e) { reportError('torch stub roll', e); } }, 4);
   // Drop surface-probe memo entries the head has passed.
   for (const k of surfMemo.keys()) if (k < x) surfMemo.delete(k);
   if (debugOn()) {
@@ -2834,7 +2872,7 @@ function keepers(seat) {
   try {
     const inv = rider.getComponent('minecraft:inventory')?.container;
     if (inv) {
-      const backpackSweep = tickN % 10 === 0;
+      const backpackSweep = tickN % 10 === 3; // odd phase: never a %20/%100 check tick or the %40 save tick
       for (let i = 0; i < inv.size; i++) {
         const want = PINNED_BY_SLOT[i];
         if (!want && i >= 9 && !backpackSweep) continue;
@@ -2861,8 +2899,9 @@ function keepers(seat) {
   // F5 body hidden), aggro ON = visible (mobs react naturally, the arm
   // shows; the inventory keeper above still keeps the hand itself empty).
   // Re-asserted once a second so the toggle is live; stop() clears the
-  // effect with the others.
-  if (tickN % 20 === 0) {
+  // effect with the others. (Phase 11: its own slice of the second, clear
+  // of the %10 backpack sweep, the %40 save and the %100 checks.)
+  if (tickN % 20 === 11) {
     try {
       if (!modeOn('AGGROMODE')) {
         rider.addEffect('minecraft:invisibility', 600, { amplifier: 0, showParticles: false });
@@ -3641,7 +3680,11 @@ function tick() {
   // sees CHANGES -- this picks up a storm already raging when the mode
   // lands (a world loaded mid-thunder, mode_storms_off run from chat).
   // World state like rain mode, so it runs before the started/rider gates.
-  if (tickN % 100 === 0) { try { stormWatchNow(); } catch (e) { reportError('storm watch', e); } }
+  // Phase 37 -- an odd offset, so this never shares a tick with the %20/%10
+  // keeper slices, the %40 save, or the other %100 checks below (every
+  // periodic job here gets its own prime-ish phase; they used to pile onto
+  // the same tick every 100-200 ticks).
+  if (tickN % 100 === 37) { try { stormWatchNow(); } catch (e) { reportError('storm watch', e); } }
 
   if (!S.started) { autoStart(); return; }
 
@@ -3663,14 +3706,15 @@ function tick() {
   oceanCheck();                     // 1a. ocean speed-up
   // 1b. corridor self-heal: rollChunks re-anchors it per 16 blocks of head
   // travel, but a corridor lost to an error (or a resume raced by chunk
-  // loading) must come back even while the head is pinned.
-  if (!corrLive && !corrBusy && tickN % 100 === 0) void rollCorridor();
+  // loading) must come back even while the head is pinned. (Phase 61 --
+  // see the storm sweep's phase note.)
+  if (!corrLive && !corrBusy && tickN % 100 === 61) void rollCorridor();
   // 1c. torch-stub reconcile, offset from the corridor heal's phase: dusk
   // and dawn happen BETWEEN 16-block rolls (or while the head is pinned),
   // so flip the stub within ~5 s of torchLit() changing -- create at dusk,
   // release at dawn (that release IS the day-time saving). Only acts on a
   // lit/exists mismatch: a live, correctly-placed stub is left alone.
-  if (!torchBusy && tickN % 100 === 50 && torchLit() !== (torchLive !== null)) void rollTorchStub();
+  if (!torchBusy && tickN % 100 === 87 && torchLit() !== (torchLive !== null)) void rollTorchStub();
   let seat = findSeat();
   let cart = findCart();
   // A lost cart prop (killed by something) heals CART-ONLY, at the rig,
@@ -3737,5 +3781,6 @@ function tick() {
   tickStateSidebar();               // 8.  the Debug menu's Live state mirror
   tickDiagSidebar();                // 8b. the Live rig & tick diagnostics view
 
-  if (--saveCountdown <= 0) { saveState(); saveCountdown = 40; }
+  if (tickN % 40 === 19) savePending = true;
+  if (savePending && tickN !== lastRollTick) { savePending = false; saveState(); }
 }
