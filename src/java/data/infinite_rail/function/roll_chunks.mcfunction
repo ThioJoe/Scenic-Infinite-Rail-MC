@@ -1,15 +1,19 @@
 # Rolling chunk management, run every 16 blocks of head travel, positioned
 # at the head marker.
-
-# Force-generate terrain .TERRAIN_GENAHEAD blocks ahead of the head (so the heightmap
-# scanner always has real data) and release chunks far behind; there is no
-# going back. forceload needs literal coordinates, so the distances (length,
-# and a torch-mode-aware width) are computed into storage and handed to a
-# macro -- see forceload_here.
-# .flok is the success flag: preset to 0 here, set to 1 by forceload_here's
-# store-success around the actual forceload macro call -- so it stays 0
-# whether forceload_here failed to load on this game version, aborted on a
-# macro expansion, or the forceload command itself errored.
+#
+# SPLIT DESIGN (the burst fix): this trigger tick keeps only the work that
+# must stay synchronous -- the passed-entity cull and the forceload
+# release, whose 16-block band tiling must never skip (a skipped band is
+# chunks stranded force-loaded until stop) -- and ARMS the phase machine
+# (.rollP) that spreads everything else one slice per phase over the
+# following ticks (roll_phase, driven from main/launch_tick): the
+# track-band add one chunk row at a time, then the torch stub, then the
+# spawn-point moves. Queueing all three rows of fresh generation in one
+# tick was the measured burst: ~49ms worst-tick (p99) with 100s-of-ms
+# whoppers on a 4-core test box, multi-second worst ticks on one core;
+# split per row the 4-core worst tick fell to ~68ms max (p99 ~37ms). The
+# cull+release kept here measured a harmless ~20ms worst tick.
+#
 # Passed-entity cull -- the release band below (forceload remove,
 # ~-336..-256 x ±64) is about to unload: remove every non-player entity in
 # it first, so passed mobs, drops and stands are neither saved into the
@@ -28,16 +32,21 @@ execute positioned ~-336 -64 ~-64 run kill @e[type=!player,dx=80,dy=384,dz=128]
 # no player credit, so no orbs spawn. Bedrock's cull has no such gap -- its
 # entity.remove() despawns without drops.)
 execute positioned ~-336 -64 ~-64 run kill @e[type=item,dx=80,dy=384,dz=128]
-scoreboard players set .flok ir 0
-function infinite_rail:forceload_here
-# One-shot loud diagnostic instead of the silent chunk-starved death spiral
-# build_loop's head gate protects against: if forceloading is broken, SAY SO.
-# Re-arms after a success, so a transient failure can warn again later.
-execute if score .flok ir matches 0 unless score .flwarn ir matches 1 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Warning: chunk force-loading is failing, so terrain cannot be prepared ahead of the ride (track building will pause at the loaded edge). Please report this with your exact Minecraft version.","color":"yellow"}]
-execute if score .flok ir matches 0 run scoreboard players set .flwarn ir 1
-execute if score .flok ir matches 1 run scoreboard players set .flwarn ir 0
-# Keep world spawn and respawn points moving with the ride so nothing is
-# anchored to the origin.
-setworldspawn ~ ~1 ~
-spawnpoint @a ~ ~1 ~
+# Release the band behind, synchronous with the trigger on purpose: bands
+# tile at exactly 16 blocks per roll, and a release deferred into a phase
+# could be skipped during catch-up bursts (triggers can arrive faster than
+# a phase cycle completes), leaving chunks force-loaded forever. As the
+# head advances 16 at a time these bands tile to clear everything ≳256
+# blocks back; the ±64 half-width is fixed and generous on purpose -- it
+# covers every width the adds can have used (releasing a never-forced
+# chunk is a no-op), so lowering .TORCHRANGE mid-ride or a dawn narrowing
+# can't strand wide chunks loaded behind the ride.
+forceload remove ~-336 ~-64 ~-256 ~64
+# Arm the phased half -- only when idle: a trigger landing mid-cycle is
+# deliberately ignored (the adds are stateless coverage from wherever the
+# head is when their phase runs, so the NEXT trigger's cycle covers both;
+# restarting mid-cycle would starve the later phases -- south row, stub,
+# spawn -- during sustained catch-up bursts, degrading the 3-row frontier
+# exactly when generation is racing).
+execute unless score .rollP ir matches 1.. run scoreboard players set .rollP ir 1
 scoreboard players add .nextLoad ir 16

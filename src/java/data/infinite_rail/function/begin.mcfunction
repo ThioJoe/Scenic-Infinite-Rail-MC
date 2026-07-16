@@ -102,6 +102,10 @@ scoreboard players operation .avg ir = .railY ir
 scoreboard players operation .avg ir -= .HOVER cfg_terrain
 scoreboard players operation .nextLoad ir = .headX ir
 scoreboard players add .nextLoad ir 16
+# No phased roll cycle mid-flight from a previous ride (roll_phase would
+# otherwise run its remaining slices at the new head -- harmless adds, but
+# a stale .flok warning could fire before the first real roll).
+scoreboard players set .rollP ir 0
 
 # --- Surface cache: forget everything (surf_roll rebuilds it at the new
 # anchor on the first column; its entries then fill lazily, one probe per

@@ -6,6 +6,11 @@
 # can never be silently truncated by the vanilla per-chain command/fork
 # budgets no matter how heavy the per-column pipeline or the config gets.
 execute store result score .cartX ir run data get entity @e[type=minecart,tag=ir_cart,limit=1] Pos[0] 1
+# The chunk roll's phase machine runs during the launch too (the runway's
+# rolls trigger from advance exactly like a ride's -- see roll_chunks);
+# begin's synchronous forceload_here already covers the whole runway, so
+# these phases are cheap no-op re-adds until the ride outgrows it.
+execute if score .rollP ir matches 1.. at @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:roll_phase
 scoreboard players set .budget ir 24
 function infinite_rail:build_loop
 execute if score .headX ir >= .pregoal ir run function infinite_rail:launch_done

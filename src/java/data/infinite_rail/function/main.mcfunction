@@ -124,6 +124,12 @@ execute unless entity @e[type=marker,tag=ir_head,limit=1] run scoreboard players
 execute if entity @e[type=marker,tag=ir_head,limit=1] run scoreboard players set .hdmiss ir 0
 execute if score .hdmiss ir matches 100 run tellraw @a [{"text":"[Scenic Rail] ","color":"gold"},{"text":"Warning: the track builder's head is in unloaded chunks, so building is paused until its terrain loads. If this keeps happening, chunk force-loading may be broken on this Minecraft version - please report it.","color":"yellow"}]
 
+# The chunk roll's phase machine (roll_phase): one slice of the 16-block
+# roll per odd tick while a cycle is armed (.rollP -- see roll_chunks for
+# the split). Runs at the head like the roll itself, so a missing head
+# pauses the cycle exactly like it pauses building, and resumes with it.
+execute if score .rollP ir matches 1.. at @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:roll_phase
+
 # Extend the track ahead of the pace cart. The per-tick column budget is
 # auto-scaled to the ride's current speed (build_budget: ceil of the active
 # cruise x .BUILD_FACTOR / 20, floored at 1, raised further if the cart's

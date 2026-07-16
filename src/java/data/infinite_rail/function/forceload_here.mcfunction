@@ -1,5 +1,9 @@
 # Computes the forceload macro's arguments and runs it at the current
-# position (the head marker for roll_chunks, the starting player for begin):
+# position. Since the roll went phased (roll_chunks/roll_phase) this is
+# BEGIN'S SYNCHRONOUS BOOTSTRAP ONLY -- the initial corridor must exist
+# before the first column is placed, so the one-command whole-corridor add
+# is exactly right there; the per-roll path spreads the same adds one row
+# per tick instead (roll_add_row/roll_stub):
 #   gen = .TERRAIN_GENAHEAD -- the TRACK BAND's reach: how far ahead
 #         terrain is force-generated for the sampler and the builder. The
 #         band is three chunk rows (+-15 blocks): the strip's own row (the
@@ -38,16 +42,10 @@
 # placement has everywhere else (and at most one roll's worth at a night
 # ride start, before the first built column refreshes the score).
 execute store result storage infinite_rail:args gen int 1 run scoreboard players get .TERRAIN_GENAHEAD cfg_ride
-# Ensure the gate score exists (a fresh world hasn't run place_torch yet;
-# an unset score fails every comparison -- add-0 keeps the read honest,
-# and 0 = not lit is the right cold answer).
-scoreboard players add .torchlit ir 0
-scoreboard players set .fw ir 1
-# Always-on torch mode (1) widens unconditionally -- no clock in its life;
-# auto (2..) widens only while the last torch_auto answer was "lit".
-execute if score .TORCHMODE ir matches 1 if score .TORCHRANGE cfg_ride > .fw ir run scoreboard players operation .fw ir = .TORCHRANGE cfg_ride
-execute if score .TORCHMODE ir matches 2.. if score .torchlit ir matches 1 if score .TORCHRANGE cfg_ride > .fw ir run scoreboard players operation .fw ir = .TORCHRANGE cfg_ride
-execute if score .fw ir matches 49.. run scoreboard players set .fw ir 48
+# The torch stub's width (.fw) -- the shared torch_width computes it (the
+# same file the per-roll stub phase uses, so the two paths can never
+# disagree about when the wide band exists).
+function infinite_rail:torch_width
 execute store result storage infinite_rail:args w int 1 run scoreboard players get .fw ir
 # The store-success feeds roll_chunks' one-shot broken-forceload warning
 # (.flok, preset to 0 there): 1 = the macro ran, 0 = it failed (file missing
