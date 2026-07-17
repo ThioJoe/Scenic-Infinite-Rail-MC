@@ -66,9 +66,18 @@ execute store result storage infinite_rail:track y[-1] int 1 run scoreboard play
 # starts at the first column built after the update (everything older reads
 # as visible by construction), so it can never desync from the y history.
 execute unless score .stpBase ir = .stpBase ir run scoreboard players operation .stpBase ir = .headX ir
-execute unless score .HIDETRACK ir matches 1 run data modify storage infinite_rail:track v append value 1
-execute if score .HIDETRACK ir matches 1 run data modify storage infinite_rail:track v append value 0
+# The v value: 1 = visible; for invisible, the NEGATED center surface class
+# (carve stashed .sfcC -- 0..5), so 0/-1..-5 all mean "invisible, restore
+# this class." The strip's wipe reads it back to repaint the support cell
+# to the same material carve restored at build (grass/podzol/.../snow), so
+# the invisible stretch looks the same before the pace cart reaches it, while
+# the strip covers it, and after the strip wipes it.
+scoreboard players set .vval ir 1
+execute if score .HIDETRACK ir matches 1 run scoreboard players set .vval ir 0
+execute if score .HIDETRACK ir matches 1 run scoreboard players operation .vval ir -= .sfcC ir
 execute if score .HIDETRACK ir matches 1 run scoreboard players set .stpAny ir 1
+data modify storage infinite_rail:track v append value 0
+execute store result storage infinite_rail:track v[-1] int 1 run scoreboard players get .vval ir
 function infinite_rail:hist_trim
 
 # --- 5b. Torch mode: maybe plant a torch on the terrain beside this column ---

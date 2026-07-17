@@ -23,8 +23,13 @@
 # whatever ground the clear newly exposes beside the rails is painted back
 # into the surface material it was buried under -- a cutting through a
 # meadow stays grass-lined, a snowy hillside stays white, plain rock is
-# left alone. Only the two SIDE stacks need it: the center's floor is
-# always the support block.
+# left alone. Normally only the two SIDE stacks need it: the center's floor
+# is the support block. But on INVISIBLE track (.HIDETRACK) no support is
+# placed, so the CENTER stack is restored too -- otherwise a plow through a
+# grassy surface leaves a one-wide dirt strip where the rail cell was dug
+# out. The center class is stashed in .sfcC for advance to record in the
+# track v list (the pace cart's just-in-time strip repaints it the same way
+# when it wipes -- see strip_col/strip_wipe).
 
 # Surface restoration, step 1: remember what each side stack's original
 # surface was, before anything is cleared.
@@ -32,6 +37,10 @@ execute positioned ~ ~ ~-1 run function infinite_rail:surf_note
 scoreboard players operation .sfl ir = .sfc ir
 execute positioned ~ ~ ~1 run function infinite_rail:surf_note
 scoreboard players operation .sfr ir = .sfc ir
+# Invisible track: the center stack too (no support block to hide its floor).
+scoreboard players set .sfcC ir 0
+execute if score .HIDETRACK ir matches 1 run function infinite_rail:surf_note
+execute if score .HIDETRACK ir matches 1 run scoreboard players operation .sfcC ir = .sfc ir
 
 # The critical envelope: rail cell + 1 above, center only.
 fill ~ ~ ~ ~ ~1 ~ minecraft:air
@@ -50,3 +59,6 @@ scoreboard players operation .sfc ir = .sfl ir
 execute if score .sfl ir matches 1.. positioned ~ ~ ~-1 run function infinite_rail:surf_fix
 scoreboard players operation .sfc ir = .sfr ir
 execute if score .sfr ir matches 1.. positioned ~ ~ ~1 run function infinite_rail:surf_fix
+# Invisible track: repaint the center stack too (see step 1).
+scoreboard players operation .sfc ir = .sfcC ir
+execute if score .HIDETRACK ir matches 1 if score .sfcC ir matches 1.. run function infinite_rail:surf_fix

@@ -103,8 +103,42 @@ export default defineSuite('surface restoration after carving', ({ test }) => {
     eq(await mc.blockIs(x, 97, 1, 'minecraft:dirt'), 'match', 'already-exposed dirt left alone');
   });
 
+  test('invisible track: the CENTER stack is restored too (no support to hide it)', async ({ mc }) => {
+    // On invisible track no support block covers the center floor, so the
+    // carve must repaint the center's exposed dirt to grass -- otherwise a
+    // plow leaves a one-wide dirt strip where the rail cell was dug out.
+    // Negative control FIRST (.HIDETRACK 0): the center floor is the support
+    // block (redstone), so the detector proves it's reading the right cell.
+    const x = 800;
+    await blankArea(mc, x);
+    await mc.cmd(`fill ${x - 5} 96 -3 ${x + 5} 103 3 minecraft:dirt`);
+    await mc.cmd(`fill ${x - 5} 104 -3 ${x + 5} 104 3 minecraft:grass_block`);
+    await mc.setScore('.veg', 'ir', 1);
+    await mc.setScore('.HIDETRACK', 'ir', 0);
+    await mc.cmd(`execute positioned ${x} 100 0 run function infinite_rail:place_flat`);
+    eq(await mc.blockIs(x, 99, 0, 'minecraft:redstone_block'), 'match', 'control: visible track puts the support block in the center');
+    eq(await mc.blockIs(x, 100, 0, 'minecraft:powered_rail'), 'match', 'control: visible track has a rail');
+
+    // Now invisible, into a fresh identical mound: no rail, no support, and
+    // the center's exposed dirt at 99 painted back to grass (not left dirt).
+    const x2 = 860;
+    await blankArea(mc, x2);
+    await mc.cmd(`fill ${x2 - 5} 96 -3 ${x2 + 5} 103 3 minecraft:dirt`);
+    await mc.cmd(`fill ${x2 - 5} 104 -3 ${x2 + 5} 104 3 minecraft:grass_block`);
+    await mc.setScore('.veg', 'ir', 1);
+    await mc.setScore('.HIDETRACK', 'ir', 1);
+    await mc.cmd(`execute positioned ${x2} 100 0 run function infinite_rail:place_flat`);
+    eq(await mc.blockIs(x2, 100, 0, 'minecraft:air'), 'match', 'invisible: no rail in the rail cell');
+    eq(await mc.blockIs(x2, 99, 0, 'minecraft:redstone_block'), 'nomatch', 'invisible: no support block');
+    eq(await mc.blockIs(x2, 99, 0, 'minecraft:grass_block'), 'match', 'invisible: the center floor was repainted to grass (not left as a dirt strip)');
+    // Sides still restored as always.
+    eq(await mc.blockIs(x2, 99, -1, 'minecraft:grass_block'), 'match', 'invisible: left side still restored');
+    await mc.setScore('.HIDETRACK', 'ir', 0);
+  });
+
   test('no unexpected server errors', async ({ mc, server }) => {
     await mc.cmd('kill @e[type=block_display,tag=ir_disp]');
+    await mc.cmd('kill @e[type=block_display,tag=ir_strip]');
     const errs = server.errorsSince(0, { alsoIgnore: [/Failed to load function/] });
     eq(errs.length, 0, `unexpected ERROR lines: ${errs.slice(0, 5).join(' | ')}`);
   });

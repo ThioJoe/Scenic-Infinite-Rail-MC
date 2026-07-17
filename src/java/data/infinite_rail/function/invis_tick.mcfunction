@@ -2,9 +2,12 @@
 # CONTEXT 6.9): the builder skips the visible rail + support on invisible
 # columns, but the hidden pace cart is a REAL minecart that physically needs
 # powered rails -- so this keeper rolls a short strip of track along
-# beneath it: the window [cartX-2 .. cartX+8] is kept placed, and columns
+# beneath it: the window [cartX-8 .. cartX+8] is kept placed, and columns
 # that fall out of it (either edge -- the ride can also run backwards at
-# negative speeds) are wiped again. The strip lives (.PACE_CART_BEHIND -
+# negative speeds) are wiped again. The window is SYMMETRIC (8 each way) so a
+# fast reverse has as much placed rail ahead of the cart (west) as a fast
+# forward run has ahead of it (east) -- an earlier -2 west edge let a
+# reversing cart at speed outrun the strip and derail off its west end. The strip lives (.PACE_CART_BEHIND -
 # .RIDER_BEHIND) blocks behind the viewer, right where the (already visible
 # when looking back) pace cart is, so it is never in the rider's view.
 # Which columns it may touch is the per-column track v list (0 = built
@@ -34,12 +37,11 @@ execute if score .cartX ir = .stpAt ir if score .stpT ir matches ..19 run return
 scoreboard players set .stpT ir 0
 scoreboard players operation .stpAt ir = .cartX ir
 
-# The wanted window [cartX-2 .. cartX+8], clamped to the remembered track
-# [trackBase .. headX]. +8 ahead outruns the fastest per-tick cart travel
-# with margin; -2 behind keeps the cart itself (and its settling wobble)
-# safely inside the placed span.
+# The wanted window [cartX-8 .. cartX+8], clamped to the remembered track
+# [trackBase .. headX]. 8 each way outruns the fastest per-tick cart travel
+# with margin in BOTH directions (forward and reverse).
 scoreboard players operation .stpA ir = .cartX ir
-scoreboard players remove .stpA ir 2
+scoreboard players remove .stpA ir 8
 execute if score .stpA ir < .trackBase ir run scoreboard players operation .stpA ir = .trackBase ir
 scoreboard players operation .stpZ ir = .cartX ir
 scoreboard players add .stpZ ir 8

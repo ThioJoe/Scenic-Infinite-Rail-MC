@@ -835,6 +835,9 @@ function showRideMenu(player) {
     sound: modeOn('SOUNDMODE'),
     hidecart: modeOn('HIDECART'),
     aggro: modeOn('AGGROMODE'),
+    // Invisible track: new columns are built without their visible rail +
+    // support (placeColumn skips them while the score is 1).
+    invis: modeOn('HIDETRACK'),
     // The slider tunes whichever cruise speed is live -- the sky cruise while
     // sky mode is on, else the land speed. Clamped to the slider's 1..64 range
     // (a hand-set / Speed+-boosted out-of-range value must not throw on the
@@ -851,6 +854,7 @@ function showRideMenu(player) {
     // Off = rider invisible: the one lever over Bedrock mob detection also
     // hides the first-person arm, so the label names both consequences.
     .toggle('Mobs aggro (mobs react to you)', { defaultValue: current.aggro })
+    .toggle('Invisible track (new track is not shown)', { defaultValue: current.invis })
     .slider(current.sky
       ? `Sky cruise speed, blocks/s (default ${cfg('SKYSPEED')})`
       : S.fast
@@ -859,8 +863,21 @@ function showRideMenu(player) {
     .submitButton('Apply');
   form.show(player).then((r) => {
     if (r.canceled || !r.formValues) return;
-    const [sky, sound, hidecart, aggro, speed] = r.formValues;
+    const [sky, sound, hidecart, aggro, invis, speed] = r.formValues;
     if (current.sky !== !!sky) runCmd(`function ${NS}/mode_sky_${sky ? 'on' : 'off'}`);
+    if (current.invis !== !!invis) {
+      runCmd(`function ${NS}/mode_hidetrack_${invis ? 'on' : 'off'}`);
+      // Stale-function-registry belt + suspenders, same as the other toggles:
+      // the mode_hidetrack_* files are NEW, so a world whose registry predates
+      // them silently no-ops the call -- write the score directly if it didn't
+      // take (API mode only; cmd-bridge worlds read stale, function route works).
+      if (bridgeMode === 'api' && getScore('HIDETRACK', 0) !== (invis ? 1 : 0)) {
+        setScore('HIDETRACK', invis ? 1 : 0);
+        say(invis
+          ? '§7Invisible track ON - new track will not be shown (the ride keeps moving exactly the same).'
+          : '§7Invisible track OFF - new track is visible again.');
+      }
+    }
     if (current.sound !== !!sound) {
       runCmd(`function ${NS}/mode_sound_${sound ? 'on' : 'off'}`);
       // Belt + suspenders: a pack update installed over the SAME manifest
@@ -936,9 +953,6 @@ function showVisualMenu(player) {
     // score marks them SUPPRESSED (mode_storms_off sets 1) -- hence the
     // inversion here and in the handler below.
     storms: !modeOn('STORMMODE'),
-    // Invisible track: new columns are built without their visible rail +
-    // support (placeColumn skips them while the score is 1).
-    invis: modeOn('HIDETRACK'),
     night: nightMode(),
     // Tri-state like Time: the dropdown index IS the .TORCHMODE value.
     torches: torchMode(),
@@ -949,7 +963,6 @@ function showVisualMenu(player) {
     .title('Scenic Rail Visual Settings')
     .toggle('Always Rain', { defaultValue: current.rain })
     .toggle('Allow Thunderstorms', { defaultValue: current.storms })
-    .toggle('Invisible track (new track is not shown)', { defaultValue: current.invis })
     .dropdown('Time', ['Default (day/night cycle)', 'Always Night', 'Always Day'], { defaultValueIndex: current.night })
     .dropdown('Torches (scattered along new track)', ['Off', 'On (day and night)', 'Auto (at night only)'], { defaultValueIndex: current.torches })
     .dropdown('Torch density', TORCH_DENSITY.map((d) => d.label), { defaultValueIndex: current.dens })
@@ -957,21 +970,8 @@ function showVisualMenu(player) {
     .submitButton('Apply');
   form.show(player).then((r) => {
     if (r.canceled || !r.formValues) return;
-    const [rain, storms, invis, night, torches, dens, light] = r.formValues;
+    const [rain, storms, night, torches, dens, light] = r.formValues;
     if (current.rain !== !!rain) runCmd(`function ${NS}/mode_rain_${rain ? 'on' : 'off'}`);
-    if (current.invis !== !!invis) {
-      runCmd(`function ${NS}/mode_hidetrack_${invis ? 'on' : 'off'}`);
-      // Stale-function-registry belt + suspenders, same as the other
-      // toggles: the mode_hidetrack_* files are NEW, so on a world whose
-      // registry predates them the call silently does nothing -- write the
-      // score directly if it didn't take (API mode only).
-      if (bridgeMode === 'api' && getScore('HIDETRACK', 0) !== (invis ? 1 : 0)) {
-        setScore('HIDETRACK', invis ? 1 : 0);
-        say(invis
-          ? '§7Invisible track ON - new track will not be shown (the ride keeps moving exactly the same).'
-          : '§7Invisible track OFF - new track is visible again.');
-      }
-    }
     if (current.storms !== !!storms) {
       // Toggle shows storms allowed; the score marks them suppressed, so
       // "Thunderstorms ON" runs mode_storms_on which CLEARS .STORMMODE.
@@ -1738,8 +1738,14 @@ function placeColumn(x, y, dir, veg) {
   const carveH = dir === 0 ? cfg('TUNNELCLEAR') : cfg('TUNNELCLEAR') + 1; // .TUNNELUP
   // Surface restoration, step 1: remember what each side stack's original
   // surface was, before anything is cleared (see noteSurface above).
+  // On INVISIBLE track no support block is placed, so the CENTER stack is
+  // remembered and repainted too -- otherwise a plow through a grassy surface
+  // leaves a one-wide dirt strip where the rail cell was dug out (Java does
+  // the same in carve, gated on .HIDETRACK).
+  const invis = modeOn('HIDETRACK');
   const surfL = noteSurface(x, z - 1, y, carveH);
   const surfR = noteSurface(x, z + 1, y, carveH);
+  const surfC = invis ? noteSurface(x, z, y, carveH) : 0;
   dim.fillBlocks(
     new BlockVolume({ x, y, z }, { x, y: y + 1, z }),
     AIR, { ignoreChunkBoundErrors: true },
@@ -1764,8 +1770,11 @@ function placeColumn(x, y, dir, veg) {
   // physical track (the pace is virtual, the cart prop velocity-driven), so
   // an unplaced rail changes nothing about the movement. Everything else
   // about the column (carve, light, torches, surface restoration, history)
-  // is untouched. Already-built columns keep their rails.
-  if (!modeOn('HIDETRACK')) {
+  // is untouched. Already-built columns keep their rails. The center stack is
+  // repainted too (no support block to hide its floor -- see step 1).
+  if (invis) {
+    fixSurface(x, z, y, surfC);
+  } else {
     dim.setBlockPermutation({ x, y: y - 1, z }, SUPPORT);
     dim.setBlockPermutation({ x, y, z }, dir === 0 ? RAIL_FLAT : dir === 1 ? RAIL_UP : RAIL_DOWN);
   }

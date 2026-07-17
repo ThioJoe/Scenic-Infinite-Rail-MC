@@ -110,15 +110,20 @@ export default defineSuite('invisible track (.HIDETRACK)', ({ test }) => {
       const near = await columnBlocks(mc, cart + 4);
       eq(near.rail, 'match', `strip rail present just ahead of the cart (x ${cart + 4})`);
       eq(near.support, 'match', 'strip support present under it');
+      // The strip carries smooth-stone disguise displays (like real track),
+      // not raw redstone -- so a backward glance over a big descent reads
+      // right (tweak: displays on the strip).
+      ok(await mc.entityExists('@e[type=block_display,tag=ir_strip,limit=1]'), 'strip supports wear smooth-stone displays');
       // Beyond the window: nothing.
       const far = await columnBlocks(mc, cart + 24);
       eq(far.rail, 'nomatch', `no rail beyond the strip window (x ${cart + 24})`);
-      // Behind the window: wiped again (still after the toggle point).
-      const back = cart - 8;
+      // Behind the window (the window is now [cart-8 .. cart+8] -- symmetric,
+      // so probe well past the west edge): wiped again.
+      const back = cart - 16;
       if (back > state.onX + 2) {
         const b = await columnBlocks(mc, back);
         eq(b.rail, 'nomatch', `strip rail wiped behind the cart (x ${back})`);
-        eq(b.support, 'nomatch', `strip support wiped behind the cart (x ${back})`);
+        eq(b.support, 'nomatch', `strip support (redstone) wiped behind the cart (x ${back})`);
       }
       // The cart itself is healthy on the strip: it kept moving without a
       // single watchdog rescue (the movement-identical proof).
@@ -164,6 +169,7 @@ export default defineSuite('invisible track (.HIDETRACK)', ({ test }) => {
       }
     }
     ok(sweptChecked > 0, 'at least one strip column verified swept');
+    eq(await mc.entityExists('@e[type=block_display,tag=ir_strip,limit=1]'), false, 'no strip disguise displays left after stop');
     await mc.unloadRegion(cart - 8, LINE_Z - 8, cart + 12, LINE_Z + 8);
   });
 });
