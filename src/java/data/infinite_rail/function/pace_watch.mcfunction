@@ -7,13 +7,18 @@
 # it into the wall forever), a cart whose entity vanished outright, or a
 # cart wedged anywhere the rails aren't. Detection is deliberately dumb and
 # safe: the cart's X must have advanced at least 1.5 blocks since the last
-# check, i.e. an average of 0.5 blocks/s over 3 seconds. The slowest speed
-# the pack can ask for is 1 block/s (speed_step floors .speed at 1; a 45°
-# climb still nets ~0.7 blocks/s of X), so a healthy ride clears the bar
-# with 2x margin at ANY selectable speed, in any mode (sky, ocean sprint,
-# mid speed-flap) -- only a cart that is genuinely going nowhere for a full
-# 3-6 s window trips it. Recovery is pace_fix: snap the cart back onto the
-# built track a few rails ahead of where it stands.
+# check, i.e. an average of 0.5 blocks/s over 3 seconds. The slowest moving
+# speed the pack can select is 1 block/s in either direction (the grid steps
+# ... -1, 0, 1 ...; a 45° climb still nets ~0.7 blocks/s of X), so a healthy
+# ride clears the bar with 2x margin at ANY selectable speed, in any mode
+# (sky, ocean sprint, mid speed-flap) -- only a cart that is genuinely going
+# nowhere for a full 3-6 s window trips it. Stop-and-reverse aware: the
+# check runs against the SIGNED target .curtgt (main recomputes it every
+# tick) -- westward progress is what counts while reversing, a sign flip
+# re-baselines the window (main), and a PARKED ride (target 0) skips the
+# watchdog entirely. Recovery is pace_fix: snap the cart back onto the
+# built track a few rails ahead of where it stands (ahead = the direction
+# of travel).
 # (Java-only by design, like the stall keeper: Bedrock's pace is a virtual
 # position advanced by script -- there is no physical cart to derail.)
 scoreboard players set .wdt ir 0
@@ -32,6 +37,13 @@ scoreboard players add .wdstuck ir 0
 # passed condition still fires -- conditions ahead of the store are what
 # keep a missing cart from minting a bogus .lineZ 0.
 execute unless score .lineZ ir = .lineZ ir if entity @e[type=minecart,tag=ir_cart,limit=1] store result score .lineZ ir run data get entity @e[type=minecart,tag=ir_cart,limit=1] Pos[2] 1
+
+# Parked (stop-and-reverse: the signed target .curtgt, recomputed by main
+# every tick, is 0): nothing is supposed to move -- no movement check, no
+# missing-cart resummon, no recovery. The baseline .wdX stays where the cart
+# stopped, and a cart whose chunk is momentarily unloaded simply waits for
+# it (or for the next nonzero speed) instead of being twinned.
+execute if score .curtgt ir matches 0 run return 0
 
 # Dedup guard: if a recovery re-summon ever races a cart whose chunk was
 # merely unloaded (not dead), two pace carts would fight over every
@@ -125,9 +137,15 @@ execute if score .wdoff ir matches 0 unless score .wdry ir matches -30000 run sc
 execute if score .wdoff ir matches 0 unless score .wdry ir matches -30000 if score .wdyn ir matches 16.. run scoreboard players set .wdoff ir 1
 execute if score .wdoff ir matches 0 unless score .wdry ir matches -30000 if score .wdyn ir matches ..-6 run scoreboard players set .wdoff ir 1
 
-# Healthy: at least +1.5 blocks since the last check AND still on the line.
-execute if score .wdmv ir matches 15.. if score .wdoff ir matches 0 run scoreboard players set .wdstuck ir 0
-execute if score .wdmv ir matches 15.. if score .wdoff ir matches 0 run return 0
+# Healthy: at least 1.5 blocks of progress IN THE RIDE'S DIRECTION since the
+# last check (east while .curtgt is positive, west while negative -- the
+# sign-flip itself re-baselines the window in main, so a mixed window can't
+# read as a false stall) AND still on the line.
+scoreboard players set .wdok ir 0
+execute if score .curtgt ir matches 1.. if score .wdmv ir matches 15.. run scoreboard players set .wdok ir 1
+execute if score .curtgt ir matches ..-1 if score .wdmv ir matches ..-15 run scoreboard players set .wdok ir 1
+execute if score .wdok ir matches 1 if score .wdoff ir matches 0 run scoreboard players set .wdstuck ir 0
+execute if score .wdok ir matches 1 if score .wdoff ir matches 0 run return 0
 
 # --- Stuck: the cart went nowhere for a full 3-second window ---------------
 scoreboard players add .wdstuck ir 1

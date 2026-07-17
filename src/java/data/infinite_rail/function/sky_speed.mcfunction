@@ -5,5 +5,5 @@
 # adjustable from there. Split out of mode_sky_on because begin re-applies it
 # too: a ride started while sky mode is already on must not launch at the land
 # speed.
-execute store result storage infinite_rail:speed v int 1 run scoreboard players get .skyspd ir
-function infinite_rail:set_speed with storage infinite_rail:speed
+scoreboard players operation .spush ir = .skyspd ir
+function infinite_rail:speed_push

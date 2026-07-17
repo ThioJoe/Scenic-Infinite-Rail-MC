@@ -24,6 +24,13 @@
 # run counters and .fast and restores the land speed (.speed) on the way out.
 execute if score .SKYMODE ir matches 1 run return 0
 
+# Parked or reversing (the signed target .curtgt, computed by main just
+# before this call, is <= 0): the ocean system stands down entirely -- no
+# counters, no sprint entry or exit ("don't bother with the ocean speed
+# while going backwards"). Everything freezes where it is and resumes the
+# moment the ride heads east again.
+execute if score .curtgt ir matches ..0 run return 0
+
 # Which chunk is the rider (seat) in now? (X floored to 16-block chunks.)
 execute store result score .rigX ir run data get entity @e[type=item_display,tag=ir_seat,limit=1] Pos[0] 1
 scoreboard players operation .chunkNow ir = .rigX ir

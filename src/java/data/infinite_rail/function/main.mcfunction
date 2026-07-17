@@ -3,6 +3,42 @@
 # Track the pace cart's X position for the build-ahead gap calculation.
 execute store result score .cartX ir run data get entity @e[type=minecart,tag=ir_cart,limit=1] Pos[0] 1
 
+# The signed speed context (.curtgt): the cruise the pace obeys right now
+# WITH its sign -- positive = eastbound, 0 = parked, negative = reverse
+# (stop-and-reverse, §6.10). Same context pick as the shared speed_step.
+# The minecart max-speed gamerule only ever holds the MAGNITUDE (speed_push
+# takes |value|), so the sign lives here: it drives the stall keeper's boost
+# direction below, the watchdog's direction awareness (pace_watch/pace_fix),
+# the ocean gate and the reverse chunk roller.
+scoreboard players operation .curtgt ir = .speed ir
+execute if score .fast ir matches 1 run scoreboard players operation .curtgt ir = .ocnspd ir
+execute if score .SKYMODE ir matches 1 run scoreboard players operation .curtgt ir = .skyspd ir
+# A direction flip re-baselines the watchdog window (a half-east half-west
+# 3-second window nets ~zero movement and would read as a false stall) and
+# re-arms the reverse roller's trigger.
+scoreboard players set .tgs ir 0
+execute if score .curtgt ir matches 1.. run scoreboard players set .tgs ir 1
+execute if score .curtgt ir matches ..-1 run scoreboard players set .tgs ir -1
+execute unless score .tgsW ir = .tgsW ir run scoreboard players operation .tgsW ir = .tgs ir
+execute unless score .tgs ir = .tgsW ir run scoreboard players set .wdt ir 0
+execute unless score .tgs ir = .tgsW ir run scoreboard players set .wdstuck ir 0
+execute unless score .tgs ir = .tgsW ir run scoreboard players reset .backLoad ir
+execute unless score .tgs ir = .tgsW ir if entity @e[type=minecart,tag=ir_cart,limit=1] store result score .wdX ir run data get entity @e[type=minecart,tag=ir_cart,limit=1] Pos[0] 10
+scoreboard players operation .tgsW ir = .tgs ir
+
+# Reverse: keep chunks loading BEHIND (west of) the pace cart -- the forward
+# roll released everything ≳256 back, and a cart entering non-ticking chunks
+# freezes. Every 16 blocks of westward travel, rev_roll re-adds the corridor
+# rows around/ahead-of the cart (already-generated chunks: cheap loads).
+# Nothing is released until stop/begin clears all forceloads -- bounded, as
+# a reverse run itself is (the ~2048-column history; rev_check below).
+execute if score .curtgt ir matches ..-1 unless score .backLoad ir = .backLoad ir run scoreboard players operation .backLoad ir = .cartX ir
+execute if score .curtgt ir matches ..-1 if score .cartX ir <= .backLoad ir at @e[type=minecart,tag=ir_cart,limit=1] run function infinite_rail:rev_roll
+
+# Reverse end-stop: park the ride when it reaches the start (west end) of
+# the remembered track.
+execute if score .curtgt ir matches ..-1 run function infinite_rail:rev_check
+
 # Ocean speed-up: sample the biome once per chunk crossed and raise/lower the
 # minecart max-speed gamerule over long ocean stretches.
 function infinite_rail:ocean_check
@@ -91,9 +127,17 @@ ride @e[type=item_display,tag=ir_plug,limit=1] mount @e[type=minecart,tag=ir_car
 ride @e[type=minecart,tag=ir_ride,limit=1] mount @e[type=item_display,tag=ir_seat,limit=1]
 
 # Keeper: if the pace cart ever stalls (mob collision, freak accident),
-# re-boost it.
+# re-boost it -- in the direction the signed target says the ride is going
+# (stop-and-reverse): east while .curtgt is positive, west while negative,
+# and while PARKED (.curtgt 0) any creeping motion is zeroed outright (the
+# gamerule may sit at 0 too, but a version that rejects 0 leaves it nonzero
+# -- the per-tick zeroing is what guarantees a parked ride holds still; a
+# cart at rest on a powered rail is not re-accelerated by it).
 execute store result score .mx ir run data get entity @e[type=minecart,tag=ir_cart,limit=1] Motion[0] 100
-execute if score .mx ir matches ..10 run data merge entity @e[type=minecart,tag=ir_cart,limit=1] {Motion:[0.5d,0.0d,0.0d]}
+execute if score .curtgt ir matches 1.. if score .mx ir matches ..10 run data merge entity @e[type=minecart,tag=ir_cart,limit=1] {Motion:[0.5d,0.0d,0.0d]}
+execute if score .curtgt ir matches ..-1 if score .mx ir matches -10.. run data merge entity @e[type=minecart,tag=ir_cart,limit=1] {Motion:[-0.5d,0.0d,0.0d]}
+execute if score .curtgt ir matches 0 if score .mx ir matches 3.. run data merge entity @e[type=minecart,tag=ir_cart,limit=1] {Motion:[0.0d,0.0d,0.0d]}
+execute if score .curtgt ir matches 0 if score .mx ir matches ..-3 run data merge entity @e[type=minecart,tag=ir_cart,limit=1] {Motion:[0.0d,0.0d,0.0d]}
 
 # Watchdog: the motion re-boost above can't help a cart that DERAILED (fell
 # off the track end into terrain when chunk loading lagged) or vanished --

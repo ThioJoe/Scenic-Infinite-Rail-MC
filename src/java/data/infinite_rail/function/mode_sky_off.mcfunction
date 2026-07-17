@@ -5,8 +5,8 @@
 # cruising speed (.speed) and hands the speed back to the ocean system with
 # fresh counters (it was skipped entirely while sky mode was on).
 scoreboard players set .SKYMODE ir 0
-execute store result storage infinite_rail:speed v int 1 run scoreboard players get .speed ir
-function infinite_rail:set_speed with storage infinite_rail:speed
+scoreboard players operation .spush ir = .speed ir
+function infinite_rail:speed_push
 scoreboard players set .fast ir 0
 scoreboard players set .oceanRun ir 0
 scoreboard players set .landRun ir 0

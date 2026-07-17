@@ -7,7 +7,10 @@
 # strands a derailed cart in the first place).
 #
 # Target column: min(lastX + 3, .headX - 2), floored into the cart's normal
-# zone (.headX - .PACE_CART_BEHIND) and at .trackBase + 1.
+# zone (.headX - .PACE_CART_BEHIND -- forward rides only, see below) and at
+# .trackBase + 1. While REVERSING (stop-and-reverse) "forward" is west: the
+# offset is -3 and the corridor floor is skipped (the reverse roller keeps
+# the cart's chunks loaded wherever it is).
 #   lastX is the watchdog's OWN baseline (.wdX, x10) -- deliberately NOT
 #   .cartX: main's per-tick .cartX read is an `execute store result`, and on
 #   modern versions a store whose command fails WRITES 0 -- so while the
@@ -35,13 +38,20 @@
 execute unless score .lineZ ir = .lineZ ir run return 0
 scoreboard players operation .fxX ir = .wdX ir
 scoreboard players operation .fxX ir /= .C10 ir
-scoreboard players add .fxX ir 3
+# "A few rails forward" means the direction of travel: +3 east on a forward
+# ride, -3 west while reversing (stop-and-reverse -- .curtgt's sign; a
+# parked ride never reaches this file, pace_watch returns at target 0).
+execute if score .curtgt ir matches 0.. run scoreboard players add .fxX ir 3
+execute if score .curtgt ir matches ..-1 run scoreboard players remove .fxX ir 3
 scoreboard players operation .fxS ir = .headX ir
 scoreboard players remove .fxS ir 2
 execute if score .fxX ir > .fxS ir run scoreboard players operation .fxX ir = .fxS ir
-scoreboard players operation .fxS ir = .headX ir
-scoreboard players operation .fxS ir -= .PACE_CART_BEHIND cfg_ride
-execute if score .fxX ir < .fxS ir run scoreboard players operation .fxX ir = .fxS ir
+# The corridor floor only holds on a FORWARD ride: reversing, the cart is
+# legitimately far west of the head (the reverse roller keeps its chunks
+# loaded), so the .PACE_CART_BEHIND floor must not yank it back east.
+execute if score .curtgt ir matches 0.. run scoreboard players operation .fxS ir = .headX ir
+execute if score .curtgt ir matches 0.. run scoreboard players operation .fxS ir -= .PACE_CART_BEHIND cfg_ride
+execute if score .curtgt ir matches 0.. if score .fxX ir < .fxS ir run scoreboard players operation .fxX ir = .fxS ir
 scoreboard players operation .fxS ir = .trackBase ir
 scoreboard players add .fxS ir 1
 execute if score .fxX ir < .fxS ir run scoreboard players operation .fxX ir = .fxS ir
@@ -89,9 +99,11 @@ execute store result storage infinite_rail:fix z double 0.1 run scoreboard playe
 # `ride ... mount` line re-plugs it next tick from any distance.
 execute if entity @e[type=minecart,tag=ir_cart,limit=1] run function infinite_rail:pace_fix_tp with storage infinite_rail:fix
 execute unless entity @e[type=minecart,tag=ir_cart,limit=1] run function infinite_rail:pace_fix_summon with storage infinite_rail:fix
-# Eastward shove (the summon NBT already carries one; the tp'd cart keeps
-# whatever dead motion stalled it, so overwrite).
-data merge entity @e[type=minecart,tag=ir_cart,limit=1] {Motion:[0.5d,0.0d,0.0d]}
+# A shove in the direction of travel (the summon NBT carries an eastward
+# one; the tp'd cart keeps whatever dead motion stalled it -- overwrite
+# either way, westward while reversing).
+execute if score .curtgt ir matches 0.. run data merge entity @e[type=minecart,tag=ir_cart,limit=1] {Motion:[0.5d,0.0d,0.0d]}
+execute if score .curtgt ir matches ..-1 run data merge entity @e[type=minecart,tag=ir_cart,limit=1] {Motion:[-0.5d,0.0d,0.0d]}
 # If the plug went down with the cart, restore it too (invisible, empty
 # item_display; the keeper mounts it).
 execute unless entity @e[type=item_display,tag=ir_plug,limit=1] at @e[type=minecart,tag=ir_cart,limit=1] run summon minecraft:item_display ~ ~1 ~ {Tags:["ir_plug"]}

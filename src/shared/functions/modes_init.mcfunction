@@ -80,34 +80,33 @@ scoreboard players add .stminit ir 0
 execute if score .stminit ir matches 0 run scoreboard players operation .STORMMODE ir = .NOSTORMS ir
 execute if score .stminit ir matches 0 run scoreboard players set .stminit ir 1
 
-# The adjustable ride speed (.speed -- see the shared speed_step) is state
-# like the modes: seed it from the config default only when it has never
-# been set (or was left at an invalid <= 0), so a speed chosen with the
-# Speed +/- items survives /reload, ride restarts and rejoins. Runs after
-# config on both editions, so .DEFAULTSPEED is already applied here.
+# The three adjustable cruise speeds (.speed land / .skyspd sky / .ocnspd
+# ocean -- see the shared speed_step) are state like the modes: each is
+# seeded from its config default ONCE, so a speed chosen with the Speed +/-
+# items survives /reload, ride restarts and rejoins. Since stop-and-reverse,
+# 0 (parked) and negative (backwards) are LEGAL values -- so "never set" can
+# no longer be told from "deliberately 0" by the value alone, and the seeds
+# sit behind a one-shot companion flag (.spdinit, the .sndinit pattern): on
+# the load that first creates the flag, any <= 0 value is (re)seeded from
+# its default -- exactly the old rule, so upgrading worlds keep their chosen
+# speeds -- and afterwards the scores are never touched again, so a ride
+# parked at 0 or backing up at -8 stays that way across a /reload. (A new
+# RIDE still normalizes: begin treats a <= 0 land speed as the config
+# default, so a fresh start always launches forward.)
+# (.ocnspd is only a sane starting value either way: on each ocean ENTRY
+# speed_up RECOMPUTES it raise-only -- max(.OCEANSPEED, .speed) -- so the
+# ocean never SLOWS a rider already going faster than the ocean speed. The
+# Speed items still tune it in BOTH directions mid-sprint; the next entry
+# recomputes. With the ocean speed-up disabled in config -- .OCEANSPEED 0 --
+# it seeds 0 and the entry recompute covers a later enable.)
 scoreboard players add .speed ir 0
-execute if score .speed ir matches ..0 run scoreboard players operation .speed ir = .DEFAULTSPEED cfg_ride
-
-# The adjustable SKY cruise speed (.skyspd -- what the ride cruises at while
-# sky mode is on; the Speed +/- items and Reset tune it in sky mode via the
-# shared speed_step) follows the exact same pattern: seeded from the config
-# default .SKYSPEED only when never set, so a chosen sky speed survives
-# /reload, ride restarts and rejoins. Sky mode still "jumps to its default"
-# on the very first use (the seed) but is adjustable from there forever after.
 scoreboard players add .skyspd ir 0
-execute if score .skyspd ir matches ..0 run scoreboard players operation .skyspd ir = .SKYSPEED cfg_ride
-
-# The adjustable OCEAN cruise speed (.ocnspd -- what the ride cruises at
-# while the ocean sprint is on, .fast 1): same pattern again, seeded from
-# the config default .OCEANSPEED. This is only a sane starting value: on each
-# ocean ENTRY speed_up RECOMPUTES it raise-only -- max(.OCEANSPEED, .speed) --
-# so the ocean never SLOWS a rider already going faster than the ocean speed.
-# The Speed items still tune it in BOTH directions mid-sprint (a tune sticks
-# for that crossing; the next entry recomputes). (With the ocean speed-up
-# disabled in config -- .OCEANSPEED 0 -- this seeds 0 and re-seeds each load
-# until the feature is enabled; it is never applied then.)
 scoreboard players add .ocnspd ir 0
-execute if score .ocnspd ir matches ..0 run scoreboard players operation .ocnspd ir = .OCEANSPEED cfg_ride
+scoreboard players add .spdinit ir 0
+execute if score .spdinit ir matches 0 if score .speed ir matches ..0 run scoreboard players operation .speed ir = .DEFAULTSPEED cfg_ride
+execute if score .spdinit ir matches 0 if score .skyspd ir matches ..0 run scoreboard players operation .skyspd ir = .SKYSPEED cfg_ride
+execute if score .spdinit ir matches 0 if score .ocnspd ir matches ..0 run scoreboard players operation .ocnspd ir = .OCEANSPEED cfg_ride
+execute if score .spdinit ir matches 0 run scoreboard players set .spdinit ir 1
 
 # Track light (.LIGHTMODE): the light level of the invisible light block
 # placed 3 above every NEW rail (0 = none -- dark tunnels and nights; the

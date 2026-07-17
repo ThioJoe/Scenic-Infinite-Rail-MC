@@ -188,27 +188,37 @@ const tests = [
     await s.setScore('.TORCHMODE', 'ir', 2);
   }),
 
-  report('shared speed_step: grid walk / floor / reset on Bedrock', async (s) => {
+  report('shared speed_step: grid walk through 0 into reverse / reset on Bedrock', async (s) => {
     const base = expected.find((e) => e.holder === '.DEFAULTSPEED')?.value ?? 8; // 8: on the coarse grid
     // Coarse zone (8 up) steps by .SPEEDSTEP (4).
     await s.fn('speed_inc');
     if (!(await s.scoreInRange('.speed', 'ir', base + 4))) throw new Error(`inc: .speed != ${base + 4}`);
     await s.fn('speed_dec');
     if (!(await s.scoreInRange('.speed', 'ir', base))) throw new Error(`dec: .speed != ${base}`);
-    // From 8 the fine grid takes over: 8 -> 6 -> 5 -> 4 -> 3 -> 2 -> 1, floor.
-    for (const want of [6, 5, 4, 3, 2, 1]) {
+    // From 8 the fine grid takes over and runs straight THROUGH 0 into
+    // reverse (stop-and-reverse -- the old floor of 1 is gone), with the
+    // mirrored -6 <-> -8 bridge into the negative coarse zone.
+    for (const want of [6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -8, -12]) {
       await s.fn('speed_dec');
       if (!(await s.scoreInRange('.speed', 'ir', want))) throw new Error(`dec down the grid: .speed != ${want}`);
     }
-    await s.fn('speed_dec');
-    if (!(await s.scoreInRange('.speed', 'ir', 1))) throw new Error('.speed did not stay at the floor of 1');
-    // Speed + from the floor walks 1 -> 2 -> ... -> 6 -> 8 (skips 7).
-    for (const want of [2, 3, 4, 5, 6, 8]) {
+    // Speed + walks it back up: -12 -> -8 -> -6 .. 0 .. 6 -> 8 (skips 7).
+    for (const want of [-8, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 8]) {
       await s.fn('speed_inc');
       if (!(await s.scoreInRange('.speed', 'ir', want))) throw new Error(`inc up the grid: .speed != ${want}`);
     }
     await s.fn('speed_reset');
     if (!(await s.scoreInRange('.speed', 'ir', base))) throw new Error(`reset: .speed != ${base}`);
+    // Reset direction rules: below -default lands on -default; anywhere in
+    // -default..0 (inclusive) heads forward to +default.
+    await s.setScore('.speed', 'ir', -(base + 4));
+    await s.fn('speed_reset');
+    if (!(await s.scoreInRange('.speed', 'ir', -base))) throw new Error(`reset from -${base + 4}: .speed != -${base}`);
+    await s.fn('speed_reset');
+    if (!(await s.scoreInRange('.speed', 'ir', base))) throw new Error(`reset from -${base}: .speed != +${base}`);
+    await s.setScore('.speed', 'ir', 0);
+    await s.fn('speed_reset');
+    if (!(await s.scoreInRange('.speed', 'ir', base))) throw new Error(`reset from 0: .speed != ${base}`);
   }),
 
   report('shared speed_step: sky mode tunes the sky cruise (.skyspd), land speed untouched', async (s) => {
@@ -553,6 +563,40 @@ const tests = [
       if (railY === null) throw new Error(`no rail at the post-toggle column ${vis.probeX} (Y ${vis.ry - 12}..${vis.ry + 12})`);
     } finally {
       await s.cmd('tickingarea remove sirm_invis2');
+    }
+  }),
+
+  report('stop-and-reverse: the virtual pace runs backwards, then resumes east', async (s) => {
+    // A negative land speed must roll the virtual pace BACKWARDS -- the dbg
+    // mirror's .gap (head - pace) grows -- and a positive one must bring it
+    // forward again (gap shrinks). tickPace reads the score live, so plain
+    // setScore is the real code path. The surrogate rider is an armor
+    // stand, not a player -- it loads no chunks itself -- so the reverse
+    // span is pinned with a test tickingarea (a REAL rider is a player and
+    // self-loads; BDS command tickingareas load chunks only with zero
+    // players online, which is the case here).
+    const h = await s.scoreValue('.headX', 'dbg', -1000, 200000);
+    if (h === null) throw new Error('no .headX from the dbg mirror');
+    // A generous pin: the whole reverse leg (~-16 b/s incl. read overhead)
+    // plus the rig lead must stay inside it, or the STAND unloads and the
+    // ride rightly freezes ("rider offline") -- which read as "did not
+    // resume" in an earlier, shorter-pinned revision of this test.
+    await s.cmd(`tickingarea add ${h - 800} 100 ${LINE_Z} ${h + 16} 100 ${LINE_Z} sirm_rev`);
+    await sleep(3000);
+    try {
+      const g0 = await s.scoreValue('.gap', 'dbg', -100000, 100000);
+      if (g0 === null) throw new Error('no .gap from the dbg mirror');
+      await s.setScore('.speed', 'ir', -16);
+      await sleep(8000);
+      const g1 = await s.scoreValue('.gap', 'dbg', -100000, 100000);
+      if (g1 === null || g1 < g0 + 60) throw new Error(`pace did not run backwards (gap ${g0} -> ${g1})`);
+      await s.setScore('.speed', 'ir', 32);
+      await sleep(8000);
+      const g2 = await s.scoreValue('.gap', 'dbg', -100000, 100000);
+      if (g2 === null || g2 > g1 - 60) throw new Error(`pace did not resume forward (gap ${g1} -> ${g2})`);
+    } finally {
+      await s.setScore('.speed', 'ir', 8);
+      await s.cmd('tickingarea remove sirm_rev');
     }
   }),
 

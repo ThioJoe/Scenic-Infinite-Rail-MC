@@ -19,8 +19,8 @@
 # the user's adjustment rather than snapping back to max(.OCEANSPEED, .speed).
 execute if score .fast ir matches 0 run scoreboard players operation .ocnspd ir = .OCEANSPEED cfg_ride
 execute if score .fast ir matches 0 if score .speed ir > .ocnspd ir run scoreboard players operation .ocnspd ir = .speed ir
-execute store result storage infinite_rail:speed v int 1 run scoreboard players get .ocnspd ir
-function infinite_rail:set_speed with storage infinite_rail:speed
+scoreboard players operation .spush ir = .ocnspd ir
+function infinite_rail:speed_push
 # The debug line and the .fast flag flip happen only on the first call (while
 # .fast is still 0), so there's no spam while cruising.
 execute if score .DEBUGMODE ir matches 1 if score .fast ir matches 0 run tellraw @a [{"text":"[SR Debug] ","color":"dark_aqua"},{"text":"entering ocean sprint, speed ","color":"aqua"},{"score":{"name":".ocnspd","objective":"ir"},"color":"white"}]

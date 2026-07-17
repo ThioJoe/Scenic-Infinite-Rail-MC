@@ -15,7 +15,7 @@
 # land, the ocean speed during the sprint -- managed by the context, not the
 # speed the rider happens to be at).
 execute if score .ocnspd ir > .OCEANSPEED cfg_ride run scoreboard players operation .speed ir = .ocnspd ir
-execute store result storage infinite_rail:speed v int 1 run scoreboard players get .speed ir
-function infinite_rail:set_speed with storage infinite_rail:speed
+scoreboard players operation .spush ir = .speed ir
+function infinite_rail:speed_push
 execute if score .DEBUGMODE ir matches 1 run tellraw @a [{"text":"[SR Debug] ","color":"dark_aqua"},{"text":"returning to land, speed ","color":"yellow"},{"score":{"name":".speed","objective":"ir"},"color":"white"}]
 scoreboard players set .fast ir 0

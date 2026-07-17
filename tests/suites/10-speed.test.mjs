@@ -31,23 +31,22 @@ export default defineSuite('ride speed state machine', ({ test }) => {
     eq(await mc.score('.spdflt', 'ir'), 1, 'reported as default again');
   });
 
-  test('Speed - walks the sub-8 grid down to the floor of 1', async ({ mc }) => {
+  test('Speed - walks the grid down through 0 into reverse (no floor)', async ({ mc }) => {
     // From the default 8, one notch at a time down the selectable grid:
-    // 8 -> 6 (bridge into the fine zone) -> 5 -> 4 -> 3 -> 2 -> 1, then it
-    // stays at 1 no matter how many more times you click.
+    // 8 -> 6 (bridge into the fine zone) -> 5 .. 1 -> 0 (parked) -> -1 ..
+    // -6 -> -8 (the mirrored bridge) -> -12 (-.SPEEDSTEP beyond). The old
+    // floor of 1 is gone -- that is the stop-and-reverse feature.
     await mc.fn('speed_dec');
     eq(await mc.score('.speed', 'ir'), 6, '8 - one notch = 6 (grid bridges 8<->6)');
-    for (const want of [5, 4, 3, 2, 1]) {
+    for (const want of [5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -8, -12]) {
       await mc.fn('speed_dec');
       eq(await mc.score('.speed', 'ir'), want, `down one to ${want}`);
     }
-    await mc.fn('speed_dec');
-    eq(await mc.score('.speed', 'ir'), 1, 'clicking - at the floor stays at 1');
   });
 
-  test('Speed + walks the sub-8 grid up: 1,2,3,4,5,6,8 (no 7), then +.SPEEDSTEP', async ({ mc }) => {
-    eq(await mc.score('.speed', 'ir'), 1, 'precondition: at the floor');
-    for (const want of [2, 3, 4, 5, 6]) {
+  test('Speed + walks the mirrored grid back up: -12,-8,-6..0,1..6,8 (no 7), then +.SPEEDSTEP', async ({ mc }) => {
+    eq(await mc.score('.speed', 'ir'), -12, 'precondition: reversing at -12');
+    for (const want of [-8, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6]) {
       await mc.fn('speed_inc');
       eq(await mc.score('.speed', 'ir'), want, `up one to ${want}`);
     }
@@ -65,6 +64,26 @@ export default defineSuite('ride speed state machine', ({ test }) => {
     eq(await mc.score('.spdflt', 'ir'), 1, '.spdflt answers default');
   });
 
+  test('reset is direction-aware while reversing', async ({ mc, expected }) => {
+    const dflt = expected.get('.DEFAULTSPEED'); // 8
+    // Backwards FASTER than the default: reset lands on the REVERSE default.
+    await mc.setScore('.speed', 'ir', -(dflt + 4));
+    await mc.fn('speed_reset');
+    eq(await mc.score('.speed', 'ir'), -dflt, `reset from -${dflt + 4} lands on -${dflt}`);
+    eq(await mc.score('.spdflt', 'ir'), 0, 'a reverse default is not THE default');
+    // From exactly -default (inclusive boundary): reset heads forward.
+    await mc.fn('speed_reset');
+    eq(await mc.score('.speed', 'ir'), dflt, `reset from -${dflt} goes forward to +${dflt}`);
+    eq(await mc.score('.spdflt', 'ir'), 1, 'now the true default');
+    // From a slow reverse and from parked: forward default both times.
+    await mc.setScore('.speed', 'ir', -3);
+    await mc.fn('speed_reset');
+    eq(await mc.score('.speed', 'ir'), dflt, 'reset from -3 goes forward');
+    await mc.setScore('.speed', 'ir', 0);
+    await mc.fn('speed_reset');
+    eq(await mc.score('.speed', 'ir'), dflt, 'reset from parked (0) goes forward');
+  });
+
   test('speed_apply pushes .speed into the max-speed gamerule', async ({ mc }) => {
     if (await speedRule(mc) === null) skip('minecart max-speed gamerule missing on this server (see version-compat suite)');
     await mc.setScore('.fast', 'ir', 0);
@@ -72,6 +91,20 @@ export default defineSuite('ride speed state machine', ({ test }) => {
     eq(await speedRule(mc), 12, 'gamerule follows the Speed + click');
     await mc.fn('speed_reset');
     eq(await speedRule(mc), 8, 'gamerule follows reset');
+  });
+
+  test('the gamerule gets the MAGNITUDE of a reverse speed (speed_push abs)', async ({ mc }) => {
+    if (await speedRule(mc) === null) skip('minecart max-speed gamerule missing on this server (see version-compat suite)');
+    await mc.setScore('.fast', 'ir', 0);
+    await mc.setScore('.speed', 'ir', -16);
+    await mc.fn('speed_inc'); // -16 -> -12 through the real click path, applies
+    eq(await mc.score('.speed', 'ir'), -12, 'grid: -16 + one notch = -12');
+    eq(await speedRule(mc), 12, 'gamerule holds |−12| = 12, never a negative');
+    await mc.fn('speed_reset'); // -12 < -8: reverse default
+    eq(await mc.score('.speed', 'ir'), -8, 'reset from -12 lands on -8');
+    eq(await speedRule(mc), 8, 'gamerule holds |−8| = 8');
+    await mc.fn('speed_reset'); // back to +8 for the suites below
+    eq(await mc.score('.speed', 'ir'), 8, 'second reset heads forward');
   });
 
   test('ocean speed_up applies the ocean cruise (.ocnspd) and flags .fast', async ({ mc, expected }) => {

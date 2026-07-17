@@ -4,5 +4,7 @@
 # config default (.spdflt). No apply here: scripts/main.js reads .speed /
 # .skyspd as the virtual pace target every tick, so there is no gamerule to
 # push on Bedrock.
-execute if score .spdflt ir matches 0 run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Ride speed: §f"},{"score":{"name":".spcur","objective":"ir"}},{"text":"§7 blocks/s"}]}
-execute if score .spdflt ir matches 1 run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Ride speed: §f"},{"score":{"name":".spcur","objective":"ir"}},{"text":"§7 blocks/s (default)"}]}
+# Negative values print with their minus sign as-is; 0 says so ("stopped").
+execute if score .spcur ir matches 0 run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Ride speed: §f"},{"score":{"name":".spcur","objective":"ir"}},{"text":"§7 blocks/s (stopped)"}]}
+execute unless score .spcur ir matches 0 if score .spdflt ir matches 0 run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Ride speed: §f"},{"score":{"name":".spcur","objective":"ir"}},{"text":"§7 blocks/s"}]}
+execute unless score .spcur ir matches 0 if score .spdflt ir matches 1 run tellraw @a {"rawtext":[{"text":"§6[Scenic Rail]§r §7Ride speed: §f"},{"score":{"name":".spcur","objective":"ir"}},{"text":"§7 blocks/s (default)"}]}

@@ -48,8 +48,13 @@ recipe give @s *
 # start. (Not enforced afterwards -- change /gamerule yourself mid-ride if
 # you want.)
 scoreboard players set .fast ir 0
-execute store result storage infinite_rail:speed v int 1 run scoreboard players get .speed ir
-function infinite_rail:set_speed with storage infinite_rail:speed
+# A fresh ride always launches FORWARD: a land speed parked at 0 or left
+# negative (stop-and-reverse state from an earlier ride) normalizes to the
+# config default here -- reversing from the very start of a track that only
+# exists to the east makes no sense.
+execute if score .speed ir matches ..0 run scoreboard players operation .speed ir = .DEFAULTSPEED cfg_ride
+scoreboard players operation .spush ir = .speed ir
+function infinite_rail:speed_push
 execute if score .DEBUGMODE ir matches 1 run tellraw @a [{"text":"[SR Debug] ","color":"dark_aqua"},{"text":"ride speed set to ","color":"gray"},{"score":{"name":".speed","objective":"ir"},"color":"white"},{"text":" (needs Minecart Improvements enabled to take effect)","color":"dark_gray"}]
 # Sky mode, if it was left on, overrides the default with its cruise speed.
 execute if score .SKYMODE ir matches 1 run function infinite_rail:sky_speed
@@ -175,6 +180,10 @@ scoreboard players set .wdt ir 0
 scoreboard players set .wdstuck ir 0
 scoreboard players set .wdmiss ir 0
 scoreboard players set .wdfixn ir 0
+# Stop-and-reverse scratch: forget the last ride's direction sign and the
+# reverse chunk roller's trigger (both re-seed from the live state in main).
+scoreboard players reset .tgsW ir
+scoreboard players reset .backLoad ir
 
 # --- Invisible track: if the mode is already on, the first column above was
 # built WITHOUT its rail -- run the strip keeper once, right now, so the

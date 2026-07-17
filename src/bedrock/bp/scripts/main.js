@@ -726,9 +726,16 @@ function lightLevel() {
 // back to the config default where the score is unreadable (cmd-bridge
 // worlds -- there live speed changes degrade to the config value, like
 // every other live tweak).
+// Stop-and-reverse: 0 (parked) and negative (the ride runs backwards) are
+// LEGAL cruise values now, so the three readers can no longer treat "< 1"
+// as unreadable -- only a score that genuinely can't be read (undefined:
+// cmd-bridge worlds, where the API can't see command-written scores, or a
+// world where modes_init never ran) falls back to the config default. On
+// cmd-bridge worlds the fallback means stop-and-reverse degrades to the
+// forward default, like every other live tweak there.
 function landSpeed() {
-  const v = getScore('speed', 0);
-  return v >= 1 ? v : cfg('DEFAULTSPEED');
+  const v = getScore('speed', undefined);
+  return v === undefined ? cfg('DEFAULTSPEED') : v;
 }
 
 // The ride's SKY cruising speed: the .skyspd state score (adjusted by the
@@ -737,8 +744,8 @@ function landSpeed() {
 // shared speed_step). Falls back to the config default where the score is
 // unreadable (cmd-bridge worlds), like landSpeed().
 function skySpeed() {
-  const v = getScore('skyspd', 0);
-  return v >= 1 ? v : cfg('SKYSPEED');
+  const v = getScore('skyspd', undefined);
+  return v === undefined ? cfg('SKYSPEED') : v;
 }
 
 // The ride's OCEAN cruise speed: the .ocnspd state score. On each ocean ENTRY
@@ -749,8 +756,8 @@ function skySpeed() {
 // .OCEANSPEED by the shared modes_init; same unreadable-score fallback as the
 // other two.
 function oceanSpeed() {
-  const v = getScore('ocnspd', 0);
-  return v >= 1 ? v : cfg('OCEANSPEED');
+  const v = getScore('ocnspd', undefined);
+  return v === undefined ? cfg('OCEANSPEED') : v;
 }
 
 // The speed the ride cruises at right now: the sky cruise while sky mode owns
@@ -797,10 +804,11 @@ function torchDensity() {
   return v >= 1 ? v : cfg('TORCHODDS');
 }
 
-// Route a speed change through the shared speed_step state machine (clamp
-// 1..64 + default detection) by feeding it a delta, then let speed_msg
-// report -- the same path as the +/- items and Java, so the feedback and
-// the clamping can never drift apart. .spstep 0 keeps this OFF the
+// Route a speed change through the shared speed_step state machine (the
+// selectable grid -- which since stop-and-reverse runs through 0 into
+// negative speeds -- plus default detection) by feeding it a delta, then
+// let speed_msg report -- the same path as the +/- items and Java, so the
+// feedback and the arithmetic can never drift apart. .spstep 0 keeps this OFF the
 // selectable-speed grid: the settings slider is an absolute setter (delta =
 // target - current), so its result must land on the exact value the user
 // picked, not get snapped onto the 1..6/8/12/... grid the +/- items walk.
@@ -831,7 +839,9 @@ function showRideMenu(player) {
     // The slider tunes whichever cruise speed is live -- the sky cruise while
     // sky mode is on, else the land speed. Clamped to the slider's 1..64 range
     // (a hand-set / Speed+-boosted out-of-range value must not throw on the
-    // form's default).
+    // form's default; a parked 0 or reverse speed displays as 1 -- moving the
+    // slider still applies the exact value picked, the Speed items handle
+    // stop-and-reverse).
     speed: Math.min(64, Math.max(1, activeSpeed())),
   };
   const form = new ModalFormData()
@@ -2352,6 +2362,12 @@ function oceanCheck() {
   // above any water anyway) -- skip the whole ocean system. tickPace resets
   // the counters and .fast on the toggle-off transition.
   if (modeOn('SKYMODE')) return;
+  // Parked or reversing (stop-and-reverse): the ocean system stands down
+  // entirely -- no counters, no sprint entry or exit ("don't bother with
+  // the ocean speed while going backwards"). Everything freezes where it
+  // is and resumes the moment the ride heads east again. (Java's
+  // ocean_check gates on the same signed target, .curtgt.)
+  if (activeSpeed() <= 0) return;
   const rigX = S.paceX + camAhead();
   const chunkNow = Math.floor(rigX / 16);
   if (chunkNow === S.lastChunk) return;
@@ -2460,13 +2476,34 @@ function tickPace() {
   paceCtxWas = ctx;
   paceTargetWas = tgt;
   const accel = (paceClickEase ? ACCEL_CLICK : ACCEL) / 20;
+  // Stop-and-reverse: a NEGATIVE target runs the ride backwards over the
+  // already-built track, until it reaches the start (west end) of the
+  // remembered history -- then it parks: the active cruise score is zeroed
+  // (so the shared speed_step / the items resume from 0) and the pace
+  // halts. The backroom soft-ceiling below already eased the approach.
+  if (S.targetSpeed < 0 && S.paceX <= S.trackBase + 2.5) {
+    S.paceSpeed = 0;
+    S.targetSpeed = 0;
+    const cruise = sky ? 'skyspd' : S.fast ? 'ocnspd' : 'speed';
+    runCmd(`scoreboard players set ${P}${cruise} ir 0`);
+    say('§7Reached the start of the track - ride stopped. Use Speed + to head east again.');
+  }
   // Never let the ride outrun the built track (e.g. while world generation is
   // catching up). This is a SOFT ceiling: the allowed speed shrinks smoothly
   // with the remaining track buffer, so a starved builder reads as the ride
   // gently easing off -- a hard positional clamp here made the cart surge and
-  // jerk whenever the buffer ran low at ocean speed.
-  const headroom = (S.headX - camAhead() - 8) - S.paceX;
-  const allowed = Math.max(0, Math.min(S.targetSpeed, headroom / 40));
+  // jerk whenever the buffer ran low at ocean speed. Mirrored while
+  // REVERSING (negative target): the "buffer" is the remembered track left
+  // behind us (down to the history's west end), so the ride eases into its
+  // stop at the start instead of slamming into it.
+  let allowed;
+  if (S.targetSpeed >= 0) {
+    const headroom = (S.headX - camAhead() - 8) - S.paceX;
+    allowed = Math.max(0, Math.min(S.targetSpeed, headroom / 40));
+  } else {
+    const backroom = S.paceX - (S.trackBase + 2);
+    allowed = Math.min(0, Math.max(S.targetSpeed, -backroom / 40));
+  }
   if (S.paceSpeed < allowed) S.paceSpeed = Math.min(allowed, S.paceSpeed + accel);
   else if (S.paceSpeed > allowed) S.paceSpeed = Math.max(allowed, S.paceSpeed - accel * 2);
   else if (S.paceSpeed === S.targetSpeed) paceClickEase = false; // arrived: back to the gentle ramp
@@ -2991,6 +3028,12 @@ function begin(rider) {
   }
 
   S.paceSpeed = 0;
+  // A fresh ride always launches FORWARD: a land speed parked at 0 or left
+  // negative (stop-and-reverse state from an earlier ride) normalizes to
+  // the config default here -- reversing from the very start of a track
+  // that only exists to the east makes no sense (Java's begin does the
+  // same normalize).
+  if (landSpeed() <= 0) runCmd(`scoreboard players set ${P}speed ir ${cfg('DEFAULTSPEED') | 0}`);
   S.targetSpeed = landSpeed() / 20;
   S.fast = false;
   syncFast();
