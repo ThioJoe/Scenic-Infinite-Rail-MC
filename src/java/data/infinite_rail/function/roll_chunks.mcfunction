@@ -19,20 +19,32 @@
 # while the neighbor rows lag at most ~2 ticks.
 #
 # Passed-entity cull -- the release band below (forceload remove,
-# ~-336..-256 x ±64) is about to unload: remove every non-player entity in
-# it first, so passed mobs, drops and stands are neither saved into the
-# unloaded chunks nor left for a revisit to reload (the safe salvage of the
-# retired trail wiper -- entities only, no block work). The band is fully
-# behind the ride by construction: the pace cart (the ride's rearmost
-# piece, plug aboard) rides at ~-224, the rider at -.RIDER_BEHIND, and the
-# head markers sit at the head itself -- so type=!player is the only
-# exclusion needed.
+# ~-336..-256 x ±64) is about to unload: remove passed mobs, drops and
+# stands so they are neither saved into the unloaded chunks nor left for a
+# revisit to reload (the safe salvage of the retired trail wiper -- entities
+# only, no block work). The band is fully behind the ride by construction:
+# the pace cart (the ride's rearmost piece, plug aboard) rides at ~-224, the
+# rider at -.RIDER_BEHIND, and the head markers sit at the head itself.
+# CRUCIAL EXCLUSION: the track's own smooth-stone disguise displays
+# (block_display, tag ir_disp) live ONE PER COLUMN all the way back -- they
+# are part of the built track, meant to stay with it (the track is left in
+# the world; §6.3 stop). A bare type=!player killed them here, so ~256+
+# blocks behind the head every support reverted to a bare RED redstone block
+# -- invisible on a forward-only ride, but glaring when you REVERSE back
+# through it (the "displays turn to redstone in groups" report). So the cull
+# excludes the ride's own entity kinds (block_display / item_display / marker
+# / minecart), exactly like main's pace-clear keeper -- it still sweeps mobs,
+# drops, XP and armor stands (none of those types), and the displays ride
+# out into the unloaded chunk with their track and reload intact on a
+# revisit. (Displays in released chunks don't tick or count against the
+# loaded-entity budget, so sparing them costs nothing.)
 # (Mobs killed here spawn NO loot: setup_world turns mob death drops off --
 # doMobLoot / 26.x mob_drops -- because loot would spawn AFTER this kill's
 # selector evaluated and be saved into the very chunks the release below
 # unloads. No XP either: command kills give no player credit. Bedrock's
-# cull has no such gap -- its entity.remove() despawns without drops.)
-execute positioned ~-336 -64 ~-64 run kill @e[type=!player,dx=80,dy=384,dz=128]
+# cull has no such gap -- its entity.remove() despawns without drops, and it
+# never touches the track since Bedrock's rails carry no display disguise.)
+execute positioned ~-336 -64 ~-64 run kill @e[type=!player,type=!block_display,type=!item_display,type=!marker,type=!minecart,dx=80,dy=384,dz=128]
 # Release the band behind, synchronous with the trigger on purpose: bands
 # tile at exactly 16 blocks per roll, and a release deferred into a phase
 # could be skipped during catch-up bursts (triggers can arrive faster than
