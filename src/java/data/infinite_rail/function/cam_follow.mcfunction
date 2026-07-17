@@ -4,25 +4,31 @@
 # CONSTRUCTED S-curve (.PACE_CART_BEHIND - .RIDER_BEHIND) blocks ahead of the hidden pace cart, built
 # from the track's recorded profile:
 #
-#   lifted(x) = min( max of railY over [x .. x+.CAMLIFT+2],  railY(x)+.CAMLIFT )
+#   lifted(x) = min( max of railY over [x-.CAMLIFT-3 .. x+.CAMLIFT+2],  railY(x)+.CAMLIFT )
 #   c1(x)     = average of lifted() over [x-.CAMBLEND/2 .. x+.CAMBLEND/2]
-#   c2       += (railY - c2) / .CAMSMOOTH          (reactive descent chaser)
-#   height    = max(c1, c2, railY)
+#   height    = max(c1, railY)
 #
 # Why this shape: lifted() is the rail line raised by .CAMLIFT wherever the
-# track climbs (the small forward max makes it start rising just before a
-# climb corner and flatten at the summit level .CAMLIFT early). Averaging it
-# over a +/-.CAMBLEND/2 window reproduces straight stretches EXACTLY -- level
-# on flats, truly parallel at 45 degrees mid-climb, no lag, no exponential
-# tail -- while every corner becomes a parabolic blend exactly .CAMBLEND
-# blocks long. So the camera lifts off shortly before a climb, is moving
-# parallel with the track as the slope arrives, rides it precisely, then
-# decelerates and lands LEVEL exactly at the summit height -- never pinned to
-# the 45 and kinked over the crest, and never sunk below the rails. Descents
-# are left to c2, the same reactive exponential glide as always (on the way
-# down the forward max IS the current line, so c1 hugs it and c2 wins the
-# max). The blend length does NOT scale with slope size: between blends the
-# camera simply rides parallel, however long the climb.
+# track slopes (the SYMMETRIC max makes it start rising just before a corner
+# and flatten .CAMLIFT early -- the SAME both approaching and leaving, so a
+# climb and a descent are treated identically). Averaging it over a
+# +/-.CAMBLEND/2 window reproduces straight stretches EXACTLY -- level on
+# flats, truly parallel at 45 degrees mid-slope, no lag -- while every corner
+# becomes a parabolic blend exactly .CAMBLEND blocks long. So the camera
+# lifts off shortly before a slope, is moving parallel as it arrives, rides
+# it precisely, then decelerates and lands LEVEL exactly at the far height --
+# never pinned to the 45, never kinked, never sunk below the rails, and
+# floating .CAMLIFT above on the way down just as on the way up.
+#
+# STATELESS AND SYMMETRIC: the height is a pure function of the rig position
+# and the fixed recorded profile -- no per-tick state, no travel-direction
+# term -- so REVERSING retraces the exact path the ride took FORWARD over the
+# same terrain. (The old design carried descents with a reactive exponential
+# chaser eased by .CAMSMOOTH; that was the one stateful term, and it floated
+# forward descents high while the reverse pass collapsed onto the bare rails
+# and clipped the track -- the "reverse sinks into descents" report. Widening
+# the max to a symmetric window lets c1 float descents by itself, so the
+# chaser is gone and the two directions are identical.)
 #
 # All heights are in milliblocks. Column heights come from the history list
 # appended by advance (storage infinite_rail:track y, index = X - .trackBase),
@@ -77,15 +83,13 @@ function infinite_rail:cam_blend
 scoreboard players operation .c1 ir = .tsum ir
 scoreboard players operation .c1 ir /= .tn ir
 
-# --- c2: the reactive descent chaser (eases toward the line; floats above it
-# while the line drops away, converges and holds on flats) ---
-scoreboard players operation .dy ir = .linem ir
-scoreboard players operation .dy ir -= .s2 ir
-scoreboard players operation .dy ir /= .CAMSMOOTH cfg_camera
-scoreboard players operation .s2 ir += .dy ir
-
-# --- Final height: the higher of the two curves, never below the rail line ---
+# --- Final height: the S-curve, never below the rail line ---
+# Just c1 now (a stateless function of position) floored at the rail line.
+# The symmetric lifted() max means c1 already floats .CAMLIFT above the line
+# on descents as well as climbs, so the old reactive descent chaser (.s2,
+# eased by .CAMSMOOTH) is gone -- it was the one stateful term, and it made
+# reverse sink onto the bare rails where forward floated high. Reverse now
+# retraces forward exactly.
 scoreboard players operation .sy ir = .c1 ir
-execute if score .s2 ir > .sy ir run scoreboard players operation .sy ir = .s2 ir
 execute if score .sy ir < .linem ir run scoreboard players operation .sy ir = .linem ir
 function infinite_rail:cam_move

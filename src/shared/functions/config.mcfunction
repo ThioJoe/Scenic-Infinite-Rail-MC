@@ -72,22 +72,20 @@ scoreboard players set .CAMHEIGHT cfg_camera 0
 # collisions. Bigger = longer, lazier arcs; smaller = snappier.
 scoreboard players set .CAMBLEND cfg_camera 6
 
-# Glide strength for DESCENTS (and settling into valleys): each tick the
-# camera closes 1/N of the remaining gap when the track drops away below it.
-# Climbs don't use this -- they follow the constructed S-curve above with no
-# lag. Higher = softer, floatier drops; lower = tighter; 1 = off.
-scoreboard players set .CAMSMOOTH cfg_camera 6
-
 # How high (in TENTHS of a block) the camera rides above the rail line while
-# climbing. This is the crest-smoothing budget: the camera reaches the summit
-# level about this many blocks early and glides level over the top. It also
-# sets how early lift-off begins (roughly .CAMBLEND/2 + this + 2 blocks
-# before the slope). Bigger = smoother hilltops but the cart visibly floats
-# higher above the rails on the way up; smaller = hugs the climb tighter but
-# lands harder on crests. Keep it <= ~25 for tunnel headroom; going below
-# half of .CAMBLEND (in blocks) makes summit landings progressively harder.
-# Setting this too high will probably make the camera raise too soon.
-# 25 seems to be an optimal number for smooth transitions.
+# on a slope -- climbs AND descents alike (the camera construction is
+# symmetric, so a descent floats this far above the rails just like a climb;
+# this is also what makes reversing retrace the exact forward path). It is
+# the crest/valley-smoothing budget: the camera reaches the far level about
+# this many blocks early and glides level over the top (or across the bottom
+# of a valley). It also sets how early lift-off begins (roughly .CAMBLEND/2 +
+# this + 2 blocks before the slope). Bigger = smoother hills/valleys but the
+# cart visibly floats higher above the rails on slopes; smaller = hugs the
+# slope tighter but lands harder on corners. Keep it <= ~25 for tunnel
+# headroom; going below half of .CAMBLEND (in blocks) makes corner landings
+# progressively harder. (Before stop-and-reverse there was a separate
+# .CAMSMOOTH knob for a reactive descent chaser; that stateful term is gone --
+# descents now use this same symmetric lift -- so .CAMSMOOTH was removed.)
 scoreboard players set .CAMLIFT cfg_camera 20
 
 # How many blocks BEHIND THE BUILD HEAD the viewer (the camera rig) rides.

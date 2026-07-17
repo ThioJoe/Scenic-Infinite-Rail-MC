@@ -187,7 +187,7 @@ const CFG_KEYS = ['HOVER', 'MIN_CHANGE', 'SAMEGAP', 'TURNGAP_TOP', 'TURNGAP_BOTT
   'GAPRATIO', 'GAPMATCH',
   'SHIFT_REQ_BOTTOM', 'DOWNCLAMP', 'UPGRACE', 'PLOW_GRACE_UP', 'PLOW_GRACE_DOWN',
   'DOWNLOOK_AHEAD', 'SAMPLE_WINDOW', 'SAMPLE_BLOCK_INTERVAL',
-  'CAMBLEND', 'CAMLIFT', 'CAMSMOOTH', 'RIDER_BEHIND', 'PACE_CART_BEHIND',
+  'CAMBLEND', 'CAMLIFT', 'RIDER_BEHIND', 'PACE_CART_BEHIND',
   'SLOPECLEAR'];
 // The objective each knob lives in (the config split -- must match
 // config.mcfunction; camera knobs + .RIDER_BEHIND live in cfg_camera,
@@ -531,20 +531,21 @@ function checkCamera(name, ride) {
   const { cfg, S } = ride;
   const trackY = S.track;
   const lift = cfg.CAMLIFT / 10;
-  let s2 = trackY[0];
-  let flatRun = 0, climbRun = 0;
-  for (let px = 0; px < trackY.length - 80; px += 0.4) {
-    const maxi = trackY.length - 1;
+  const maxi = trackY.length - 1;
+  const level = (i) => trackY[Math.min(Math.max(i, 0), maxi)];
+  const height = (px) => {
     const fx = px - Math.floor(px);
     const index = Math.min(Math.max(Math.floor(px) + cfg.PACE_CART_BEHIND - cfg.RIDER_BEHIND, 0), maxi);
-    const r = camHeight({
-      trackY, index, fx,
-      lift10: cfg.CAMLIFT, blend: cfg.CAMBLEND, smooth: cfg.CAMSMOOTH, s2,
-    });
-    s2 = r.s2;
+    return { index, r: camHeight({ trackY, index, fx, lift10: cfg.CAMLIFT, blend: cfg.CAMBLEND }) };
+  };
+  let flatRun = 0, slopeRun = 0, lastPx = null, maxAsym = 0;
+  const seen = new Map();
+  const step = 0.4;
+  for (let px = 0; px < trackY.length - 80; px += step) {
+    const { index, r } = height(px);
     if (Number.isNaN(r.sy)) return fail(`${name}: camera height NaN at pace ${px}`);
     if (r.sy < r.line - 1e-9) return fail(`${name}: camera sank below the rail line at pace ${px}`);
-    const level = (i) => trackY[Math.min(Math.max(i, 0), maxi)];
+    seen.set(px.toFixed(2), r.sy);
     const isFlat = (i, span) => {
       for (let d = -span; d <= span; d++) if (level(i + d) !== level(i)) return false;
       return true;
@@ -554,17 +555,34 @@ function checkCamera(name, ride) {
     if (flatRun > 200 && Math.abs(r.sy - r.line) > 0.05) {
       return fail(`${name}: camera not level on a settled flat at pace ${px} (off by ${(r.sy - r.line).toFixed(3)})`);
     }
-    // Mid-climb (45 degrees on both sides) it must ride parallel at +lift.
-    const climbing = level(index + 6) - level(index) === 6 && level(index) - level(index - 6) === 6;
-    if (climbing) { climbRun += 1; } else { climbRun = 0; }
-    if (climbRun > 40) {
+    // Mid-SLOPE (45 degrees, either direction) it must ride parallel at +lift.
+    // Both climbs AND descents now float +CAMLIFT (the symmetric lifted max),
+    // which is exactly what makes reverse retrace forward.
+    const slopingUp = level(index + 6) - level(index) === 6 && level(index) - level(index - 6) === 6;
+    const slopingDown = level(index) - level(index + 6) === 6 && level(index - 6) - level(index) === 6;
+    if (slopingUp || slopingDown) { slopeRun += 1; } else { slopeRun = 0; }
+    if (slopeRun > 40) {
       const above = r.sy - r.line;
       if (above < lift - 0.5 || above > lift + 0.5) {
-        return fail(`${name}: mid-climb camera not parallel at +CAMLIFT (offset ${above.toFixed(3)}, lift ${lift}) at pace ${px}`);
+        return fail(`${name}: mid-slope camera not parallel at +CAMLIFT (offset ${above.toFixed(3)}, lift ${lift}) at pace ${px}`);
       }
     }
+    lastPx = px;
   }
-  ok(`${name}: camera construction holds (floor, flats, parallel climbs)`);
+  // Symmetry: walk the SAME pace positions in reverse and demand an identical
+  // height at each -- the whole point of the stateless construction (reverse
+  // retraces forward, the fix for descents sinking in reverse). Any state or
+  // travel-direction term reintroduced into camHeight breaks this.
+  for (let px = lastPx; px >= 0; px -= step) {
+    const key = px.toFixed(2);
+    if (!seen.has(key)) continue;
+    const { r } = height(px);
+    maxAsym = Math.max(maxAsym, Math.abs(r.sy - seen.get(key)));
+  }
+  if (maxAsym > 1e-9) {
+    return fail(`${name}: camera path is NOT direction-symmetric (max |fwd-rev| = ${maxAsym.toFixed(4)} blocks) -- reverse would not retrace forward`);
+  }
+  ok(`${name}: camera construction holds (floor, flats, parallel slopes, forward==reverse)`);
 }
 
 // ---------------------------------------------------------------------------

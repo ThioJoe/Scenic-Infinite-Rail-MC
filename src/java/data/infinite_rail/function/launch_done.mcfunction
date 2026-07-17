@@ -38,9 +38,9 @@ execute if score .HIDECART ir matches 0 as @e[type=player,tag=ir_rider,limit=1] 
 execute if score .HIDECART ir matches 1 as @e[type=player,tag=ir_rider,limit=1] run ride @s mount @e[type=item_display,tag=ir_seat,limit=1]
 
 # --- Snap the rig (rider aboard) to its cruising position and hand off ---
-# The S-curve (c1) is stateless; only the descent chaser (.s2) needs seeding.
-scoreboard players operation .s2 ir = .railY ir
-scoreboard players operation .s2 ir *= .C1000 ir
+# The camera height is stateless (just the S-curve floored at the rail line),
+# so nothing needs seeding -- cam_follow computes the cruising position from
+# the recorded profile alone.
 function infinite_rail:cam_follow
 # Prime the riding-sound clock at its firing threshold so the sound (if
 # .SOUNDMODE is on) starts with the very first ride tick (see sound_loop).

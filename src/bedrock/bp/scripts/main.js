@@ -381,7 +381,7 @@ const HIST_PERSIST = 1024;
 // drifts from it (tools/build.mjs step 1b), so retune the knob there and
 // copy the new value here.
 const CONFIG_DEFAULTS = {
-  HOVER: 2, TUNNELCLEAR: 6, CAMHEIGHT: 0, CAMBLEND: 6, CAMSMOOTH: 6, CAMLIFT: 20,
+  HOVER: 2, TUNNELCLEAR: 6, CAMHEIGHT: 0, CAMBLEND: 6, CAMLIFT: 20,
   RIDER_BEHIND: 160, CAMMODE: 0, CARTYOFF: 12, AUTOSTART: 1,
   DEFAULTSPEED: 8, OCEANSPEED: 32, OCEANCHUNKS: 6, LANDCHUNKS: 3, MIN_CHANGE: 2,
   SAMEGAP: 75, TURNGAP_TOP: 60, TURNGAP_BOTTOM: 100, GAPRATIO: 50, GAPMATCH: 75,
@@ -414,7 +414,7 @@ const CFG_GROUPS = {
     'TURNGAP_BOTTOM', 'GAPRATIO', 'GAPMATCH', 'SLOPECLEAR', 'DOWNCLAMP',
     'UPGRACE', 'DOWNLOOK_AHEAD', 'PLOW_GRACE_DOWN', 'PLOW_GRACE_UP',
     'SAMPLE_WINDOW'],
-  cfg_camera: ['CAMHEIGHT', 'CAMBLEND', 'CAMSMOOTH', 'CAMLIFT', 'RIDER_BEHIND',
+  cfg_camera: ['CAMHEIGHT', 'CAMBLEND', 'CAMLIFT', 'RIDER_BEHIND',
     'CAMMODE', 'CARTYOFF'],
   cfg_ride: ['DEFAULTSPEED', 'OCEANSPEED', 'OCEANCHUNKS', 'LANDCHUNKS', 'SKYY',
     'SKYSPEED', 'TORCHODDS', 'TORCHRANGE', 'SEAPICKLE', 'SHIFT_REQ_BOTTOM',
@@ -494,7 +494,6 @@ const S = {
   oceanRun: 0,     // .oceanRun -- consecutive ocean chunks
   landRun: 0,      // .landRun -- consecutive non-ocean chunks
   lastChunk: 0,    // .lastChunk -- last chunk index the ocean check processed
-  s2: 0,           // .s2 -- the reactive descent chaser (blocks; double)
   lastBad: 0,      // how many of the last column's 12 samples were fallbacks
   riderName: '',   // the one player this ride belongs to ('' when riderId is set)
   riderId: '',     // entity id of a NON-PLAYER rider (a surrogate -- see begin)
@@ -1384,7 +1383,7 @@ function saveState() {
     trackY: S.trackY.slice(histStart),
     paceX: S.paceX, paceSpeed: S.paceSpeed, targetSpeed: S.targetSpeed,
     fast: S.fast, oceanRun: S.oceanRun, landRun: S.landRun,
-    lastChunk: S.lastChunk, s2: S.s2, riderName: S.riderName, riderId: S.riderId,
+    lastChunk: S.lastChunk, riderName: S.riderName, riderId: S.riderId,
     hudHidden: S.hudHidden, weather: S.weather,
   }));
   // The debug roll line reports the window's worst write (this is the
@@ -1406,7 +1405,7 @@ function loadState() {
     S.paceX = +d.paceX || 0; S.paceSpeed = +d.paceSpeed || 0;
     S.targetSpeed = +d.targetSpeed || 0; S.fast = !!d.fast;
     S.oceanRun = d.oceanRun | 0; S.landRun = d.landRun | 0;
-    S.lastChunk = d.lastChunk | 0; S.s2 = +d.s2 || 0;
+    S.lastChunk = d.lastChunk | 0;
     S.riderName = typeof d.riderName === 'string' ? d.riderName : '';
     S.riderId = typeof d.riderId === 'string' ? d.riderId : '';
     S.hudHidden = !!d.hudHidden;
@@ -2525,10 +2524,8 @@ function camFollow() {
 
   const r = camHeight({
     trackY: S.trackY, index: ci, fx,
-    lift10: cfg('CAMLIFT'), blend: cfg('CAMBLEND'), smooth: cfg('CAMSMOOTH'),
-    s2: S.s2,
+    lift10: cfg('CAMLIFT'), blend: cfg('CAMBLEND'),
   });
-  S.s2 = r.s2;
   return r.sy;
 }
 
@@ -3123,7 +3120,6 @@ function beginPhase2(startX) {
   // whenever mount state misread. The player mounts once (mount events
   // flash the client's un-hideable dismount hint, so the keeper only ever
   // re-mounts after a genuine, positionally-confirmed dismount).
-  S.s2 = S.railY;
   const sy = camFollow() ?? S.railY;
   const rigPos = {
     x: S.paceX + camAhead(),
