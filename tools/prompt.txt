@@ -25,6 +25,9 @@ You should test the changes in any way possible using the available testing envi
 
 When possible and applicable, when initially designing a new test, also verify a “negative hypothesis” or expected failure mode for it, basically set of inputs or conditions where it SHOULD fail, and ensure it also fails when it should. This way we know the test is actually testing the correct thing, and a success is not misleading.  You don't need to necessarily include the "negative" test in the permanent test suite (unless it makes sense to). You can just use it to verify it's a meaningful test.
 
+Never edit the main repository readme, i will handle that myself.
+
+
 -----------------------------------------------------------
 
 ====== OUR JOB TODAY ======
