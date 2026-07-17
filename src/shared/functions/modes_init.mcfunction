@@ -28,6 +28,13 @@ execute if score .trchinit ir matches 0 run scoreboard players set .trchinit ir 
 # invisible seat alone (Java re-seats the rider onto the seat itself;
 # Bedrock just stops spawning the scenery cart prop).
 scoreboard players add .HIDECART ir 0
+# .HIDETRACK: 1 = invisible track -- columns built from now on get NO visible
+# rail/support (carve, light, torches and the movement are unchanged; track
+# built before the toggle keeps its rails). Bedrock simply skips the two
+# placements (nothing rides its physical track); Java still needs rails
+# under the hidden pace cart, so a short just-in-time strip is kept rolling
+# beneath it, out of the rider's view (invis_tick & co. -- see CONTEXT 6.9).
+scoreboard players add .HIDETRACK ir 0
 
 # The minecart-sound toggle (.SOUNDMODE -- each edition's clock re-triggers
 # the vanilla rolling sound at the rider while it is 1) is a mode like the

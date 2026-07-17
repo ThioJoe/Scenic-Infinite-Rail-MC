@@ -12,6 +12,9 @@
 scoreboard players operation .ch ir = .TUNNELCLEAR cfg_terrain
 execute store result storage infinite_rail:carve h int 1 run scoreboard players get .TUNNELCLEAR cfg_terrain
 function infinite_rail:carve
-function infinite_rail:support
-setblock ~ ~ ~ minecraft:powered_rail[shape=east_west,powered=true]
+# Invisible track (mode_hidetrack_* / .HIDETRACK): the visible rail and its
+# support are skipped -- the pace cart's just-in-time strip (invis_tick)
+# carries the cart instead; everything else about the column is unchanged.
+execute unless score .HIDETRACK ir matches 1 run function infinite_rail:support
+execute unless score .HIDETRACK ir matches 1 run setblock ~ ~ ~ minecraft:powered_rail[shape=east_west,powered=true]
 function infinite_rail:place_light

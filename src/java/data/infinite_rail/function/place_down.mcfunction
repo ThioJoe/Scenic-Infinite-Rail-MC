@@ -6,6 +6,7 @@
 scoreboard players operation .ch ir = .TUNNELUP ir
 execute store result storage infinite_rail:carve h int 1 run scoreboard players get .TUNNELUP ir
 function infinite_rail:carve
-function infinite_rail:support
-setblock ~ ~ ~ minecraft:powered_rail[shape=ascending_west,powered=true]
+# Invisible track (.HIDETRACK): skip the visible rail + support (see place_flat).
+execute unless score .HIDETRACK ir matches 1 run function infinite_rail:support
+execute unless score .HIDETRACK ir matches 1 run setblock ~ ~ ~ minecraft:powered_rail[shape=ascending_west,powered=true]
 function infinite_rail:place_light

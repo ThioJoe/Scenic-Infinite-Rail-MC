@@ -21,6 +21,7 @@
 #   31/32    mobs aggro on/off           20/21     sidebar off / command help
 #   33/34/35 track light off/low/on      28/29     minecart sound on/off
 #   36/37    thunderstorms on/off (37 = mode_storms_off: storms pass as rain)
+#   38/39    invisible track on/off
 execute as @a[scores={ir_menu=1}] run function infinite_rail:mode_rain_on
 execute as @a[scores={ir_menu=2}] run function infinite_rail:mode_rain_off
 execute as @a[scores={ir_menu=3}] run function infinite_rail:mode_night_on
@@ -55,6 +56,8 @@ execute as @a[scores={ir_menu=34}] run function infinite_rail:mode_light_low
 execute as @a[scores={ir_menu=35}] run function infinite_rail:mode_light_on
 execute as @a[scores={ir_menu=36}] run function infinite_rail:mode_storms_on
 execute as @a[scores={ir_menu=37}] run function infinite_rail:mode_storms_off
+execute as @a[scores={ir_menu=38}] run function infinite_rail:mode_hidetrack_on
+execute as @a[scores={ir_menu=39}] run function infinite_rail:mode_hidetrack_off
 # The Speed hotbar items' clicks: the carrot_on_a_stick "used" statistic
 # (ir_click, a stat-criteria objective) fans out to speed_click, which reads
 # the held item's custom_data to tell + from - and resets the count.

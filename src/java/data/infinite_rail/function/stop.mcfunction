@@ -11,6 +11,12 @@ effect clear @a[gamemode=adventure]
 clear @a[gamemode=adventure] minecraft:written_book
 clear @a[gamemode=adventure] minecraft:carrot_on_a_stick
 execute as @a[gamemode=adventure] run ride @s dismount
+# Invisible track: take back the just-in-time strip under the pace cart
+# (runs before the entity kills / forceload clear, while everything it
+# needs is still loaded). The INVISIBLE stretch stays invisible -- only the
+# small serving strip is swept; the visible track is left in the world as
+# always.
+function infinite_rail:strip_stop
 kill @e[type=minecart,tag=ir_cart]
 kill @e[type=minecart,tag=ir_ride]
 kill @e[type=item_display,tag=ir_seat]

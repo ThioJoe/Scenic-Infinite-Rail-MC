@@ -11,6 +11,10 @@ execute store result score .cartX ir run data get entity @e[type=minecart,tag=ir
 # begin's synchronous forceload_here already covers the whole runway, so
 # these phases are cheap no-op re-adds until the ride outgrows it.
 execute if score .rollP ir matches 1.. at @e[type=marker,tag=ir_head,limit=1] run function infinite_rail:roll_phase
+# Invisible track: the runway columns are invisible too while the mode is
+# on -- keep the pace cart's just-in-time rail strip under it during the
+# pre-build (free otherwise -- see invis_tick).
+function infinite_rail:invis_tick
 scoreboard players set .budget ir 24
 function infinite_rail:build_loop
 execute if score .headX ir >= .pregoal ir run function infinite_rail:launch_done

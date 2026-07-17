@@ -6,6 +6,10 @@
 # the bottom for why the launch is phased.
 
 # --- Reset any previous run ---
+# First, while the previous ride's state is still intact: take back any
+# just-in-time strip rails invisible-track mode left under its pace cart
+# (stop does the same; this covers a begin without a stop).
+function infinite_rail:strip_stop
 scoreboard players set .started ir 0
 # A ride has now been started in this world: the auto-starter must never fire again.
 scoreboard players set .autodone ir 1
@@ -118,6 +122,20 @@ data modify storage infinite_rail:track y set value []
 scoreboard players operation .trackBase ir = .headX ir
 data modify storage infinite_rail:track y append value 0
 execute store result storage infinite_rail:track y[-1] int 1 run scoreboard players get .railY ir
+# ...and the per-column visibility list beside it (invisible track, §6.9):
+# fresh, same anchor, first entry per the current .HIDETRACK. The strip
+# keeper's state resets with it (.stpAny arms it only once an invisible
+# column exists; the placed-range pointers re-seed on first use).
+data modify storage infinite_rail:track v set value []
+scoreboard players operation .stpBase ir = .headX ir
+execute unless score .HIDETRACK ir matches 1 run data modify storage infinite_rail:track v append value 1
+execute if score .HIDETRACK ir matches 1 run data modify storage infinite_rail:track v append value 0
+scoreboard players set .stpAny ir 0
+execute if score .HIDETRACK ir matches 1 run scoreboard players set .stpAny ir 1
+scoreboard players reset .stpLo ir
+scoreboard players reset .stpHi ir
+scoreboard players reset .stpAt ir
+scoreboard players set .stpT ir 0
 
 # --- First column and the hidden pace cart (plugged so nothing can enter) ---
 # The anchor IS the starting player's position, so the first column is about
@@ -157,6 +175,11 @@ scoreboard players set .wdt ir 0
 scoreboard players set .wdstuck ir 0
 scoreboard players set .wdmiss ir 0
 scoreboard players set .wdfixn ir 0
+
+# --- Invisible track: if the mode is already on, the first column above was
+# built WITHOUT its rail -- run the strip keeper once, right now, so the
+# just-summoned pace cart has a rail under it before its first physics tick.
+function infinite_rail:invis_tick
 
 # --- Hand the rest of the launch to the ticker (launch_tick/launch_done) ---
 # The runway pre-build (out to the rig position + 32 columns) plus the rig

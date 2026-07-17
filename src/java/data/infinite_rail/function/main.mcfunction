@@ -104,6 +104,11 @@ execute if score .mx ir matches ..10 run data merge entity @e[type=minecart,tag=
 scoreboard players add .wdt ir 1
 execute if score .wdt ir matches 60.. run function infinite_rail:pace_watch
 
+# Invisible track (mode_hidetrack_* / .HIDETRACK): keep the pace cart's
+# just-in-time rail strip rolling under it across invisible columns (free
+# until the ride has ever built one -- see invis_tick).
+function infinite_rail:invis_tick
+
 # Smooth camera: fly the rig along the recorded profile ahead of the pace cart.
 execute if entity @e[type=minecart,tag=ir_cart,limit=1] run function infinite_rail:cam_follow
 

@@ -15,6 +15,22 @@
 # macro. 2048 comfortably exceeds every distance knob's sane range (the rig
 # reads ~.RIDER_BEHIND + .CAMBLEND/2 + a few columns behind the head; keep
 # .RIDER_BEHIND well under 2048, as on Bedrock).
+# The per-column visibility list (track v -- invisible track, §6.9) is
+# bounded the same way, on its OWN base (.stpBase) and BEFORE the y early
+# returns below (at the steady-state cap, the first y probe returns out of
+# this file -- v trimmed after it would never run). Independent existence
+# checks per drop (the flag dance: removing v[0] changes what v[2048]
+# means, so the condition is snapshotted first), so a v list shorter than
+# y -- a save from before the feature -- simply isn't trimmed yet.
+scoreboard players set .stvT ir 0
+execute if data storage infinite_rail:track v[2048] run scoreboard players set .stvT ir 1
+execute if score .stvT ir matches 1 run data remove storage infinite_rail:track v[0]
+execute if score .stvT ir matches 1 run scoreboard players add .stpBase ir 1
+scoreboard players set .stvT ir 0
+execute if data storage infinite_rail:track v[2048] run scoreboard players set .stvT ir 1
+execute if score .stvT ir matches 1 run data remove storage infinite_rail:track v[0]
+execute if score .stvT ir matches 1 run scoreboard players add .stpBase ir 1
+
 execute unless data storage infinite_rail:track y[2048] run return 0
 data remove storage infinite_rail:track y[0]
 scoreboard players add .trackBase ir 1

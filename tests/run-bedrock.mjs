@@ -493,6 +493,69 @@ const tests = [
     if (errs.length) throw new Error(`script errors across stub transitions:\n  ${errs.slice(0, 8).join('\n  ')}`);
   }),
 
+  report('invisible track: new columns skip rail+support (light stays), off restores', async (s) => {
+    // Toggle .HIDETRACK on mid-ride: columns built from the head onward
+    // must carry NO rail and NO smooth_stone support -- but still their
+    // light block (the carve/light/history half of placeColumn is
+    // untouched, so the movement stays identical). Then toggle off and a
+    // fresh column must have its rail again (the control that proves the
+    // block probes actually see this part of the world).
+    const h0 = await s.scoreValue('.headX', 'dbg', -1000, 200000);
+    if (h0 === null) throw new Error('no .headX from the dbg mirror');
+    await s.fn('mode_hidetrack_on');
+    if (!(await s.scoreInRange('.HIDETRACK', 'ir', 1))) throw new Error('.HIDETRACK did not set');
+    const probeAfter = async (from) => {
+      // Wait until the head is 40+ past `from`, capturing .railY as it
+      // passes the probe column (the line may slope between here and there).
+      const probeX = from + 24;
+      const t0 = Date.now();
+      let ry = null;
+      while (Date.now() - t0 < 90000) {
+        const h = await s.scoreValue('.headX', 'dbg', -1000, 200000);
+        if (h !== null && h >= probeX && ry === null) ry = await s.scoreValue('.railY', 'dbg', -1000, 10000);
+        if (h !== null && h >= from + 40 && ry !== null) return { probeX, ry };
+        await sleep(1500);
+      }
+      throw new Error(`head did not advance past ${from + 40} (probe never taken)`);
+    };
+    const inv = await probeAfter(h0);
+    await s.cmd(`tickingarea add circle ${inv.probeX} 100 ${LINE_Z} 2 sirm_invis`);
+    await sleep(1500);
+    try {
+      // Locate the column by its LIGHT block (must exist), then assert the
+      // rail cell (3 below it) and support (4 below) are empty.
+      let lightY = null;
+      for (let y = inv.ry + 12; y >= inv.ry - 12; y--) {
+        const r = await s.cmd(`testforblock ${inv.probeX} ${y} ${LINE_Z} light_block_11`, { quietMs: 200 });
+        if (/Successfully found/i.test(r)) { lightY = y; break; }
+      }
+      if (lightY === null) throw new Error(`no light block at the invisible column ${inv.probeX} (Y ${inv.ry - 12}..${inv.ry + 12}) -- was the column even built?`);
+      const rail = await s.cmd(`testforblock ${inv.probeX} ${lightY - 3} ${LINE_Z} rail`);
+      if (/Successfully found/i.test(rail)) throw new Error(`a rail exists at the invisible column ${inv.probeX} Y ${lightY - 3}`);
+      const sup = await s.cmd(`testforblock ${inv.probeX} ${lightY - 4} ${LINE_Z} smooth_stone`);
+      if (/Successfully found/i.test(sup)) throw new Error(`a support exists at the invisible column ${inv.probeX} Y ${lightY - 4}`);
+    } finally {
+      await s.cmd('tickingarea remove sirm_invis');
+    }
+    // Off again: a fresh column must carry its rail (the positive control).
+    await s.fn('mode_hidetrack_off');
+    if (!(await s.scoreInRange('.HIDETRACK', 'ir', 0))) throw new Error('.HIDETRACK did not clear');
+    const h2 = await s.scoreValue('.headX', 'dbg', -1000, 200000);
+    const vis = await probeAfter(h2);
+    await s.cmd(`tickingarea add circle ${vis.probeX} 100 ${LINE_Z} 2 sirm_invis2`);
+    await sleep(1500);
+    try {
+      let railY = null;
+      for (let y = vis.ry + 12; y >= vis.ry - 12; y--) {
+        const r = await s.cmd(`testforblock ${vis.probeX} ${y} ${LINE_Z} rail`, { quietMs: 200 });
+        if (/Successfully found/i.test(r)) { railY = y; break; }
+      }
+      if (railY === null) throw new Error(`no rail at the post-toggle column ${vis.probeX} (Y ${vis.ry - 12}..${vis.ry + 12})`);
+    } finally {
+      await s.cmd('tickingarea remove sirm_invis2');
+    }
+  }),
+
   // (No command-level item probe on purpose: the pack's own items carry
   // menu_category "none", which hides them from the COMMAND item enum --
   // /replaceitem answers "Syntax error: Unexpected ..." for a perfectly

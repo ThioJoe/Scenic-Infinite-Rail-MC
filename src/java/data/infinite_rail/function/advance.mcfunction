@@ -58,6 +58,17 @@ scoreboard players add .headX ir 1
 # reads near the rig, and an unbounded list was pure world-save weight.
 data modify storage infinite_rail:track y append value 0
 execute store result storage infinite_rail:track y[-1] int 1 run scoreboard players get .railY ir
+
+# --- 5a. Record the column's visibility beside it (invisible track, §6.9) ---
+# One 0/1 per column (0 = built without its visible rail/support -- the pace
+# cart's just-in-time strip serves those; 1 = real track, hands off). The
+# list rides its OWN base (.stpBase): on a save upgraded mid-ride it simply
+# starts at the first column built after the update (everything older reads
+# as visible by construction), so it can never desync from the y history.
+execute unless score .stpBase ir = .stpBase ir run scoreboard players operation .stpBase ir = .headX ir
+execute unless score .HIDETRACK ir matches 1 run data modify storage infinite_rail:track v append value 1
+execute if score .HIDETRACK ir matches 1 run data modify storage infinite_rail:track v append value 0
+execute if score .HIDETRACK ir matches 1 run scoreboard players set .stpAny ir 1
 function infinite_rail:hist_trim
 
 # --- 5b. Torch mode: maybe plant a torch on the terrain beside this column ---
