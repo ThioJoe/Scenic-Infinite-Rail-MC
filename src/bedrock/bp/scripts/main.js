@@ -854,7 +854,7 @@ function showRideMenu(player) {
     // Off = rider invisible: the one lever over Bedrock mob detection also
     // hides the first-person arm, so the label names both consequences.
     .toggle('Mobs aggro (mobs react to you)', { defaultValue: current.aggro })
-    .toggle('Invisible track (new track is not shown)', { defaultValue: current.invis })
+    .toggle('Invisible track', { defaultValue: current.invis })
     .slider(current.sky
       ? `Sky cruise speed, blocks/s (default ${cfg('SKYSPEED')})`
       : S.fast
@@ -1037,35 +1037,34 @@ function showTips(player) {
   const form = new ActionFormData()
     .title('Scenic Rail Tips')
     .body([
-      '§lRecommended settings§r',
-      '',
-	  '§7- FOV: §f100+',
-      '§7- For keyboard: Hide the HUD with §fF1',
-      '§7- Simulation distance: §fLowest option',
-      '§7- Render distance: §f16-24 chunks,§7',
+      '§l--- Recommended settings ---§r',
+	  '§7• FOV: §f95+',
+      '§7• For keyboard: Hide the HUD with §fF1',
+      '§7• Simulation distance: §fLowest option',
 	  'or more if your hardware keeps up',
-      '§7- Max Framerate: §fmatch your monitor\'s refresh rate§7',
+      '§7• Max Framerate: §fmatch your monitor\'s refresh rate§7',
 	  '(no benefit to going higher, just extra GPU heat)',
       '',
-      '§lSettings > General§r',
+      '§l Settings > General§r',
+      '§7   • Disable §f"Enable Game Pause"§7',
+      '§7   • Disable §f"Show Pause Menu on Focus Lost"',
+      '§7   • Disable §f"Lower Framerate when Controller is Disconnected"§r',
       '',
-      '§7- Disable §f"Enable Game Pause"§7',
-	  '',
-      '§7- Disable §f"Show Pause Menu on Focus Lost"',
-	  '',
-      '§7- Disable §f"Lower Framerate when Controller is Disconnected"§7',
+	  '§l--- General Tips ---§r',
+	  '§7• If concerned about OLED burn-in, §fhide the cart and track§7 in the Ride Settings',
+	  '§7• To reduce any cart lurching, lower chunk render distance.§r',
       '',
-      '§lConsole Tips§r',
-      '',
-      '§7- Hide the HUD with the §fToggle HUD§7 hotbar item - while hidden, staying on its slot also keeps your hand empty.',
+      '§l--- Console Tips ---§r',
+      '§7• Hide the HUD with the §fToggle HUD§7 hotbar item - while hidden, staying on its slot also keeps your hand empty.',
 	  '',
-      '§7- Use a §fwired controller§7 to avoid the "controller disconnected" warning',
+      '§7• Use a §fwired controller§7 to avoid the "controller disconnected" warning',
 	  '',
-	  '§7- Wrap a §frubber band§7 around the left joystick to prevent the 15-minute AFK message.',
+	  '§7• Wrap a §frubber band§7 around the left joystick to prevent the 15-minute AFK message.',
 	  '',
-      '§7- To run a custom pack on console: host it on a §fRealm§7 (a trial Realm works), then §fdownload the world as a local copy§7 to play it offline with the pack intact. §fTutorial available at: ',
+      '§7• To run a custom pack on console: host it on a §fRealm§7 (a trial Realm works), then §fdownload the world as a local copy§7 to play it offline with the pack intact. §fTutorial available at: ',
 	  '§7GitHub.com/ThioJoe/Scenic-Infinite-',
 	  '§7Rail-MC/wiki',
+	  '\n',
     ].join('\n'))
     .button('Close');
   form.show(player).catch((e) => reportError('tips page', e));
