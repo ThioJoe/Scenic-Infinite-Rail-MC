@@ -134,6 +134,7 @@ https://github.com/user-attachments/assets/33e31197-6d4d-493d-925f-54d2d2c212bd
   * **Sky mode** (_On/Off_): If enabled, the ride goes high up into the sky instead of ground level. **Default = Off**
   * **Cart Sound** (_On/Off_): Whether the cart sound is heard or silent. **Default = On**
   * **Show Cart** (_Show/Hide_): Whether you can see the cart or not. **Default = Show**
+  * **Invisible Track** (_Show/Hide_): Whether new track will be invisible. **Default = Show**
   * **Mobs Aggro** (_On/Off_): Mobs make noise and approach the player. **Default = On**
 
 ###  **Visual Settings**: 
@@ -145,9 +146,14 @@ https://github.com/user-attachments/assets/33e31197-6d4d-493d-925f-54d2d2c212bd
   * **Track Light** (_Off/Low/On_): Self illumination level of the track and surrounding blocks. **Default = On**
 
 ###  **Speed Control Items:** 
-  * **Speed +**
-  * **Speed -** 
+  * **Speed `+`** and **Speed `-`**
+    * Changes the speed by `+/-4` unless below speed `8` (then by `1`)
+    * Can be used to stop the cart (speed `0`) or reverse it (speed `-1` and below)
   * **Speed Reset**
+    * Resets the speed to `8` under normal conditions
+    * When at ocean speeds, will reset speed to `32`
+    * When in sky mode, will reset speed to `18`
+    * When in reverse going `-9` or faster, will reset to `-8`. You can then use it again to reset to `+8`
 
 ### **Other Items:**
   * **Toggle HUD** (Bedrock Only): Hides the HUD except for the item-name popup.
