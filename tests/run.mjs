@@ -102,6 +102,18 @@ for (const suite of suites) {
     && !suite.tests.some((t) => t.name.toLowerCase().includes(filter))) {
     continue;
   }
+  // Opt-in suites (opts.optIn = an env-var name) sit out of a normal full run
+  // without paying a server boot: they only run when their env var is set, or
+  // when a --filter deliberately picked them.
+  if (suite.opts.optIn && !process.env[suite.opts.optIn] && !filter) {
+    console.log(`\n=== ${suite.name} (${suite.file}) ===`);
+    console.log(`  ~ opt-in suite skipped (set ${suite.opts.optIn}=1 or --filter it to run)`);
+    allResults.push(...suite.tests.map((t) => ({
+      suite: suite.name, test: t.name, status: 'skipped', ms: 0,
+      detail: `opt-in suite: set ${suite.opts.optIn}=1`, notes: [],
+    })));
+    continue;
+  }
   console.log(`\n=== ${suite.name} (${suite.file}) ===`);
   const server = new JavaServer({ serverDir, packDir, ...(suite.opts.server ?? {}) });
   let ctx;

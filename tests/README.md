@@ -21,6 +21,16 @@ node tests/run-bedrock.mjs --smoke                   # Bedrock: load/init checks
 Exit code `0` = everything passed (skips allowed), `1` = failures; JSON reports land in
 `tests/.work/results.json` / `results-bedrock.json` (or `--json <path>`).
 
+**Opt-in: camera-curve SVG graphs from in-game data.** `14-camgraph` re-draws the
+camera design's ascent reference graphs (1–40 blocks) from the REAL Java engine — a
+synthetic ascent in the track history, the pace cart teleported along it in
+0.25-block steps, the integer `cam_follow` flown each step, the seat's actual Y read
+back — and writes side-view SVGs to `tests/.work/camgraphs/ascent_XX.svg`, each
+overlaying the in-game path (blue) on the `cam_math.js` float reference (orange), with
+asserts for parity, no rail clip, level flats, no summit overshoot and no mid-ramp
+wobble. It skips (without booting a server) in a normal full run; run it with
+`CAM_GRAPHS=1 node tests/run.mjs` or `node tests/run.mjs --filter graph`.
+
 ## Environment: what must exist before running
 
 The tests need a Java dedicated server and a Bedrock dedicated server already present on
