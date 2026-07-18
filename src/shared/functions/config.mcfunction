@@ -47,12 +47,12 @@ scoreboard players set .TUNNELCLEAR cfg_terrain 6
 # --- Smooth camera (the ride rig) --------------------------------------------
 # The rider sits -- mounted once, never remounted -- in a real minecart that
 # is glued to an invisible interpolated "camera seat", gliding OFF the rails
-# along a pre-smoothed S-curve computed from the track's recorded profile:
+# along a smooth S-curve computed from the track's recorded profile:
 # climbs begin rising BEFORE the corner, steady 45-degree runs are followed
 # exactly parallel with zero lag, and every ramp end (climbs AND descents,
-# top AND bottom) eases with a horizontal tangent -- a soft-min envelope, so
-# descents float the same as climbs and reverse retraces forward exactly (7g).
-# The camera never drops below the rail line. Meanwhile a hidden
+# top AND bottom) eases with a horizontal tangent -- ONE continuous
+# convolution, so descents float the same as climbs and reverse retraces
+# forward exactly (7g). The camera never drops below the rail line. Meanwhile a hidden
 # "pace cart" rides the physical rails (.PACE_CART_BEHIND - .RIDER_BEHIND)
 # blocks BEHIND the viewer and sets the speed -- however fast the rails push
 # it -- so the rig inherits real cart pace without any of its bounce.
@@ -64,24 +64,22 @@ scoreboard players set .TUNNELCLEAR cfg_terrain 6
 # tunnel roofs.
 scoreboard players set .CAMHEIGHT cfg_camera 0
 
-# Corner-ease length (in blocks) of the S-curve at every slope change. The
-# camera height is a soft-min of the "level" line and the "parallel to the
-# 45-degree track" line, built on a lightly pre-smoothed profile (see 7g).
-# CAMBLEND drives both: the soft-min corner width (k = CAMBLEND/4 blocks) that
-# rounds the CONVEX ramp ends (a slope top), and the pre-smooth radius
-# (round(CAMBLEND/4) columns) that rounds the CONCAVE ramp ends (a slope
-# bottom). So EVERY ramp end -- top and bottom, climb and descent -- eases with
-# a HORIZONTAL tangent: a climb lifts off level and is already parallel when
-# the slope arrives; a descent launches off the lip level, eases down the
-# slope, then DECELERATES onto the flat at the bottom. No kink, no notch, no
-# hard landing, and (because CAMLIFT is the clearance budget) no vertical
-# overshoot above the flat. Between corners it just rides parallel, however
-# long the slope, so the ease never stretches into tunnel-roof collisions.
-# Bigger = longer, lazier arcs; smaller = snappier. Any positive integer works
-# (it no longer has to be even). 0 = a hard corner (no ease -- the raw
-# min-envelope). (Before soft-min this was a box-average of the whole envelope;
-# a mean cut convex corners down and left the descent-top notch, so it was
-# replaced -- the soft-min handles the convex ends, the pre-smooth the concave.)
+# Corner-ease length (in blocks) at every slope change. The camera height is
+# the "lifted" envelope -- min(the higher-ground line, the parallel +CAMLIFT
+# line) -- convolved ONCE with a triangle kernel (see 7g). CAMBLEND sets the
+# triangle half-width (CAMBLEND/2 columns), so the ease spans ~CAMBLEND blocks.
+# A single symmetric smoothing rounds EVERY ramp end the same way, with a
+# HORIZONTAL tangent: a climb lifts off level and is parallel when the slope
+# arrives; a descent launches off the lip level, rides parallel, then
+# DECELERATES onto the flat at the bottom. No kink, no notch, no hard landing,
+# and (because CAMLIFT is the clearance budget) no vertical overshoot above the
+# flat. Between corners it rides parallel however long the slope, so the ease
+# never stretches into tunnel-roof collisions. Bigger = longer, lazier arcs;
+# smaller = snappier. Any positive integer works. 0-1 = a hard corner (no ease
+# -- the raw min-envelope). (Earlier designs smoothed the whole envelope with a
+# box-average -- a mean cut convex corners down and left the descent-top notch
+# -- or stitched a soft-min top to a pre-smoothed bottom, which showed a seam;
+# one triangle convolution replaced both.)
 scoreboard players set .CAMBLEND cfg_camera 6
 
 # How high (in TENTHS of a block) the camera rides above the rail line while
@@ -91,10 +89,12 @@ scoreboard players set .CAMBLEND cfg_camera 6
 # the crest/valley-smoothing budget: the camera reaches the far level about
 # this many blocks early and glides level over the top (or across the bottom
 # of a valley). It is also the clearance the descent lip launches on (the
-# soft-min never overshoots above the flat, so CAMLIFT must cover the drop the
-# corner needs -- see 7g), and it sets how early lift-off begins (roughly
-# .CAMLIFT/10 + 2 + .CAMBLEND/4 blocks before the slope, the maxRail window
-# plus the soft-min corner). Bigger = smoother hills/valleys but the cart
+# construction never overshoots above the flat, so CAMLIFT must cover the drop
+# the corner needs -- see 7g), it sets the max-window reach (.CAMLIFT/10
+# columns -- the camera looks exactly `lift` ahead, just enough to establish
+# the float on a 45-degree slope), and how early lift-off begins (roughly
+# .CAMLIFT/10 + .CAMBLEND/2 blocks before the slope, the window plus the
+# triangle kernel). Bigger = smoother hills/valleys but the cart
 # visibly floats higher above the rails on slopes; smaller = hugs the slope
 # tighter. Keep it <= ~25 for tunnel headroom. (Before stop-and-reverse there was a separate
 # .CAMSMOOTH knob for a reactive descent chaser; that stateful term is gone --

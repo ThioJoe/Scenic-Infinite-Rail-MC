@@ -1,33 +1,26 @@
 // The smooth-camera height construction -- the floating-point port of Java's
-// cam_follow/cam_scan (CONTEXT.md section 7g):
+// cam_follow/cam_kernel/cam_maxlift/cam_sample (CONTEXT.md section 7g):
 //
-//   sline(i)  = the recorded rail profile, PRE-SMOOTHED over +/-s columns
-//   maxLine   = max of sline over the SYMMETRIC [i-wmax-1 .. i+wmax] window
-//   height    = max( softmin(maxLine, sline(i)+lift, k),  rawLine(i) )
+//   lifted(i) = min( max of the rail over [i-W .. i+W],  rail(i) + lift )   (W = lift columns)
+//   height    = triangle_smooth( lifted )               floored at the RAW rail
 //
-// The camera is built from two lines: the "higher-ground" line `maxLine` (the
-// flat/crest it rides toward, rising just before a slope) and the parallel
-// line `sline+lift` (exactly `lift` above the rail). Their lower envelope
-// min(maxLine, sline+lift) is the ideal path: level on flats (maxLine == sline
-// there), parallel `+lift` mid-slope, and it holds the flat OVER a convex top
-// (a descent lip) with NO vertical overshoot -- `lift` is the clearance budget.
+// ONE continuous operation. `lifted` is the ideal envelope -- level on flats
+// (there the max == the rail, so the min is the rail), parallel `+lift`
+// mid-slope (there rail+lift is the lower one), and it holds the flat OVER a
+// convex top (a descent lip) with no vertical overshoot, `lift` being the
+// clearance budget. It has hard corners; a single **triangle-kernel
+// convolution** (weights H-|j|, H = CAMBLEND/2) rounds ALL of them at once
+// into one smooth curve. Because it is a single symmetric smoothing, every
+// ramp end -- top and bottom, climb and descent -- eases with the same shape
+// and a horizontal tangent: launch level off the top, ride parallel, then
+// DECELERATE onto the flat at the bottom. No seam, no notch, no hard landing.
 //
-// TWO things are smoothed, because a ramp has two kinds of corner and both must
-// ease with a HORIZONTAL tangent:
-//   * the CONVEX corners (a descent top / ascent top) are where `maxLine` and
-//     `sline+lift` CROSS -- a `softmin` rounds that crossing without cutting
-//     below it, so the camera launches off the lip level and eases onto the
-//     slope (no notch, no rail-hug);
-//   * the CONCAVE corners (a descent bottom / ascent bottom) are where the two
-//     lines' OWN kinks live (maxLine's rolling-max edge, and sline+lift where
-//     the rail flattens) -- PRE-SMOOTHING the profile (`sline`) rounds those,
-//     so the camera decelerates onto the flat instead of riding a hard edge
-//     down and slamming level.
-// A single soft-min alone fixes only the convex corners and leaves the concave
-// ones landing hard (the "upside-down"/vertical-lift bottom); the pre-smooth is
-// what makes the bottom a real landing. The final floor is at the RAW rail line
-// (never the smoothed one), so flats stay exactly level and the rig never sinks
-// into the track.
+// The two knobs that make it clean:
+//   * the max window is +/-W with W = lift COLUMNS (CAMLIFT/10), i.e. it looks
+//     exactly `lift` ahead -- just enough to establish the float on a 45-degree
+//     slope. The old +2 margin over-anticipated and bulged the ramp bottoms.
+//   * the floor is the RAW rail (never the smoothed curve), so flats stay
+//     exactly level and the rig can never sink into the track.
 //
 // STATELESS AND SYMMETRIC BY CONSTRUCTION: the height at a rig position is a
 // pure function of that position and the fixed recorded profile -- no time
@@ -39,15 +32,6 @@
 // used by scripts/main.js in-game AND imported by tests/simulate.mjs, so the
 // regression test exercises the exact math that ships.
 
-// Smooth minimum (Inigo Quilez's polynomial smin): rounds the corner where a
-// and b cross, staying at or below min(a,b) by up to k/4 and reproducing
-// min(a,b) exactly once they are more than k apart. k <= 0 => a hard min.
-function softmin(a, b, k) {
-  if (k <= 0) return Math.min(a, b);
-  const h = Math.max(k - Math.abs(a - b), 0) / k;
-  return Math.min(a, b) - h * h * k * 0.25;
-}
-
 export function camHeight({ trackY, index, fx, lift10, blend }) {
   const maxi = trackY.length - 1;
   const lineAt = (i) => {
@@ -57,30 +41,29 @@ export function camHeight({ trackY, index, fx, lift10, blend }) {
   };
 
   const lift = lift10 / 10;
-  const wmax = Math.floor(lift10 / 10) + 2;
-  // From CAMBLEND: k = the soft-min corner half-width (rounds the convex
-  // crossing), s = the profile pre-smoothing radius (rounds the concave
-  // corners). Default 6 -> k = 1.5, s = 2.
-  const k = blend / 4;
-  const s = Math.round(blend / 4);
-  // The profile pre-smoothed over +/-s columns (a plain box average). On flats
-  // and straight slopes this is identical to the raw line (an average of a
-  // constant or a line is itself), so it only rounds the corners.
-  const sline = (i) => {
-    if (s <= 0) return lineAt(i);
-    let sum = 0;
-    for (let j = -s; j <= s; j++) sum += lineAt(i + j);
-    return sum / (2 * s + 1);
+  const W = Math.floor(lift10 / 10);       // max window = lift, in columns
+  const H = Math.max(1, Math.floor(blend / 2)); // triangle half-width (H=1 -> no smoothing)
+
+  // The lifted envelope at column i: rail raised to `lift` on slopes, the max
+  // over +/-W holding the flat level over convex tops.
+  const lifted = (i) => {
+    let mx = -Infinity;
+    for (let k = -W; k <= W; k++) {
+      const v = lineAt(i + k);
+      if (v > mx) mx = v;
+    }
+    return Math.min(mx, lineAt(i) + lift);
   };
 
-  // maxLine over the symmetric window, taken on the SMOOTHED profile.
-  let mx = -Infinity;
-  for (let kk = -wmax - 1; kk <= wmax; kk++) {
-    const v = sline(index + kk);
-    if (v > mx) mx = v;
+  // Triangle-kernel convolution (weights H-|j|), the single smoothing pass.
+  let num = 0, den = 0;
+  for (let j = -(H - 1); j <= H - 1; j++) {
+    const w = H - Math.abs(j);
+    num += w * lifted(index + j);
+    den += w;
   }
+  const c1 = num / den;
 
-  const c1 = softmin(mx, sline(index) + lift, k);
   const line = lineAt(index); // RAW rail for the floor
   return { sy: Math.max(c1, line), line };
 }
