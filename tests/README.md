@@ -259,10 +259,14 @@ slash path), `setScore`, `scoreInRange`, `scoreValue`, `scriptErrorsSince(mark)`
   its add, so `execute store success … run function` reads the add's real result on
   modern semantics (functions without `return` store 0 — which used to make the health
   signal read "failed" on every ride and fire a bogus warning at start). The ride suite
-  asserts `.flok=1` / `.flwarn=0` after a ride. Also, `datapack list` shows
-  `minecart_improvements (feature)` as *available* rather than enabled on 26.2, yet
-  `max_minecart_speed` exists and works — the version-compat suite checks the gamerule
-  itself, which is what matters.
+  asserts `.flok=1` / `.flwarn=0` after a ride. Also, the `minecart_improvements`
+  feature the pack declares in `pack.mcmeta` only bakes into a new world's enabled
+  features if the pack is enabled *at world creation*, not merely auto-loaded from
+  `world/datapacks/` afterward — a pack sitting in the folder shows up in
+  `datapack list` as *available* rather than *enabled*, and its `max_minecart_speed`
+  gamerule then never appears. `freshWorld` puts the pack in `initial-enabled-packs`
+  so world-gen enables it and the improved-minecart physics (the faster, configurable
+  cart speed the pace cart rides) is live from the first tick.
 
 ## Runtime budget
 

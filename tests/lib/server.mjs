@@ -85,6 +85,14 @@ export class JavaServer {
       'pause-when-empty-seconds': '-1',
       'server-port': '25565',
       'sync-chunk-writes': 'false',
+      // Enable the pack DURING world creation, not just after it. A datapack's
+      // pack.mcmeta feature flags (here minecraft:minecart_improvements) are
+      // only baked into the new world's enabled_features if the pack is enabled
+      // at generation time; a pack merely sitting in world/datapacks/ is
+      // auto-loaded AFTER creation, so its feature stays "available" and never
+      // "enabled" (the exact 26.2 `datapack list` symptom). Listing it here
+      // guarantees the improved-minecart physics the pace cart rides on.
+      'initial-enabled-packs': `vanilla,file/${DATAPACK_FOLDER}`,
       ...this.extraProps,
     };
     fs.writeFileSync(
