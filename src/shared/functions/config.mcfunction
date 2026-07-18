@@ -25,6 +25,13 @@
 #  /scoreboard commands. (.DEBUGMODE, .AUTOSTART, .SAMPLE_BLOCK_INTERVAL and
 #  .NOSTORMS stay in the plain `ir` objective with the runtime state -- not
 #  worth sidebar rows.)
+#
+#  EDITIONS: every setting below applies to BOTH Java and Bedrock unless its
+#  comment says otherwise. The exceptions are marked in their own comments:
+#  "BEDROCK EDITION ONLY (ignored on Java)" (.CAMMODE, .CARTYOFF), and the
+#  "JAVA EDITION ONLY" notes where only part of a setting's MECHANISM is
+#  edition-specific (the minecart-speed section's gamerule plumbing, the
+#  .DEBUGMODE note).
 # =============================================================================
 
 
@@ -171,21 +178,29 @@ scoreboard players set .AUTOSTART ir 1
 scoreboard players set .WORLDAGEWARN ir 15
 
 
-# --- Minecart speed (the max_minecart_speed gamerule) -----------------------
-# These control the vanilla minecart max-speed gamerule (named minecartMaxSpeed
-# on 1.21-era versions, max_minecart_speed on 26.x). It only has any effect when
-# the world has the "Minecart Improvements" feature enabled -- without it these
-# are harmless no-ops and the ride runs at vanilla speed.
+# --- Minecart speed ---------------------------------------------------------
+# The speed settings below apply to BOTH editions; only the mechanism under
+# them differs:
+#   JAVA EDITION ONLY: the speed lands in the vanilla minecart max-speed
+#   gamerule (named minecartMaxSpeed on 1.21-era versions, max_minecart_speed
+#   on 26.x), which only exists while the world has the "Minecart
+#   Improvements" feature enabled -- without it the speed settings are
+#   harmless no-ops and the ride runs at vanilla speed. Applied once per
+#   change, NOT continuously enforced, so you can still change /gamerule
+#   yourself mid-ride if you like.
+#   BEDROCK: no gamerule and no feature toggle involved -- the script's
+#   virtual pace reads these speed scores directly every tick, so they
+#   always take effect.
 #
 # The speed applied at ride start (and restored after every ocean sprint) is
-# the ADJUSTABLE ride speed -- the .speed state score, nudged .SPEEDSTEP
-# blocks/s per click by the "Speed -"/"Speed +" hotbar items (floored at 1)
-# and reset from the Ride Settings menu. (.SPEEDSTEP is a fixed cross-edition
+# the ADJUSTABLE ride speed -- the .speed state score, walked one notch
+# along the selectable speed grid per "Speed -"/"Speed +" click (fine by 1
+# through -6..8, coarse by .SPEEDSTEP outside it, straight through 0
+# [parked] into reverse -- the shared speed_step owns the grid) and reset
+# from the Ride Settings menu. (.SPEEDSTEP is a fixed cross-edition
 # constant in the shared consts.mcfunction, deliberately not a setting here.)
 # .DEFAULTSPEED below is its DEFAULT: what .speed starts out as, and what
-# Reset returns it to. On Java it is applied once per change, NOT
-# continuously enforced, so you can still change /gamerule yourself mid-ride
-# if you like.
+# Reset returns it to.
 
 # Default ride speed (blocks/second). Vanilla minecart default is 8; raise
 # it for a brisker journey.
@@ -477,6 +492,14 @@ scoreboard players set .TERRAIN_GENAHEAD cfg_ride 192
 # keeps a matching budget.)
 scoreboard players set .BUILD_FACTOR cfg_ride 2
 
+# (A note on the three knobs above, since it is easy to assume the chunk
+# machinery is Java-only: ALL of them matter on BOTH editions. Java realizes
+# them with its rolling forceload corridor; Bedrock realizes the same spans
+# with script-managed ticking areas -- .PACE_CART_BEHIND is the virtual
+# pace's distance and the track-buffer size, and .TERRAIN_GENAHEAD sets the
+# ticking-area corridor's forward reach, clamped there to 512 and never
+# less than .SAMPLE_WINDOW + 24.)
+
 
 # --- Ride modes (see the mode_* functions) -----------------------------------
 # The modes themselves are toggled with chat commands, not here:
@@ -565,9 +588,11 @@ scoreboard players set .SEAPICKLE cfg_ride 4
 #   Java     /playsound entity.minecart.inside every 115 ticks (the
 #            sample's length) at a large volume so it never fades as the
 #            ride moves. Pure vanilla command, no resource pack needed.
-#   Bedrock  the pack's own resource pack plays the same sample; the file
-#            loops natively (FMOD loop flag) and its sound definition is
-#            attenuation-free, so it is played once and simply left running.
+#   Bedrock  the pack's own resource pack defines the same sample
+#            attenuation-free (ir.cart_roll), and the script re-triggers it
+#            on the same 115-tick clock (the file's baked-in loop flag
+#            proved unreliable through a pack definition, so the clock is
+#            what loops it).
 # 1 = on, 0 = the silent glide. This is only the DEFAULT for the .SOUNDMODE
 # state score (modes_init copies it once, on the first load): the Settings
 # menu's Sound switch (mode_sound_on / mode_sound_off) owns the live value
@@ -613,10 +638,11 @@ scoreboard players set .NOSTORMS ir 0
 # offers the scoreboard sidebar views of the three settings groups above and
 # of the live ride state.
 #
-# NOTE: the speed only actually changes the ride if the world has the vanilla
-# "Minecart Improvements" feature enabled (that's what adds the
-# minecartMaxSpeed / max_minecart_speed gamerule). If debug shows the speed
-# being set but the cart never gets faster, recreate the world with that
-# experiment/feature turned on.
+# NOTE (JAVA EDITION ONLY): the speed only actually changes the ride if the
+# world has the vanilla "Minecart Improvements" feature enabled (that's what
+# adds the minecartMaxSpeed / max_minecart_speed gamerule). If debug shows the
+# speed being set but the cart never gets faster, recreate the world with that
+# experiment/feature turned on. (Bedrock's virtual pace involves no gamerule
+# or feature toggle, so this failure mode doesn't exist there.)
 scoreboard players set .DEBUGMODE ir 0
 
