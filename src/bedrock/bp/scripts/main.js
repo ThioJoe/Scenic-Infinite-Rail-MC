@@ -2672,6 +2672,14 @@ const SOUND_REANCHOR = 256;
 const SOUND_JOIN_WARM = 200;  // ticks after a join on the fast cadence
 const SOUND_WARM_TICKS = 20;  // the fast cadence itself
 let lastJoinAt = -1e9;        // tickN of the latest initial player spawn
+// The world-rejoin unpark check (the shared speed_rejoin, via the native
+// rejoin_check wrapper): armed by the playerSpawn handler on every genuine
+// join, consumed by the tick driver once init has the state loaded -- if
+// the ACTIVE cruise speed persisted as exactly 0 (parked), it is returned
+// to that cruise's config default so a player who forgot they stopped the
+// cart doesn't rejoin to a ride that looks broken. (Java arms the same
+// check from load.mcfunction, where a world load is the only join signal.)
+let unparkPending = false;
 let soundOn = false;      // a copy is (believed) playing
 let soundAnchorX = 0;     // world X where it was emitted
 let soundStartedAt = -1e9; // tickN of the last (re)trigger
@@ -3568,6 +3576,9 @@ try {
     runCmd(`scoreboard players set ${P}HUDHIDDEN ir 0`);
     S.hudHidden = false;
     saveState();
+    // Arm the rejoin unpark check (consumed by the tick driver, which has
+    // init + the loaded state -- this handler can fire before either).
+    unparkPending = true;
   });
 } catch { /* signal unavailable: the warm window simply never arms */ }
 
@@ -3758,6 +3769,17 @@ function tick() {
   // periodic job here gets its own prime-ish phase; they used to pile onto
   // the same tick every 100-200 ticks).
   if (tickN % 100 === 37) { try { stormWatchNow(); } catch (e) { reportError('storm watch', e); } }
+
+  // The world-rejoin unpark one-shot (armed by the playerSpawn handler):
+  // a ride resumed parked at speed 0 returns to the active cruise's config
+  // default -- the shared speed_rejoin decides, the native rejoin_check
+  // wrapper reports; the pace picks the restored score up this same tick.
+  // Consumed (and discarded) even without a ride: a stopped world has
+  // nothing to unpark, and the flag must not linger into a later start.
+  if (unparkPending) {
+    unparkPending = false;
+    if (S.started) runCmd(`function ${NS}/rejoin_check`);
+  }
 
   if (!S.started) { autoStart(); return; }
 

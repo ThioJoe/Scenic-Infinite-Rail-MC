@@ -4,8 +4,8 @@
 # the sign lives in the scores (main's .curtgt drives the pace cart's motion
 # direction from it) and the gamerule gets |.spush|. Every gamerule writer
 # funnels through here (speed_apply, speed_up, speed_down, sky_speed,
-# mode_sky_off, begin, rev_check) so no caller can ever feed the gamerule a
-# negative. |x| without a constant: .spabs = -(x), overwritten with x when
+# mode_sky_off, begin, rev_check, rejoin_check) so no caller can ever feed
+# the gamerule a negative. |x| without a constant: .spabs = -(x), overwritten with x when
 # x was already >= 0. (A value of 0 is offered to the gamerule as-is; if
 # the running version rejects 0, the set silently fails and main's parked
 # motion-zeroing holds the cart still regardless.)

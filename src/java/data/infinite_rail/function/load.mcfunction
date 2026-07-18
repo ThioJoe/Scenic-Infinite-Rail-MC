@@ -111,6 +111,22 @@ data modify storage infinite_rail:rule rule set from storage infinite_rail:names
 data modify storage infinite_rail:rule v set value "false"
 function infinite_rail:set_rule with storage infinite_rail:rule
 
+# Arm the world-rejoin unpark check (rejoin_check -- if the active cruise
+# speed persisted as exactly 0, the first player back gets it returned to
+# its default so the parked ride doesn't read as broken). Armed on EVERY
+# load, unconditionally: an earlier build armed only when this ran with
+# nobody online, meaning to exempt a mid-session /reload -- but on a real
+# SINGLEPLAYER world open the host player is already attached to the
+# integrated server by the time the load-tag functions run (field-verified:
+# the check never fired there; a dedicated server boots empty, which is why
+# the headless tests passed), so from here a rejoin and a /reload are
+# INDISTINGUISHABLE and the exemption starved the real feature. The cost is
+# deliberate and documented: a mid-session /reload also re-runs the check,
+# so a deliberately parked ride resumes with the explanatory message -- one
+# Speed - click undoes it. tick consumes the flag on the first tick a
+# player is targetable.
+scoreboard players set .rejchk ir 1
+
 # Prime the riding-sound clock at its firing threshold: a world rejoin
 # resumes .sndt wherever it was mid-count (scores persist in the save), and
 # waiting out the remainder left the ride silent for up to 5.75 s after

@@ -252,6 +252,39 @@ const tests = [
     await s.setScore('.fast', 'ir', 0);
   }),
 
+  report('shared speed_rejoin: a parked cruise unparks to its default, everything else stays', async (s) => {
+    const base = expected.find((e) => e.holder === '.DEFAULTSPEED')?.value ?? 8;
+    const ocean = expected.find((e) => e.holder === '.OCEANSPEED')?.value ?? 32;
+    // Parked land cruise (the persisted stop-and-reverse 0): the rejoin
+    // check returns it to the config default. (The script calls the same
+    // rejoin_check wrapper from its playerSpawn handler, gated on a
+    // resumed ride -- here the wrapper is driven directly.)
+    await s.setScore('.speed', 'ir', 0);
+    await s.fn('rejoin_check');
+    if (!(await s.scoreInRange('.spfix', 'ir', 1))) throw new Error('parked land: .spfix != 1');
+    if (!(await s.scoreInRange('.speed', 'ir', base))) throw new Error(`parked land: .speed != ${base}`);
+    // Negative control: a chosen non-zero speed must be left alone.
+    await s.setScore('.speed', 'ir', 12);
+    await s.fn('rejoin_check');
+    if (!(await s.scoreInRange('.spfix', 'ir', 0))) throw new Error('non-zero speed: .spfix != 0');
+    if (!(await s.scoreInRange('.speed', 'ir', 12))) throw new Error('non-zero speed changed');
+    // Negative control: a REVERSING speed must be left alone (only exact 0).
+    await s.setScore('.speed', 'ir', -8);
+    await s.fn('rejoin_check');
+    if (!(await s.scoreInRange('.spfix', 'ir', 0))) throw new Error('reverse speed: .spfix != 0');
+    if (!(await s.scoreInRange('.speed', 'ir', -8))) throw new Error('reverse speed changed');
+    await s.setScore('.speed', 'ir', base);
+    // Parked mid-ocean-sprint: the OCEAN cruise unparks, land stays.
+    await s.setScore('.fast', 'ir', 1);
+    await s.setScore('.ocnspd', 'ir', 0);
+    await s.fn('rejoin_check');
+    if (!(await s.scoreInRange('.spfix', 'ir', 1))) throw new Error('parked ocean: .spfix != 1');
+    if (!(await s.scoreInRange('.ocnspd', 'ir', ocean))) throw new Error(`parked ocean: .ocnspd != ${ocean}`);
+    if (!(await s.scoreInRange('.speed', 'ir', base))) throw new Error('the inactive land cruise moved');
+    await s.setScore('.fast', 'ir', 0);
+    await s.setScore('.ocnspd', 'ir', ocean);
+  }),
+
   report('mode toggles flip their scores on Bedrock', async (s) => {
     await s.fn('mode_torches_on');
     if (!(await s.scoreInRange('.TORCHMODE', 'ir', 1))) throw new Error('torches on != 1');

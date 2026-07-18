@@ -10,7 +10,9 @@ src/
                         modes_init (mode-toggle + ride-speed seeding),
                         consts (fixed cross-edition constants, e.g. the
                         Speed items' .SPEEDSTEP increment), speed_step (the
-                        adjustable ride speed's state machine) and
+                        adjustable ride speed's state machine), speed_rejoin
+                        (the world-rejoin unpark check: a cruise parked at
+                        exactly 0 returns to its config default) and
                         debug_state (the live-state sidebar mirror)
   java/                 the Java data pack, minus the shared files
                         (pack.mcmeta, pack.png -- the pack icon -- data/,

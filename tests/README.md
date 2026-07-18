@@ -119,6 +119,7 @@ toggles) are all covered directly.
 | `46-surface` | surface restoration after carving: controlled mounds + `place_flat` straight into them — grass-topped ground regrows grass beside the rails, snow cover comes back as grass + a snow layer, a buried span falls back to its top cell, deep rock and already-open ground stay untouched; and on **invisible track** the CENTER stack is restored too (no support block to hide its floor), with a visible-track control proving the detector reads the right cell |
 | `50-longride` | 2 400 ticks of sprinting: sustained building, cart progress, contiguity + physical checks along the whole line, rig still on-profile, no errors |
 | `60-lifecycle` | `/reload` mid-ride (state survives, config refreshes, build continues), `stop` teardown (entities gone, forceloads cleared, **track remains**), stopped-stays-stopped, second ride restarts cleanly |
+| `61-rejoin` | the world-rejoin unpark check (shared `speed_rejoin` + Java's `rejoin_check`): a ride parked at exactly 0 resumes at the ACTIVE cruise's default (land / ocean / sky each verified, gamerule follows), with negative controls — non-zero and reversing speeds untouched, a stopped world untouched — and the `.rejchk` arming (every `load` arms — unconditional on purpose: a headless boot can't exercise the singleplayer host-online-at-load shape that killed the conditional version; the checks disarm). The real join dispatch (`tick`'s `if entity @a`) needs a client and stays uncovered like every join path |
 | `90-perf` | **opt-in** (skipped unless `SIRM_PERF=1`): burst-cost measurement around the 16-block chunk roll — `/tick query` percentiles over a live ride, decomposed into fresh-generation vs unload-only vs no-rolls windows. Produces notes, not pass/fail thresholds (numbers are hardware-relative); pin the server to one core (a `java` PATH shim running `exec taskset -c 0 java "$@"`) to simulate a weak device |
 
 ## Adding a test
@@ -211,7 +212,8 @@ stdin, responses are scraped from stdout with a quiet-window — see `lib/bedroc
 It asserts: clean content log / no script errors, the script's `init()` applied
 `config.mcfunction`, `modes_init` seeding, and that the **shared brain files behave
 identically on the Bedrock command engine** — the exact `torch_auto` night window, the
-full `speed_step` state machine, the mode toggles. Bedrock has no
+full `speed_step` state machine, the `speed_rejoin` unpark check (with its
+non-zero / reversing negative controls), the mode toggles. Bedrock has no
 `scoreboard players get`, so assertions go through `scoreboard players test`
 (`server.scoreInRange(holder, obj, min, max)`; `server.scoreValue(...)` bisects that
 into an exact value when one is needed).

@@ -12,6 +12,14 @@ execute if score .SIDEBAR ir matches 4 run function infinite_rail:debug_tick
 # Permanent rain stands the watcher down: its frozen cycle only ever rains,
 # and the suppression is only meant for the natural cycle anyway.
 execute if score .STORMMODE ir matches 1 unless score .RAINMODE ir matches 1 run function infinite_rail:storm_watch
+# The world-rejoin unpark one-shot: load arms .rejchk on every (re)load --
+# vanilla Java has no join event, and on a singleplayer world open the host
+# player is already online when the load hook runs, so a rejoin cannot be
+# told from a /reload (see load.mcfunction) -- and the first tick a player
+# is targetable consumes it (rejoin_check -- a ride parked at speed 0
+# resumes at the active cruise's default). Runs before main so a restored
+# speed drives the pace cart the same tick.
+execute if score .rejchk ir matches 1 if entity @a run function infinite_rail:rejoin_check
 execute if score .started ir matches 1 run function infinite_rail:main
 # .started 2 = a launch is in progress: begin seeded the ride and the runway
 # is being pre-built a slice per tick (see launch_tick / launch_done).
