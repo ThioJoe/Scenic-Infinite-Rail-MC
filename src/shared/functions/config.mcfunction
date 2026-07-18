@@ -66,18 +66,22 @@ scoreboard players set .CAMHEIGHT cfg_camera 0
 
 # Corner-ease length (in blocks) of the S-curve at every slope change. The
 # camera height is a soft-min of the "level" line and the "parallel to the
-# 45-degree track" line (see 7g); CAMBLEND sets the soft-min corner width
-# (k = CAMBLEND/4 blocks), so the camera eases between level and parallel over
-# roughly CAMBLEND/2 blocks. This ease has a HORIZONTAL tangent at each end:
-# a climb lifts off level and is already parallel when the slope arrives, and
-# a descent launches off the lip level and eases down onto the slope -- no
-# kink, no notch, and (because CAMLIFT is the clearance budget) no vertical
+# 45-degree track" line, built on a lightly pre-smoothed profile (see 7g).
+# CAMBLEND drives both: the soft-min corner width (k = CAMBLEND/4 blocks) that
+# rounds the CONVEX ramp ends (a slope top), and the pre-smooth radius
+# (round(CAMBLEND/4) columns) that rounds the CONCAVE ramp ends (a slope
+# bottom). So EVERY ramp end -- top and bottom, climb and descent -- eases with
+# a HORIZONTAL tangent: a climb lifts off level and is already parallel when
+# the slope arrives; a descent launches off the lip level, eases down the
+# slope, then DECELERATES onto the flat at the bottom. No kink, no notch, no
+# hard landing, and (because CAMLIFT is the clearance budget) no vertical
 # overshoot above the flat. Between corners it just rides parallel, however
 # long the slope, so the ease never stretches into tunnel-roof collisions.
 # Bigger = longer, lazier arcs; smaller = snappier. Any positive integer works
 # (it no longer has to be even). 0 = a hard corner (no ease -- the raw
-# min-envelope). (Before soft-min this was a box-average window; a mean cut
-# convex corners down and left the descent-top notch, so it was replaced.)
+# min-envelope). (Before soft-min this was a box-average of the whole envelope;
+# a mean cut convex corners down and left the descent-top notch, so it was
+# replaced -- the soft-min handles the convex ends, the pre-smooth the concave.)
 scoreboard players set .CAMBLEND cfg_camera 6
 
 # How high (in TENTHS of a block) the camera rides above the rail line while
