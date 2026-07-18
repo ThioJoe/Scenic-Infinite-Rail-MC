@@ -80,7 +80,7 @@ scoreboard players set .CAMHEIGHT cfg_camera 0
 # box-average -- a mean cut convex corners down and left the descent-top notch
 # -- or stitched a soft-min top to a pre-smoothed bottom, which showed a seam;
 # one triangle convolution replaced both.)
-scoreboard players set .CAMBLEND cfg_camera 6
+scoreboard players set .CAMBLEND cfg_camera 10
 
 # How high (in TENTHS of a block) the camera rides above the rail line while
 # on a slope -- climbs AND descents alike (the camera construction is
@@ -99,7 +99,7 @@ scoreboard players set .CAMBLEND cfg_camera 6
 # tighter. Keep it <= ~25 for tunnel headroom. (Before stop-and-reverse there was a separate
 # .CAMSMOOTH knob for a reactive descent chaser; that stateful term is gone --
 # descents now use this same symmetric lift -- so .CAMSMOOTH was removed.)
-scoreboard players set .CAMLIFT cfg_camera 20
+scoreboard players set .CAMLIFT cfg_camera 30
 
 # How many blocks BEHIND THE BUILD HEAD the viewer (the camera rig) rides.
 # Like every distance knob this is measured from the head -- the column
