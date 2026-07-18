@@ -49,8 +49,10 @@ scoreboard players set .TUNNELCLEAR cfg_terrain 6
 # is glued to an invisible interpolated "camera seat", gliding OFF the rails
 # along a pre-smoothed S-curve computed from the track's recorded profile:
 # climbs begin rising BEFORE the corner, steady 45-degree runs are followed
-# exactly parallel with zero lag, and descents use a reactive exponential
-# glide. The camera never drops below the rail line. Meanwhile a hidden
+# exactly parallel with zero lag, and every ramp end (climbs AND descents,
+# top AND bottom) eases with a horizontal tangent -- a soft-min envelope, so
+# descents float the same as climbs and reverse retraces forward exactly (7g).
+# The camera never drops below the rail line. Meanwhile a hidden
 # "pace cart" rides the physical rails (.PACE_CART_BEHIND - .RIDER_BEHIND)
 # blocks BEHIND the viewer and sets the speed -- however fast the rails push
 # it -- so the rig inherits real cart pace without any of its bounce.
@@ -62,14 +64,20 @@ scoreboard players set .TUNNELCLEAR cfg_terrain 6
 # tunnel roofs.
 scoreboard players set .CAMHEIGHT cfg_camera 0
 
-# Length (in blocks, EVEN numbers) of the S-curve blend at every slope
-# change. The camera transitions between "level" and "moving parallel with
-# the 45-degree track" over exactly this distance -- lifting off shortly
-# before a climb so it is already parallel when the slope arrives, and
-# leveling off so it lands flat exactly at the summit height. Between blends
-# it just rides parallel, however long the slope: the blend does NOT stretch
-# across the whole climb, so it never accumulates into tunnel-roof
-# collisions. Bigger = longer, lazier arcs; smaller = snappier.
+# Corner-ease length (in blocks) of the S-curve at every slope change. The
+# camera height is a soft-min of the "level" line and the "parallel to the
+# 45-degree track" line (see 7g); CAMBLEND sets the soft-min corner width
+# (k = CAMBLEND/4 blocks), so the camera eases between level and parallel over
+# roughly CAMBLEND/2 blocks. This ease has a HORIZONTAL tangent at each end:
+# a climb lifts off level and is already parallel when the slope arrives, and
+# a descent launches off the lip level and eases down onto the slope -- no
+# kink, no notch, and (because CAMLIFT is the clearance budget) no vertical
+# overshoot above the flat. Between corners it just rides parallel, however
+# long the slope, so the ease never stretches into tunnel-roof collisions.
+# Bigger = longer, lazier arcs; smaller = snappier. Any positive integer works
+# (it no longer has to be even). 0 = a hard corner (no ease -- the raw
+# min-envelope). (Before soft-min this was a box-average window; a mean cut
+# convex corners down and left the descent-top notch, so it was replaced.)
 scoreboard players set .CAMBLEND cfg_camera 6
 
 # How high (in TENTHS of a block) the camera rides above the rail line while
@@ -78,12 +86,13 @@ scoreboard players set .CAMBLEND cfg_camera 6
 # this is also what makes reversing retrace the exact forward path). It is
 # the crest/valley-smoothing budget: the camera reaches the far level about
 # this many blocks early and glides level over the top (or across the bottom
-# of a valley). It also sets how early lift-off begins (roughly .CAMBLEND/2 +
-# this + 2 blocks before the slope). Bigger = smoother hills/valleys but the
-# cart visibly floats higher above the rails on slopes; smaller = hugs the
-# slope tighter but lands harder on corners. Keep it <= ~25 for tunnel
-# headroom; going below half of .CAMBLEND (in blocks) makes corner landings
-# progressively harder. (Before stop-and-reverse there was a separate
+# of a valley). It is also the clearance the descent lip launches on (the
+# soft-min never overshoots above the flat, so CAMLIFT must cover the drop the
+# corner needs -- see 7g), and it sets how early lift-off begins (roughly
+# .CAMLIFT/10 + 2 + .CAMBLEND/4 blocks before the slope, the maxRail window
+# plus the soft-min corner). Bigger = smoother hills/valleys but the cart
+# visibly floats higher above the rails on slopes; smaller = hugs the slope
+# tighter. Keep it <= ~25 for tunnel headroom. (Before stop-and-reverse there was a separate
 # .CAMSMOOTH knob for a reactive descent chaser; that stateful term is gone --
 # descents now use this same symmetric lift -- so .CAMSMOOTH was removed.)
 scoreboard players set .CAMLIFT cfg_camera 20

@@ -65,10 +65,10 @@
 //  parser, and Java accepts it just as happily), so this script addresses
 //  them as '.NAME' strings via the native scoreboard API.
 //
-//  The camera math in camFollow()/lifted() is a floating-point port of
-//  cam_follow/cam_blend/cam_scan/cam_sample.mcfunction -- same construction,
-//  same knobs, none of the milliblock fixed-point scaffolding. See CONTEXT.md
-//  section 7g for the algorithm itself.
+//  The camera math in cam_math.js (camHeight()/softmin()) is a floating-point
+//  port of cam_follow/cam_scan/cam_sample.mcfunction -- same soft-min
+//  construction, same knobs, none of the milliblock fixed-point scaffolding.
+//  See CONTEXT.md section 7g for the algorithm itself.
 // =============================================================================
 
 import { world, system, BlockPermutation, BlockVolume, EasingType, GameMode, ItemStack, WeatherType } from '@minecraft/server';
